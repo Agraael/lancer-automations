@@ -14,6 +14,7 @@ function targetToken()
 function localizedLabel(key, cfg)
 {
     const raw = cfg?.label ?? key;
+
     try
     {
         return game.i18n?.localize?.(raw) ?? raw;
@@ -31,15 +32,19 @@ function buildItems(token)
     const actions = /** @type {any} */ (CONFIG).Token?.movement?.actions ?? {};
     const current = token.document.movementAction;
     const items = [];
+
     for (const [key, cfg] of Object.entries(actions))
     {
         if (HIDDEN_ACTIONS.has(key))
             continue;
+
         const canSelect = /** @type {any} */ (cfg)?.canSelect;
         const isSelectable = key === current || (typeof canSelect === 'function' ? canSelect(token.document) : true);
+
         if (isSelectable)
             items.push({ key, cfg, current: key === current });
     }
+
     return items;
 }
 
@@ -47,6 +52,7 @@ function commitSelection(key, token)
 {
     if (!key || !token?.document)
         return;
+
     const layer = /** @type {any} */ (canvas.tokens);
     if (layer)
         layer._dragMovementAction = null;
@@ -58,6 +64,7 @@ function buildIconContent(cfg, buttonEl)
 {
     const img = /** @type {any} */ (cfg)?.img;
     const iconClass = /** @type {any} */ (cfg)?.icon || 'fa-solid fa-circle-question';
+
     if (img)
     {
         const url = /^(?:https?:|data:|\/)/.test(img) ? img : `/${img}`;
@@ -67,6 +74,7 @@ function buildIconContent(cfg, buttonEl)
         buttonEl.appendChild(span);
         return;
     }
+
     buttonEl.innerHTML = `<i class="${iconClass}"></i>`;
 }
 
@@ -89,12 +97,44 @@ function openWheel(token)
     });
 }
 
+export function openMovementWheelPreview(anchor)
+{
+    const current = canvas.tokens?.controlled?.[0]?.document?.movementAction ?? 'walk';
+    const stub = { actor: null, inCombat: false, movementAction: current };
+    const actions = /** @type {any} */ (CONFIG).Token?.movement?.actions ?? {};
+    const items = [];
+
+    for (const [key, cfg] of Object.entries(actions))
+    {
+        if (HIDDEN_ACTIONS.has(key))
+            continue;
+
+        let selectable = key === current;
+
+        try
+        {
+            selectable ||= typeof cfg?.canSelect === 'function' ? !!cfg.canSelect(stub) : true;
+        }
+        catch
+        {
+            selectable = key === current;
+        }
+
+        if (selectable)
+            items.push({ key, title: localizedLabel(key, cfg), current: key === current, buildContent: (buttonEl) => buildIconContent(cfg, buttonEl), onSelect: () => {} });
+    }
+
+    if (items.length)
+        openRadialWheel({ anchor, rootClass: 'lancer-movement-wheel', showLabel: true, items });
+}
+
 export function toggleMovementWheel()
 {
     if (isRadialWheelOpen())
     {
         closeRadialWheel(); return;
     }
+
     const token = targetToken();
     if (!token)
         return;
@@ -129,6 +169,7 @@ Hooks.once('ready', () =>
     {
         const dragging = !!this._draggedToken;
         const handled = wrapped.call(this, event);
+
         if (handled && dragging)
         {
             playUiSound('toggle');
@@ -136,6 +177,7 @@ Hooks.once('ready', () =>
             if (label)
                 floatDragFeedback(localize(label));
         }
+
         return handled;
     }, 'WRAPPER');
 });

@@ -21,31 +21,42 @@ export function makeWallBlocker(action)
 {
     if (game.user?.isGM && getExternalSetting('core', 'unconstrainedMovement', false))
         return null;
-    const wallType = CONFIG.Token?.movement?.actions?.[action]?.walls ?? 'move';
+
+    const walls = CONFIG.Token?.movement?.actions?.[action]?.walls;
+    const wallType = walls === null ? null : (walls ?? 'move');
     if (!wallType)
         return null;
+
     const quadtree = canvas.walls?.quadtree;
     if (!quadtree)
         return null;
+
     const cache = new Map();
+
     return (from, to, elevation) =>
     {
         const key = `${Math.round(from.x)},${Math.round(from.y)}>${Math.round(to.x)},${Math.round(to.y)}@${elevation}`;
         const cached = cache.get(key);
+
         if (cached !== undefined)
             return cached;
+
         const bounds = new PIXI.Rectangle(
             Math.min(from.x, to.x) - 1, Math.min(from.y, to.y) - 1,
             Math.abs(to.x - from.x) + 2, Math.abs(to.y - from.y) + 2);
+
         let blocked = false;
+
         for (const wall of quadtree.getObjects(bounds))
         {
             const edge = wall.edge;
             if (!edge || edge[wallType] === CONST.WALL_SENSE_TYPES.NONE || wall.isOpen)
                 continue;
+
             const { top, bottom } = wallBand(wall);
             if (elevation < bottom || elevation > top)
                 continue;
+
             // One-way walls let a mover through from their open side.
             if (edge.direction)
             {
@@ -53,12 +64,14 @@ export function makeWallBlocker(action)
                 if (!side || side === edge.direction)
                     continue;
             }
+
             if (foundry.utils.lineSegmentIntersects(edge.a, edge.b, from, to))
             {
                 blocked = true;
                 break;
             }
         }
+
         cache.set(key, blocked);
         return blocked;
     };

@@ -6,7 +6,9 @@ import { localize, localizeFormat } from "../tools/string-utils.js";
 import { cancelButton } from "../tools/dialog-utils.js";
 import { laRenderWeaponProfile, laRenderTextSection, laRenderTags, laRenderActions, laDetailPopup, laPositionPopup } from "../interactive/detail-renderers.js";
 import { startChoiceCard } from "../interactive/network.js";
-import { rollCard } from "../interactive/tools/rollCard.js";
+import { startPickCard } from "../interactive/pick-card.js";
+import { weaponTypeIcon } from "../tah/item-helpers.js";
+import { mountLabel } from "../utils/lancer-token.js";
 import { getWeaponProfiles_WithBonus } from "../tools/misc-tools.js";
 import { altStructButton, pushEmbedButton, destroyMech, getRollCount } from "./alt-struct-helpers.js";
 
@@ -26,6 +28,7 @@ function structTableDescriptions(roll, remStruct)
     {
         case 0:
             return localize('LA.altStruct.struct.crushingHit');
+
         case 1:
             switch (remStruct)
             {
@@ -36,6 +39,7 @@ function structTableDescriptions(roll, remStruct)
                 default:
                     return localize('LA.altStruct.struct.directHit');
             }
+
         case 2:
         case 3:
         case 4:
@@ -44,6 +48,7 @@ function structTableDescriptions(roll, remStruct)
         case 6:
             return localize('LA.altStruct.struct.glancingBlow');
     }
+
     return "";
 }
 
@@ -58,6 +63,7 @@ export function describeDestruction(choice, destroyed)
                 : localizeFormat('LA.altStruct.weaponsAllIndestructible', { mount: choice.mount.name })
         };
     }
+
     return {
         title: localize('LA.dialogTitle.systemDestroyed'),
         description: localizeFormat('LA.altStruct.systemDestroyedBody', { name: choice.system.name })
@@ -72,24 +78,74 @@ export async function interactiveSecondaryStructureRoll(state)
     if (!isValidActor(state.actor))
         return false;
 
-    const token = state.actor.getActiveTokens()?.[0] ?? null;
-    const rolled = await rollCard({
-        title: localize('LA.dialogTitle.tearOff'),
-        description: localize('LA.altStruct.13AWeaponMount4'),
-        roll: state.data.roll_str || "1d6",
-        allowEdit: false,
+    const actor = state.actor;
+    const token = actor.getActiveTokens()?.[0] ?? null;
+    const title = localize('LA.dialogTitle.tearOff');
+    const formula = state.data.roll_str || "1d6";
+    const afterRoll = '[data-action="confirm"], .la-pick-hint';
+    let roll = null;
+    let setup = null;
+
+    const choice = await startPickCard({
+        title,
+        icon: "fas fa-dice-d6",
+        origin: actor.name,
         originToken: token,
-        icon: "fas fa-dice-d6"
+        description: localize('LA.altStruct.13AWeaponMount4'),
+        hint: 'Right-click a row for details',
+        confirmText: localize("LA.altStruct.destroy"),
+        confirmIcon: 'fas fa-trash',
+        getRows: () => (setup ? setup.rows() : [{ rollRow: true, icon: "fas fa-dice-d6", name: localizeFormat('LA.altStruct.rollTearOff', { formula }) }]),
+        onReady: card => card.element.find(afterRoll).hide(),
+        onPick: async (row, card) =>
+        {
+            if (!row.rollRow)
+            {
+                setup.pick(row);
+                card.refresh();
+                return;
+            }
+
+            card.busy = true;
+            roll = new Roll(formula, actor.getRollData?.() ?? {});
+            await roll.evaluate();
+            await roll.toMessage({ speaker: ChatMessage.getSpeaker({ token: token?.document, actor }), flavor: title });
+            card.busy = false;
+
+            setup = traumaPickSetup(actor, roll.total <= 3 ? "weapon" : "system");
+
+            if (!setup)
+            {
+                card.finish(null);
+                return;
+            }
+
+            card.setMessage(`${localizeFormat('LA.altStruct.tearOffRolled', { total: roll.total, kind: setup.kindLabel })}<br>${setup.subtitle}`);
+            card.element.find(afterRoll).show();
+            card.refresh();
+        },
+        onConfirm: (card) =>
+        {
+            if (setup)
+                card.finish(setup.choice());
+        },
+        onContext: ({ item }, card) =>
+        {
+            if (item)
+                setup?.detail(item, card.element);
+        },
     });
-    if (!rolled)
+
+    if (!roll)
         return false;
 
-    const roll = rolled.roll;
+    state.la_tearOffChoice = choice;
     state.data.result = {
         roll: roll,
         tt: await roll.getTooltip(),
         total: String(roll.total)
     };
+
     if (roll.total <= 3)
     {
         state.data.title = localize('LA.altStruct.weaponDestruction');
@@ -100,6 +156,7 @@ export async function interactiveSecondaryStructureRoll(state)
         state.data.title = localize('LA.altStruct.systemDestruction');
         state.data.desc = localize('LA.altStruct.tearOffSystemDesc');
     }
+
     return true;
 }
 
@@ -110,6 +167,7 @@ export function isValidActor(actor)
         ui.notifications.warn(localize('LA.notify.onlyNpcsAndMechsCanPerformThis'));
         return false;
     }
+
     return true;
 }
 
@@ -138,6 +196,7 @@ async function createDirectHitRoll(damage)
     const roll = new Roll(`${damage}d6kl1`);
     await roll.evaluate({ allowInteractive: false });
     const term0 = /** @type {DiceTerm} */ (roll.terms[0]);
+
     if (term0.results.length > 0)
     {
         term0.results[0] = {
@@ -147,6 +206,7 @@ async function createDirectHitRoll(damage)
             hidden: true
         };
     }
+
     /** @type {any} */ (roll)._total = 1;
     return roll;
 }
@@ -156,6 +216,7 @@ export async function npcOneStructStep(state)
 {
     if (!getModuleSetting("enableOneStructNpc"))
         return true;
+
     const actor = state.actor;
     if (!actor?.is_npc() || actor.system.structure.max !== 1)
         return true;
@@ -167,6 +228,7 @@ export async function npcOneStructStep(state)
     state.data.result = undefined;
 
     const onPreStructureStep = game.lancer.flowSteps?.get("lancer-automations:onPreStructure");
+
     if (onPreStructureStep)
     {
         const proceed = await onPreStructureStep(state);
@@ -190,6 +252,7 @@ export async function altRollStructure(state)
 {
     if (!state.data)
         throw new TypeError(`Structure roll flow data missing!`);
+
     const actor = state.actor;
     if (!isValidActor(actor))
         return false;
@@ -209,6 +272,7 @@ export async function altRollStructure(state)
     {
         let damage = actor.system.structure.max - remainingStructure;
         let formula = `${damage}d6kl1`;
+
         // If it's an NPC with legendary, change the formula to roll twice and keep the best result.
         if (actor.is_npc() &&
       actor.items.some((item) => ["npcf_legendary_ultra", "npcf_legendary_veteran"].includes(item.system.lid)
@@ -240,6 +304,7 @@ export async function altRollStructure(state)
 
     return true;
 }
+
 export async function structCheckMultipleOnes(state)
 {
     if (!state.data)
@@ -253,6 +318,7 @@ export async function structCheckMultipleOnes(state)
         throw new TypeError(`Structure check hasn't been rolled yet!`);
 
     let one_count = getRollCount(roll, 1);
+
     if (one_count > 1)
     {
         state.data.title = localize(structTableTitles[0]);
@@ -261,6 +327,7 @@ export async function structCheckMultipleOnes(state)
 
     return true;
 }
+
 export async function insertHullCheckButton(state)
 {
     if (!state.data)
@@ -272,6 +339,7 @@ export async function insertHullCheckButton(state)
 
     let show_button = false;
     const result = state.data.result;
+
     if (!result)
         throw new TypeError(`Structure check hasn't been rolled yet!`);
 
@@ -289,6 +357,7 @@ export async function insertHullCheckButton(state)
                     show_button = true;
                     break;
             }
+
             break;
     }
 
@@ -315,6 +384,7 @@ export async function insertHullCheckButton(state)
         else
             pushEmbedButton(state, { flowType: 'DirectHitHullCheckFlow', actorUuid: actor.uuid, icon: 'fas fa-dice-d20', label: 'LA.common.hull', attrs: { 'check-type': 'hull', 'rem-struct': structure, 'has-items': hasWeaponsOrSystems } });
     }
+
     return true;
 }
 
@@ -345,6 +415,7 @@ export async function insertSecondaryRollButton(state)
                 case 2:
                     break;
             }
+
             break;
         case 2:
         case 3:
@@ -366,6 +437,7 @@ export async function insertSecondaryRollButton(state)
         else
             pushEmbedButton(state, { flowType: 'TearOffDirectHitFlow', actorUuid: actor.uuid, icon: 'fas fa-dice-d6', label: 'LA.altStruct.directHitCaps' });
     }
+
     return true;
 }
 
@@ -377,12 +449,15 @@ function isValidDestructionChoice(item)
         return false;
     if (item.system?.destroyed === true)
         return false;
+
     const isLimited = item.system?.tags?.some((tag) => tag.lid === "tg_limited" || tag.is_limited);
+
     if (isLimited)
     {
         const uses = item.system?.uses?.value ?? 0;
         return uses > 0;
     }
+
     return true;
 }
 
@@ -395,6 +470,7 @@ function isIndestructible(item)
 export async function destroyTraumaChoice(choice)
 {
     const destroyed = [];
+
     if (choice.type === "mount")
     {
         for (const weapon of choice.mount.weapons)
@@ -410,6 +486,7 @@ export async function destroyTraumaChoice(choice)
         await choice.system.update({ "system.destroyed": true });
         destroyed.push(choice.system.name);
     }
+
     return destroyed;
 }
 
@@ -419,13 +496,16 @@ export function getValidWeaponMounts(actor, includeDestroyed = false)
     if (actor.is_npc?.())
     {
         const validWeapons = [];
+
         const weapons = actor.items.filter(item =>
             item.type === "npc_feature" &&
       item.system.type === "Weapon"
         );
+
         for (let i = 0; i < weapons.length; i++)
         {
             const weaponItem = weapons[i];
+
             if (includeDestroyed || isValidDestructionChoice(weaponItem))
             {
                 validWeapons.push({
@@ -437,17 +517,21 @@ export function getValidWeaponMounts(actor, includeDestroyed = false)
                 });
             }
         }
+
         return validWeapons;
     }
 
     // Handle Mechs - they have weapon mounts
     if (!actor.system?.loadout?.weapon_mounts)
         return [];
+
     const validMounts = [];
+
     for (let i = 0; i < actor.system.loadout.weapon_mounts.length; i++)
     {
         const mount = actor.system.loadout.weapon_mounts[i];
         const weapons = [];
+
         for (const slot of mount.slots || [])
         {
             if (slot.weapon && slot.weapon.status === "resolved" && slot.weapon.value)
@@ -457,16 +541,18 @@ export function getValidWeaponMounts(actor, includeDestroyed = false)
                     weapons.push(weaponItem);
             }
         }
+
         if (weapons.length > 0)
         {
             validMounts.push({
                 index: i,
                 mount: mount,
                 weapons: weapons,
-                name: `${mount.type} Mount`
+                name: mountLabel(actor, mount)
             });
         }
     }
+
     return validMounts;
 }
 
@@ -476,21 +562,26 @@ export function getValidSystems(actor, includeDestroyed = false)
     if (actor.is_npc?.())
     {
         const validSystems = [];
+
         const features = actor.items.filter(item =>
             item.type === "npc_feature" && item.system.type === "System"
         );
+
         for (const featureItem of features)
         {
             if (includeDestroyed || isValidDestructionChoice(featureItem))
                 validSystems.push(featureItem);
         }
+
         return validSystems;
     }
 
     // Handle Mechs - they have systems in loadout
     if (!actor.system?.loadout?.systems)
         return [];
+
     const validSystems = [];
+
     for (const systemRef of actor.system.loadout.systems)
     {
         if (systemRef && systemRef.status === "resolved" && systemRef.value)
@@ -500,12 +591,13 @@ export function getValidSystems(actor, includeDestroyed = false)
                 validSystems.push(systemItem);
         }
     }
+
     return validSystems;
 }
 
 // #endregion
 
-export async function showSystemTraumaDialog(actor, traumaType)
+function traumaPickSetup(actor, traumaType)
 {
     const validMounts = getValidWeaponMounts(actor);
     const validSystems = getValidSystems(actor);
@@ -513,7 +605,7 @@ export async function showSystemTraumaDialog(actor, traumaType)
     const allSystems = getValidSystems(actor, true);
 
     let items = [];
-    let titleHtml = "";
+    let kindLabel = "";
     let subtitle = "";
 
     if (traumaType === "weapon")
@@ -533,7 +625,7 @@ export async function showSystemTraumaDialog(actor, traumaType)
 
     if (traumaType === "weapon")
     {
-        titleHtml = localize('LA.altStruct.traumaWeaponTitle');
+        kindLabel = localize('LA.altStruct.weaponDestruction');
         subtitle = actor.is_npc?.()
             ? localize('LA.altStruct.selectWeapon')
             : localize('LA.altStruct.selectWeaponMount');
@@ -542,49 +634,58 @@ export async function showSystemTraumaDialog(actor, traumaType)
             const allIndestructible = mount.weapons.length > 0 && mount.weapons.every(weapon =>
                 (weapon.system?.all_tags ?? weapon.system?.tags)?.some(tag => tag.lid === 'tg_indestructible')
             );
-            const labelHtml = mount.weapons.map(weapon =>
+
+            const tags = mount.weapons.flatMap(weapon =>
             {
                 const isDestroyed = weapon.system?.destroyed === true;
                 const isIndestructible = !isDestroyed && (weapon.system?.all_tags ?? weapon.system?.tags)?.some(tag => tag.lid === 'tg_indestructible');
-                const badge = isDestroyed
-                    ? `<span style="font-size:0.7em;background:#b71c1c;color:#fff;padding:1px 4px;border-radius:3px;margin-left:5px;vertical-align:middle;">${localize('LA.altStruct.badgeDestroyed')}</span>`
-                    : isIndestructible
-                        ? `<span style="font-size:0.7em;background:#1a3a5c;color:#7ec8e3;padding:1px 4px;border-radius:3px;margin-left:5px;vertical-align:middle;">${localize('LA.altStruct.badgeIndestructible')}</span>`
-                        : '';
-                return `<div style="display:block;margin-bottom:2px;"><span style="font-weight:bold;">${weapon.name}${badge}</span></div>`;
-            }).join('');
+                const prefix = mount.weapons.length > 1 ? `${weapon.name} ` : '';
+
+                if (isDestroyed)
+                    return [{ text: `${prefix}${localize('LA.altStruct.badgeDestroyed')}`, tone: 'bad' }];
+
+                return isIndestructible ? [{ text: `${prefix}${localize('LA.altStruct.badgeIndestructible')}`, tone: 'steel' }] : [];
+            });
+
             const weaponDetails = mount.weapons.map(weapon =>
             {
                 const sys = weapon.system;
                 if (!sys)
                     return null;
+
                 const profiles = getWeaponProfiles_WithBonus(weapon, actor);
                 if (!profiles.length)
                     return null;
+
                 const size = sys.size?.toLowerCase() === 'superheavy' ? 'Superheavy' : (sys.size || "");
                 const type = sys.active_profile?.type || sys.type || "";
                 return { name: weapon.name, img: weapon.img, size, type, profiles };
             }).filter(Boolean);
+
             return {
                 id: `mount_${mount.index}`,
                 type: "mount",
                 data: mount,
-                img: mount.weapons[0]?.img || "icons/svg/item-bag.svg",
-                labelHtml,
-                sublabel: mount.name,
+                icon: weaponTypeIcon(mount.weapons[0]),
+                name: mount.weapons.map(weapon => weapon.name).join(' + '),
+                tags,
+                sublabel: actor.is_npc?.() ? (mount.weapons[0]?.system?.weapon_type || mount.name) : mount.name,
                 selectable: !allIndestructible && mount.weapons.some(weapon => isValidDestructionChoice(weapon)),
                 detail: { weaponDetails },
             };
         });
+
         const armamentRedundancy = validSystems.find(systemItem => systemItem.system.lid === "ms_armament_redundancy");
+
         if (armamentRedundancy)
         {
             items.push({
                 id: `system_${armamentRedundancy.id}`,
                 type: "system",
                 data: armamentRedundancy,
-                img: armamentRedundancy.img || "systems/lancer/assets/icons/mech_system.svg",
-                labelHtml: `<div style="display:block;margin-bottom:2px;"><span style="font-weight:bold;">${armamentRedundancy.name}</span></div><div style="font-size:0.82em;color:#bbb;margin-top:2px;">${localize('LA.altStruct.armamentRedundancyHint')}</div>`,
+                icon: armamentRedundancy.img || "systems/lancer/assets/icons/mech_system.svg",
+                name: armamentRedundancy.name,
+                lines: [localize('LA.altStruct.armamentRedundancyHint')],
                 sublabel: armamentRedundancy.system?.type || "SYSTEM",
                 selectable: true,
                 detail: {
@@ -598,23 +699,25 @@ export async function showSystemTraumaDialog(actor, traumaType)
     }
     else
     {
-        titleHtml = localize('LA.altStruct.traumaSystemTitle');
+        kindLabel = localize('LA.altStruct.systemDestruction');
         subtitle = localize('LA.altStruct.selectSystem');
         items = allSystems.map(systemItem =>
         {
             const isDestroyed = systemItem.system?.destroyed === true;
             const isIndestructible = !isDestroyed && systemItem.system?.tags?.some(tag => tag.lid === 'tg_indestructible');
-            const badge = isDestroyed
-                ? `<span style="font-size:0.7em;background:#b71c1c;color:#fff;padding:1px 4px;border-radius:3px;margin-left:5px;vertical-align:middle;">${localize('LA.altStruct.badgeDestroyed')}</span>`
-                : isIndestructible
-                    ? `<span style="font-size:0.7em;background:#1a3a5c;color:#7ec8e3;padding:1px 4px;border-radius:3px;margin-left:5px;vertical-align:middle;">${localize('LA.altStruct.badgeIndestructible')}</span>`
-                    : '';
+
+            const tags = [
+                ...(isDestroyed ? [{ text: localize('LA.altStruct.badgeDestroyed'), tone: 'bad' }] : []),
+                ...(isIndestructible ? [{ text: localize('LA.altStruct.badgeIndestructible'), tone: 'steel' }] : []),
+            ];
+
             return {
                 id: `system_${systemItem.id}`,
                 type: "system",
                 data: systemItem,
-                img: systemItem.img || "systems/lancer/assets/icons/mech_system.svg",
-                labelHtml: `<div style="display:block;margin-bottom:2px;"><span style="font-weight:bold;">${systemItem.name}${badge}</span></div>`,
+                icon: systemItem.img || "systems/lancer/assets/icons/mech_system.svg",
+                name: systemItem.name,
+                tags,
                 sublabel: systemItem.system?.type || "SYSTEM",
                 selectable: isValidDestructionChoice(systemItem) && !isIndestructible,
                 detail: {
@@ -627,148 +730,134 @@ export async function showSystemTraumaDialog(actor, traumaType)
         });
     }
 
-    return new Promise((resolve) =>
+    let selectedId = items.find(item => item.selectable)?.id ?? null;
+
+    const showTraumaDetail = (item, html) =>
     {
-        let selectedId = items.find(item => item.selectable)?.id ?? null;
+        document.querySelectorAll('.la-trauma-detail-popup').forEach(node => node.remove());
 
-        const content = `
-            <div class="lancer-dialog-header">
-                <div class="lancer-dialog-title">${titleHtml}</div>
-                <div class="lancer-dialog-subtitle">${subtitle}</div>
-            </div>
-            <div class="lancer-dialog-body" style="padding: 10px;">
-                <div style="font-size:0.72em;color:#777;font-style:italic;margin-bottom:6px;"><i class="fas fa-mouse-pointer"></i> Right-click a row for details</div>
-                <div class="la-choice-list" style="max-height: 350px; overflow-y: auto; padding-right: 5px;">
-                    ${items.map(item => `
-                        <div class="la-choice-item ${item.selectable ? '' : 'unselectable'}" data-item-id="${item.id}"
-                             style="display:flex;align-items:center;padding:5px 8px;border:1px solid ${item.selectable ? (item.id === selectedId ? '#ff6400' : '#444') : '#222'};
-                                    margin-bottom:3px;cursor:${item.selectable ? 'pointer' : 'not-allowed'};border-radius:3px;
-                                    background:${item.selectable ? (item.id === selectedId ? 'rgba(255,100,0,0.05)' : 'rgba(255,255,255,0.03)') : 'rgba(0,0,0,0.2)'};
-                                    opacity:${item.selectable ? '1' : '0.75'};transition:all 0.15s;">
-                            <img src="${item.img}" style="width:28px;height:28px;object-fit:contain;margin-right:8px;border:1px solid #333;flex-shrink:0;">
-                            <div style="flex:1;display:flex;flex-direction:column;min-width:0;">
-                                <div style="margin-bottom:1px;">${item.labelHtml}</div>
-                                <span style="font-size:0.68em;opacity:0.45;text-transform:uppercase;font-weight:bold;letter-spacing:0.5px;">${item.sublabel}</span>
-                            </div>
-                            <i class="fas fa-check selection-check" style="color:#ff6400;margin-left:6px;font-size:0.85em;visibility:${item.id === selectedId ? 'visible' : 'hidden'};"></i>
-                        </div>
-                    `).join('')}
-                </div>
-            </div>
-        `;
+        if (!item?.detail)
+            return;
 
-        new Dialog({
-            title: localize('LA.dialogTitle.systemTrauma'),
-            content,
-            buttons: {
-                destroy: {
-                    icon: '<i class="fas fa-trash"></i>',
-                    label: localize("LA.altStruct.destroy"),
-                    callback: () =>
-                    {
-                        const item = items.find(candidateItem => candidateItem.id === selectedId);
-                        if (!item)
-                        {
-                            resolve(null);
-                            return;
-                        }
-                        if (!item.selectable)
-                        {
-                            ui.notifications.warn(localize('LA.notify.thisItemCannotBeDestroyed'));
-                            resolve(null);
-                            return;
-                        }
-                        if (item.type === "mount")
-                            resolve({ type: "mount", mount: item.data });
-                        else
-                            resolve({ type: "system", system: item.data });
-                    }
-                },
-                cancel: cancelButton(() => resolve(null))
-            },
-            default: "destroy",
-            render: (html) =>
+        let title = '', popupSubtitle = '', bodyHtml = '', theme = 'weapon';
+        if (item.type === "mount" && item.detail.weaponDetails?.length)
+        {
+            bodyHtml = item.detail.weaponDetails.map(weaponDetail =>
             {
-                html.find('.la-choice-item').on('contextmenu', function(e)
-                {
-                    e.preventDefault();
-                    document.querySelectorAll('.la-trauma-detail-popup').forEach(node => node.remove());
-                    const itemId = $(this).data('item-id');
-                    const item = items.find(candidateItem => candidateItem.id === itemId);
-                    if (!item?.detail)
-                        return;
+                const wName = item.detail.weaponDetails.length > 1
+                    ? `<div style="font-size:0.8em;font-weight:bold;color:#ff6400;margin-bottom:6px;border-bottom:1px solid #333;padding-bottom:4px;">${weaponDetail.name}</div>`
+                    : '';
 
-                    let title = '', subtitle = '', bodyHtml = '', theme = 'weapon';
-                    if (item.type === "mount" && item.detail.weaponDetails?.length)
-                    {
-                        bodyHtml = item.detail.weaponDetails.map(weaponDetail =>
-                        {
-                            const wName = item.detail.weaponDetails.length > 1
-                                ? `<div style="font-size:0.8em;font-weight:bold;color:#ff6400;margin-bottom:6px;border-bottom:1px solid #333;padding-bottom:4px;">${weaponDetail.name}</div>`
-                                : '';
-                            const showProfileNames = weaponDetail.profiles.length > 1;
-                            const profilesHtml = weaponDetail.profiles
-                                .map(profile => laRenderWeaponProfile(profile, showProfileNames))
-                                .join('<div style="border-top:1px dashed #333;margin:5px 0;"></div>');
-                            return `${wName}${profilesHtml}`;
-                        }).join('<hr style="border:0;border-top:1px solid #333;margin:6px 0;">');
-                        title = item.detail.weaponDetails.length > 1 ? item.sublabel : (item.detail.weaponDetails[0]?.name ?? '');
-                        subtitle = item.detail.weaponDetails.length > 1
-                            ? item.detail.weaponDetails.map(weaponDetail => weaponDetail.name).join(' / ')
-                            : [item.detail.weaponDetails[0]?.size, item.detail.weaponDetails[0]?.type].filter(Boolean).join(' · ');
-                    }
-                    else if (item.type === "system")
-                    {
-                        const detail = item.detail;
-                        if (!detail.effect && !detail.tags?.length && !detail.actions?.length)
-                            return;
-                        title = item.data.name;
-                        subtitle = item.sublabel;
-                        bodyHtml = laRenderTextSection('EFFECT', detail.effect, '#e65100')
-                            + laRenderTags(detail.tags)
-                            + laRenderActions(detail.actions);
-                        theme = 'system';
-                    }
-                    else
-                        return;
-                    const popup = laDetailPopup('la-trauma-detail-popup', title, subtitle, bodyHtml, theme);
-                    laPositionPopup(popup, html);
-                });
+                const showProfileNames = weaponDetail.profiles.length > 1;
 
-                html.find('.la-choice-item:not(.unselectable)').on('click', function()
-                {
-                    html.find('.la-choice-item')
-                        .css({ 'border-color': '#444', 'background': 'rgba(255,255,255,0.03)' })
-                        .find('.selection-check').css('visibility', 'hidden');
-                    $(this).css({ 'border-color': '#ff6400', 'background': 'rgba(255,100,0,0.05)' })
-                        .find('.selection-check').css('visibility', 'visible');
-                    selectedId = $(this).data('item-id');
-                });
-            }
-        }, {
-            classes: ['lancer-dialog-base', 'lancer-no-title'],
-            width: 480,
-            top: 450,
-            left: 150
-        }).render(true);
+                const profilesHtml = weaponDetail.profiles
+                    .map(profile => laRenderWeaponProfile(profile, showProfileNames))
+                    .join('<div style="border-top:1px dashed #333;margin:5px 0;"></div>');
+
+                return `${wName}${profilesHtml}`;
+            }).join('<hr style="border:0;border-top:1px solid #333;margin:6px 0;">');
+            title = item.detail.weaponDetails.length > 1 ? item.sublabel : (item.detail.weaponDetails[0]?.name ?? '');
+            popupSubtitle = item.detail.weaponDetails.length > 1
+                ? item.detail.weaponDetails.map(weaponDetail => weaponDetail.name).join(' / ')
+                : [item.detail.weaponDetails[0]?.size, item.detail.weaponDetails[0]?.type].filter(Boolean).join(' · ');
+        }
+        else if (item.type === "system")
+        {
+            const detail = item.detail;
+            if (!detail.effect && !detail.tags?.length && !detail.actions?.length)
+                return;
+            title = item.data.name;
+            popupSubtitle = item.sublabel;
+            bodyHtml = laRenderTextSection('EFFECT', detail.effect, '#e65100')
+                + laRenderTags(detail.tags)
+                + laRenderActions(detail.actions);
+            theme = 'system';
+        }
+        else
+            return;
+
+        const popup = laDetailPopup('la-trauma-detail-popup', title, popupSubtitle, bodyHtml, theme);
+        laPositionPopup(popup, html);
+    };
+
+    return {
+        kindLabel,
+        subtitle,
+        detail: showTraumaDetail,
+        rows: () => items.map(item => ({
+            item,
+            icon: item.icon,
+            name: item.name,
+            sub: item.sublabel,
+            lines: item.lines,
+            tags: item.tags,
+            off: !item.selectable,
+            picked: item.id === selectedId,
+        })),
+        pick: ({ item }) =>
+        {
+            selectedId = item.id;
+        },
+        choice: () =>
+        {
+            const item = items.find(candidateItem => candidateItem.id === selectedId);
+
+            if (!item)
+                return null;
+
+            return item.type === "mount" ? { type: "mount", mount: item.data } : { type: "system", system: item.data };
+        },
+    };
+}
+
+export async function showSystemTraumaDialog(actor, traumaType)
+{
+    const setup = traumaPickSetup(actor, traumaType);
+    if (!setup)
+        return null;
+
+    return startPickCard({
+        title: localize('LA.altStruct.systemTraumaCaps'),
+        origin: `${actor.name}, ${setup.kindLabel}`,
+        description: setup.subtitle,
+        hint: 'Right-click a row for details',
+        confirmText: localize("LA.altStruct.destroy"),
+        confirmIcon: 'fas fa-trash',
+        getRows: setup.rows,
+        onPick: (row, card) =>
+        {
+            setup.pick(row);
+            card.refresh();
+        },
+        onConfirm: card => card.finish(setup.choice()),
+        onContext: ({ item }, card) => setup.detail(item, card.element),
     });
+}
+
+export function tearOffChoice(state, traumaType)
+{
+    return 'la_tearOffChoice' in state ? Promise.resolve(state.la_tearOffChoice) : showSystemTraumaDialog(state.actor, traumaType);
 }
 
 /** Manual System Trauma function for macros/hotkeys */
 export async function manualSystemTrauma()
 {
     let token = canvas.tokens.controlled[0];
+
     if (!token && game.user.character)
     {
         const tokens = game.user.character.getActiveTokens();
         token = tokens[0];
     }
+
     if (!token)
     {
         ui.notifications.error(localize('LA.notify.noTokenSelected'));
         return;
     }
+
     const actor = token.actor;
+
     if (!actor || (!actor.is_mech() && !actor.is_npc()))
     {
         ui.notifications.error(localize('LA.notify.selectedTokenMustBeAMechOr'));
@@ -860,6 +949,7 @@ async function handleTearOffChoice(state, isSystemTrauma)
 
     if (!isValidActor(state.actor))
         return false;
+
     const actor = state.actor;
 
     const result = state.data.result;
@@ -867,12 +957,13 @@ async function handleTearOffChoice(state, isSystemTrauma)
         throw new TypeError(`Secondary Structure check hasn't been rolled yet!`);
 
     const traumaType = result.roll.total <= 3 ? "weapon" : "system";
-    const choice = await showSystemTraumaDialog(actor, traumaType);
+    const choice = await tearOffChoice(state, traumaType);
 
     if (!choice)
     {
         const damage = actor.system.structure.max - actor.system.structure.value;
         const hitType = localize(isSystemTrauma ? 'LA.altStruct.directHit' : 'LA.altStruct.crushingHit');
+
         const hitDescription = isSystemTrauma
             ? localize('LA.altStruct.noEquipmentDirectHit')
             : localize('LA.altStruct.noEquipmentCrushingHit');
@@ -916,7 +1007,8 @@ async function handleTearOffChoice(state, isSystemTrauma)
                     },
                     cancel: cancelButton(() => resolve(false))
                 },
-                default: "proceed"
+                default: "proceed",
+                close: () => resolve(false)
             }, {
                 width: 400,
                 height: "auto"
@@ -944,6 +1036,7 @@ async function handleTearOffChoice(state, isSystemTrauma)
                     super(uuid, data || {});
                 }
             };
+
             GenericFlow.steps = SimulatedStructureFlow.steps;
             new GenericFlow(actor.uuid, { overrideRoll: simulatedRoll }).begin();
         }
@@ -960,11 +1053,13 @@ async function handleTearOffChoice(state, isSystemTrauma)
     delete state.data.result;
 
     const currentStructure = actor.system.structure.value;
+
     if (currentStructure === 1)
     {
         // generic-card.hbs has no embedButtons block, the anchor has to ride in the description
         state.data.description += altStructButton({ flowType: 'DirectHitHullCheckFlow', actorUuid: actor.uuid, icon: 'fas fa-dice-d20', label: 'LA.common.hull', attrs: { 'check-type': 'hull', 'rem-struct': 1 } });
     }
+
     return true;
 }
 
@@ -974,9 +1069,11 @@ export async function tearOffDirectHitFlow(state)
         throw new TypeError(`Check flow data missing!`);
     if (!isValidActor(state.actor))
         return false;
+
     const actor = state.actor;
 
     const damage = actor.system.structure.max - actor.system.structure.value;
+
     const confirmed = await new Promise((resolve) =>
     {
         new Dialog({
@@ -1016,7 +1113,8 @@ export async function tearOffDirectHitFlow(state)
                 },
                 cancel: cancelButton(() => resolve(false))
             },
-            default: "proceed"
+            default: "proceed",
+            close: () => resolve(false)
         }, {
             width: 400,
             height: "auto"
@@ -1032,6 +1130,7 @@ export async function tearOffDirectHitFlow(state)
     console.log("lancer-automations | alt-struct |No weapons/systems, launching SimulatedStructureFlow with Direct Hit");
     const directHitRoll = await createDirectHitRoll(damage);
     const SimulatedStructureFlow = game.lancer?.flows?.get("SimulatedStructureFlow");
+
     if (SimulatedStructureFlow && typeof SimulatedStructureFlow === "function")
         new SimulatedStructureFlow(actor.uuid, { overrideRoll: directHitRoll }).begin();
     else if (SimulatedStructureFlow?.steps)
@@ -1043,6 +1142,7 @@ export async function tearOffDirectHitFlow(state)
                 super(uuid, data || {});
             }
         };
+
         GenericFlow.steps = SimulatedStructureFlow.steps;
         new GenericFlow(actor.uuid, { overrideRoll: directHitRoll }).begin();
     }
@@ -1057,9 +1157,11 @@ export async function tearOffCrushingHitFlow(state)
         throw new TypeError(`Check flow data missing!`);
     if (!isValidActor(state.actor))
         return false;
+
     const actor = state.actor;
 
     const damage = actor.system.structure.max - actor.system.structure.value;
+
     const confirmed = await new Promise((resolve) =>
     {
         new Dialog({
@@ -1099,7 +1201,8 @@ export async function tearOffCrushingHitFlow(state)
                 },
                 cancel: cancelButton(() => resolve(false))
             },
-            default: "proceed"
+            default: "proceed",
+            close: () => resolve(false)
         }, {
             width: 400,
             height: "auto"
@@ -1115,6 +1218,7 @@ export async function tearOffCrushingHitFlow(state)
     console.log("lancer-automations | alt-struct |No weapons/systems, launching SimulatedStructureFlow with Crushing Hit");
     const crushingRoll = await createCrushingHitRoll(damage);
     const SimulatedStructureFlow = game.lancer?.flows?.get("SimulatedStructureFlow");
+
     if (SimulatedStructureFlow && typeof SimulatedStructureFlow === "function")
         new SimulatedStructureFlow(actor.uuid, { overrideRoll: crushingRoll }).begin();
     else if (SimulatedStructureFlow?.steps)
@@ -1126,6 +1230,7 @@ export async function tearOffCrushingHitFlow(state)
                 super(uuid, data || {});
             }
         };
+
         GenericFlow.steps = SimulatedStructureFlow.steps;
         new GenericFlow(actor.uuid, { overrideRoll: crushingRoll }).begin();
     }
@@ -1155,6 +1260,7 @@ export async function handleDirectHitHullCheckResult(actor, success)
     {
         if (!token)
             return;
+
         try
         {
             await applyEffectsToTokens({
@@ -1169,11 +1275,13 @@ export async function handleDirectHitHullCheckResult(actor, success)
             console.warn("lancer-automations | alt-struct |Could not apply effects:", error);
         }
     };
+
     const tearOff = () => hasWeaponsOrSystems
         ? altStructButton({ flowType: 'secondaryStructureCrushingHit', actorUuid: actor.uuid, icon: 'fas fa-dice-d6', label: 'LA.altStruct.tearOff' })
         : altStructButton({ flowType: 'TearOffCrushingHitFlow', actorUuid: actor.uuid, icon: 'fas fa-dice-d6', label: 'LA.altStruct.crushingHitCaps' });
 
     const title = localize('LA.altStruct.directHit');
+
     if (remStruct === 2)
     {
         if (success)
@@ -1181,6 +1289,7 @@ export async function handleDirectHitHullCheckResult(actor, success)
             await applyHullEffects(["slow", "impaired"], "Direct Hit (HULL check success)");
             return { title, description: localize('LA.altStruct.result.hullPassedSlowImpaired') };
         }
+
         if (hasWeaponsOrSystems)
             await applyHullEffects(["immobilized", "impaired"], "Direct Hit (HULL check failed)");
         return { title, description: `${localize('LA.altStruct.result.hullFailed')}${hasWeaponsOrSystems ? ' ' + localize('LA.altStruct.result.immobilizedImpaired') : ''}<br>${tearOff()}` };
@@ -1188,11 +1297,13 @@ export async function handleDirectHitHullCheckResult(actor, success)
 
     if (!hasWeaponsOrSystems)
         return { title, description: `${localize('LA.altStruct.result.noValidEquipment')}<br>${tearOff()}` };
+
     if (success)
     {
         await applyHullEffects(["slow", "impaired"], "Direct Hit (HULL check success)");
         return { title, description: `${localize('LA.altStruct.result.hullPassedSlowImpaired')}<br>${tearOff()}` };
     }
+
     await applyHullEffects(["stunned"], "Direct Hit (HULL check failed)");
     return { title, description: `${localize('LA.altStruct.result.hullFailedStunned')}<br>${tearOff()}` };
 }
@@ -1224,6 +1335,7 @@ export async function handleCrushingHitHullCheckResult(actor, success)
                 console.warn("lancer-automations | alt-struct |Could not apply Dazed effect:", error);
             }
         }
+
         return { title, description: localize('LA.altStruct.result.hullPassedDazed') };
     }
 
@@ -1238,6 +1350,7 @@ export async function applyStructureEffects(state)
         throw new TypeError(`Structure roll flow data missing!`);
     if (!isValidActor(state.actor))
         return false;
+
     const actor = state.actor;
 
     const result = state.data.result;
@@ -1249,11 +1362,13 @@ export async function applyStructureEffects(state)
     const remStruct = state.data.remStruct;
 
     const tokens = actor.getActiveTokens();
+
     if (!tokens || tokens.length === 0)
     {
         console.log("lancer-automations | alt-struct |No active token found for actor");
         return true;
     }
+
     const token = tokens[0];
 
     switch (rollTotal)
@@ -1276,6 +1391,7 @@ export async function applyStructureEffects(state)
                     console.warn("lancer-automations | alt-struct |Could not apply Direct Hit effects:", error);
                 }
             }
+
             break;
         case 5:
         case 6:
@@ -1293,7 +1409,9 @@ export async function applyStructureEffects(state)
             {
                 console.warn("lancer-automations | alt-struct |Could not apply IMPAIRED effect:", error);
             }
+
             break;
     }
+
     return true;
 }

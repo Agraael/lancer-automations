@@ -99,6 +99,7 @@ function _ensureExtraBarsStyles()
 {
     if (document.getElementById('la-extra-bars-styles'))
         return;
+
     const styleEl = document.createElement('style');
     styleEl.id = 'la-extra-bars-styles';
     styleEl.textContent = `
@@ -150,6 +151,7 @@ function _bindExtraBarsUI(root, tokenDoc, app, storeOverride = null)
     const listEl = root.querySelector?.('[data-extras]');
     const addBtn = root.querySelector?.('.la-extra-bars-add');
     const formEl = root.querySelector?.('form') ?? root.closest?.('form') ?? root;
+
     if (!listEl || !addBtn || !formEl)
         return;
 
@@ -172,18 +174,22 @@ function _bindExtraBarsUI(root, tokenDoc, app, storeOverride = null)
         // Mark every entry whose requested width pushed it onto a new line.
         const overflowing = new Set();
         let currentLine = null;
+
         for (const extra of workingExtras)
         {
             const widthPct = Math.max(1, Math.min(100, Number(extra?.widthPct) || 100));
             const breaks = !currentLine || extra?.layoutMode === 'newLine' || (currentLine.used + widthPct) > 100;
+
             if (breaks)
             {
                 if (currentLine && extra?.layoutMode === 'sameLine' && (currentLine.used + widthPct) > 100)
                     overflowing.add(extra.id);
                 currentLine = { used: 0 };
             }
+
             currentLine.used += widthPct;
         }
+
         void lines;
         return overflowing;
     };
@@ -211,6 +217,7 @@ function _bindExtraBarsUI(root, tokenDoc, app, storeOverride = null)
         {
             const idx = Number(rowEl.dataset.idx);
             const entry = workingExtras[idx];
+
             if (!entry)
                 return;
 
@@ -220,6 +227,7 @@ function _bindExtraBarsUI(root, tokenDoc, app, storeOverride = null)
                 {
                     const field = input.dataset.field;
                     let value;
+
                     if (input.type === 'checkbox')
                         value = input.checked;
                     else if (input.type === 'number')
@@ -251,6 +259,7 @@ function _bindExtraBarsUI(root, tokenDoc, app, storeOverride = null)
                     if (tokenDoc.actor && flagId)
                         await altFlags.setBarLink(tokenDoc.actor, flagId, false);
                 }
+
                 collapsedIds.delete(entry.id);
                 workingExtras.splice(idx, 1);
                 rerender();
@@ -272,6 +281,7 @@ function _bindExtraBarsUI(root, tokenDoc, app, storeOverride = null)
             rowEl.querySelector('.la-extra-bar-icon-pick')?.addEventListener('click', () =>
             {
                 const current = (entry.icon || DEFAULT_EXTRA_BAR_ICON);
+
                 const fp = new FilePicker({
                     type: 'imagevideo',
                     current,
@@ -280,6 +290,7 @@ function _bindExtraBarsUI(root, tokenDoc, app, storeOverride = null)
                         entry.icon = path;
                         if (iconInput)
                             iconInput.value = path;
+
                         if (iconPreview)
                         {
                             iconPreview.src = path;
@@ -287,6 +298,7 @@ function _bindExtraBarsUI(root, tokenDoc, app, storeOverride = null)
                         }
                     },
                 });
+
                 fp.browse();
             });
 
@@ -296,16 +308,20 @@ function _bindExtraBarsUI(root, tokenDoc, app, storeOverride = null)
                 const actor = tokenDoc?.actor ?? tokenDoc?.parent?.actor;
                 const pilot = resolvePilot(actor);
                 const sources = [];
+
                 if (actor)
                     sources.push({ label: actor.name ?? 'Actor', items: [...(actor.items?.values?.() ?? [])] });
                 if (pilot && pilot !== actor)
                     sources.push({ label: `${pilot.name ?? 'Pilot'} (Pilot)`, items: [...(pilot.items?.values?.() ?? [])] });
+
                 const optionGroups = sources.filter(source => source.items.length).map(source =>
                     `<optgroup label="${_escAttr(source.label)}">${source.items.map(item =>
                         `<option value="${_escAttr(item.uuid)}" ${entry.linkedItemUuid === item.uuid ? 'selected' : ''}>${_escAttr(item.name)} [${_escAttr(item.type)}]</option>`
                     ).join('')}</optgroup>`
                 ).join('');
+
                 const content = `<form><div class="form-group"><label>Linked Item</label><select name="uuid" style="width:100%;">${optionGroups || '<option value="">(no items found)</option>'}</select></div></form>`;
+
                 const picked = await Dialog.prompt({
                     title: localize('LA.dialogTitle.linkItemToExtraBar'),
                     content,
@@ -317,6 +333,7 @@ function _bindExtraBarsUI(root, tokenDoc, app, storeOverride = null)
                     },
                     rejectClose: false,
                 });
+
                 if (typeof picked === 'string')
                 {
                     entry.linkedItemUuid = picked;
@@ -340,6 +357,7 @@ function _bindExtraBarsUI(root, tokenDoc, app, storeOverride = null)
 
             // HTML5 drag/drop reorder: dragstart fires from the handle only.
             const dragHandle = rowEl.querySelector('.la-extra-bar-drag');
+
             if (dragHandle)
             {
                 dragHandle.addEventListener('dragstart', (/** @type {any} */ ev) =>
@@ -350,6 +368,7 @@ function _bindExtraBarsUI(root, tokenDoc, app, storeOverride = null)
                 });
                 dragHandle.addEventListener('dragend', () => rowEl.classList.remove('dragging'));
             }
+
             rowEl.addEventListener('dragover', (/** @type {any} */ ev) =>
             {
                 ev.preventDefault();
@@ -362,6 +381,7 @@ function _bindExtraBarsUI(root, tokenDoc, app, storeOverride = null)
                 rowEl.classList.remove('drag-over');
                 const from = Number(ev.dataTransfer.getData('text/plain'));
                 const to = idx;
+
                 if (Number.isFinite(from) && from !== to)
                 {
                     const moved = workingExtras.splice(from, 1)[0];
@@ -385,6 +405,7 @@ function _bindExtraBarsUI(root, tokenDoc, app, storeOverride = null)
     resetBtn?.addEventListener('click', async () =>
     {
         const settingOn = !!getModuleSetting(SETTING_AUTO_INJECT_TALENTS);
+
         // Persist the in-memory edits first so user changes aren't blown away by races.
         try
         {
@@ -394,19 +415,24 @@ function _bindExtraBarsUI(root, tokenDoc, app, storeOverride = null)
         {
             console.warn(`${MODULE_ID} | reset auto: failed to persist current state`, err);
         }
+
         const ok = await store.onReset();
+
         if (!ok)
         {
             ui.notifications.warn(localize('LA.notify.resetFailedSeeTheConsole'));
             return;
         }
+
         // Pull the fresh array back into the editor and re-render.
         workingExtras = foundry.utils.deepClone(store.read());
+
         for (const entry of workingExtras)
         {
             if (entry?.id && entry.autoKey)
                 collapsedIds.add(entry.id);
         }
+
         rerender();
         ui.notifications.info(settingOn
             ? 'Auto-injected bars re-synced.'
@@ -446,6 +472,7 @@ function _makeActorTemplateStore(actor)
                 const { _tid, ...rest } = entry;
                 return { id: _tid ?? foundry.utils.randomID(), entry: rest };
             });
+
             await setLAFlag(actor,FLAG_TEMPLATES, records);
             await reinjectAutoBarsForActor(actor);
         },
@@ -461,6 +488,7 @@ function _makeActorTemplateStore(actor)
 function _makeSceneTokenStore(actor, tokenDoc)
 {
     const actorSrc = `actor:${actor.id}`;
+
     const linkedActorTid = (autoKey) =>
     {
         if (typeof autoKey !== 'string' || !autoKey.startsWith('linked:'))
@@ -469,10 +497,13 @@ function _makeSceneTokenStore(actor, tokenDoc)
             return null;
         return autoKey.split(':')[1] || null;
     };
+
     const initialArr = getLAFlag(tokenDoc,FLAG_EXTRAS) ?? [];
+
     const initiallyVisibleTids = new Set(
         initialArr.map(/** @type {any} */ entry => linkedActorTid(entry?.autoKey)).filter(Boolean),
     );
+
     return {
         read: () => getLAFlag(tokenDoc,FLAG_EXTRAS) ?? [],
         write: async (working) =>
@@ -481,17 +512,21 @@ function _makeSceneTokenStore(actor, tokenDoc)
             const newManuals = [];
             const templateUpdates = new Map();
             const tokenRows = [];
+
             for (const entry of working ?? [])
             {
                 if (!entry)
                     continue;
+
                 if (!entry.autoKey)
                 {
                     const { _tid, autoKey, ...rest } = entry;
                     newManuals.push(rest);
                     continue;
                 }
+
                 const tid = linkedActorTid(entry.autoKey);
+
                 if (tid)
                 {
                     workingTids.add(tid);
@@ -499,14 +534,18 @@ function _makeSceneTokenStore(actor, tokenDoc)
                     templateUpdates.set(tid, rest);
                     continue;
                 }
+
                 tokenRows.push(entry);
             }
+
             const existing = getLAFlag(actor,FLAG_TEMPLATES) ?? [];
             const merged = [];
+
             for (const record of existing)
             {
                 const wasVisible = initiallyVisibleTids.has(record.id);
                 const stillVisible = workingTids.has(record.id);
+
                 if (wasVisible && !stillVisible)
                     continue;
                 if (templateUpdates.has(record.id))
@@ -514,6 +553,7 @@ function _makeSceneTokenStore(actor, tokenDoc)
                 else
                     merged.push(record);
             }
+
             for (const rest of newManuals)
                 merged.push({ id: foundry.utils.randomID(), entry: rest });
             await setLAFlag(actor,FLAG_TEMPLATES, merged);
@@ -529,15 +569,20 @@ export function renderConfigHandler(app, html)
 {
     if (!isEnabled())
         return;
+
     const isPrototype = app.isPrototype === true;
     const tokenDoc = app.token ?? app.object;
     const actor = app.actor ?? tokenDoc?.actor ?? tokenDoc?.parent;
+
     if (!isLancerCombatant(actor) || !tokenDoc)
         return;
+
     const root = html instanceof HTMLElement ? html : html?.[0];
     const tab = root?.querySelector?.('.tab[data-tab="resources"]');
+
     if (!tab)
         return;
+
     const hidden = statBarHidden(tokenDoc);
     const disabled = statBarDisabled(tokenDoc);
     const combatOnly = statBarCombatOnly(tokenDoc);
@@ -547,8 +592,10 @@ export function renderConfigHandler(app, html)
     const showMode = getLAFlag(tokenDoc,FLAG_SHOW_MODE) ?? '';
     const isPilotActor = tokenDoc?.actor?.type === 'pilot';
     const pilotStress = showsPilotStress(tokenDoc);
+
     const visOption = (val, label, current) =>
         `<option value="${val}" ${current === val ? 'selected' : ''}>${label}</option>`;
+
     const visSelect = (name, current) => `
         <select name="${name}">
             ${visOption('', 'Use world default', current)}
@@ -558,6 +605,7 @@ export function renderConfigHandler(app, html)
             ${visOption(VIS_NONE, 'None', current)}
         </select>
     `;
+
     // Hidden bar1/bar2 fields so Foundry's submit handler doesn't crash.
     const bar1Attr = tokenDoc.bar1?.attribute ?? '';
     const bar2Attr = tokenDoc.bar2?.attribute ?? '';
@@ -625,9 +673,11 @@ export function renderConfigHandler(app, html)
         </div>
         </div>
     `;
+
     const storeOverride = isPrototype
         ? _makeActorTemplateStore(actor)
         : _makeSceneTokenStore(actor, tokenDoc);
+
     _bindExtraBarsUI(root, tokenDoc, app, storeOverride);
     if (typeof app.setPosition === 'function')
         app.setPosition({ height: 'auto' });

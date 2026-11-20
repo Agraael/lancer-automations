@@ -25,6 +25,7 @@ export function getBoostOfferMode()
 export function registerSettings()
 {
     // Core
+    // LEGACY KEYS `reactionNotificationMode`, `reactionEditorBandFolded`. See the note on AutomationManager.
     game.settings.register(MODULE_ID,'reactionNotificationMode', {
         name: 'LA.settings.reactionNotificationMode.name',
         hint: 'LA.settings.reactionNotificationMode.hint',
@@ -394,6 +395,24 @@ export function registerSettings()
         default: true
     });
 
+    game.settings.register(MODULE_ID,'diceFirst', {
+        name: 'LA.settings.diceFirst.name',
+        hint: 'LA.settings.diceFirst.hint',
+        scope: 'world',
+        config: false,
+        type: Boolean,
+        default: false
+    });
+
+    game.settings.register(MODULE_ID,'diceFirstLead', {
+        name: 'LA.settings.diceFirstLead.name',
+        hint: 'LA.settings.diceFirstLead.hint',
+        scope: 'world',
+        config: false,
+        type: Number,
+        default: 1000
+    });
+
     game.settings.register(MODULE_ID,'autoStructFollowup', {
         name: 'LA.settings.autoStructFollowup.name',
         hint: 'LA.settings.autoStructFollowup.hint',
@@ -406,15 +425,6 @@ export function registerSettings()
     game.settings.register(MODULE_ID,'enableKnockbackFlow', {
         name: 'LA.settings.enableKnockbackFlow.name',
         hint: 'LA.settings.enableKnockbackFlow.hint',
-        scope: 'world',
-        config: false,
-        type: Boolean,
-        default: true
-    });
-
-    game.settings.register(MODULE_ID,'enableThrowFlow', {
-        name: 'LA.settings.enableThrowFlow.name',
-        hint: 'LA.settings.enableThrowFlow.hint',
         scope: 'world',
         config: false,
         type: Boolean,
@@ -465,6 +475,15 @@ export function registerSettings()
     game.settings.register(MODULE_ID,'weaponFxAboveTokens', {
         name: 'LA.settings.weaponFxAboveTokens.name',
         hint: 'LA.settings.weaponFxAboveTokens.hint',
+        scope: 'world',
+        config: false,
+        type: Boolean,
+        default: true
+    });
+
+    game.settings.register(MODULE_ID,'weaponFxDefaults', {
+        name: 'LA.settings.weaponFxDefaults.name',
+        hint: 'LA.settings.weaponFxDefaults.hint',
         scope: 'world',
         config: false,
         type: Boolean,
@@ -710,12 +729,14 @@ export function registerSettings()
         type: Boolean,
         default: true,
     });
+
     // Per-category wreck mode + terrain.
     const wreckModeChoices = {
         token: 'LA.settings.wreckMode.choices.token',
         tile: 'LA.settings.wreckMode.choices.tile',
         none: 'LA.settings.wreckMode.choices.none',
     };
+
     for (const cat of ['mech', 'vehicle', 'human', 'monstrosity', 'biological'])
     {
         game.settings.register(MODULE_ID,`wreckMode_${cat}`, {
@@ -741,6 +762,7 @@ export function registerSettings()
             },
         });
     }
+
     game.settings.register(MODULE_ID,'wreckAuraColor', {
         name: 'LA.settings.wreckAuraColor.name',
         hint: 'LA.settings.wreckAuraColor.hint',
@@ -973,6 +995,15 @@ export function registerSettings()
         config: false,
         type: Number,
         default: 1.5
+    });
+
+    game.settings.register(MODULE_ID,'deployableFolderName', {
+        name: 'LA.settings.deployableFolderName.name',
+        hint: 'LA.settings.deployableFolderName.hint',
+        scope: 'world',
+        config: false,
+        type: String,
+        default: 'Deployables'
     });
 
     game.settings.register(MODULE_ID,'deployableArtPools', {

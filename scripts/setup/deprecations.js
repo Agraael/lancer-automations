@@ -1,6 +1,6 @@
 // Deprecation scans over saved world data. A world that upgrades gets told what stopped working
 // instead of finding out mid-session.
-import { ReactionManager } from "../activations/reaction-manager.js";
+import { AutomationManager } from "../activations/automation-manager.js";
 import { getModuleSetting } from "../tools/settings-utils.js";
 import { localizeFormat } from "../tools/string-utils.js";
 
@@ -12,30 +12,30 @@ import { localizeFormat } from "../tools/string-utils.js";
  */
 
 /** Every saved reaction, labelled by where it lives. Defaults are skipped, they ship already migrated. */
-function* savedReactions()
+function* savedAutomations()
 {
-    const items = getModuleSetting(ReactionManager.SETTING_REACTIONS) || {};
+    const items = getModuleSetting(AutomationManager.SETTING_AUTOMATIONS) || {};
     for (const [lid, entry] of Object.entries(items))
-        for (const reaction of (Array.isArray(entry?.reactions) ? entry.reactions : []))
-            yield { label: `item ${lid} / ${reaction?.name || 'unnamed'}`, reaction };
+        for (const automation of (Array.isArray(entry?.reactions) ? entry.reactions : []))
+            yield { label: `item ${lid} / ${automation?.name || 'unnamed'}`, automation };
 
-    const general = getModuleSetting(ReactionManager.SETTING_GENERAL_REACTIONS) || {};
+    const general = getModuleSetting(AutomationManager.SETTING_GENERAL_AUTOMATIONS) || {};
     for (const [name, entry] of Object.entries(general))
-        for (const reaction of (Array.isArray(entry?.reactions) ? entry.reactions : [entry]))
-            yield { label: `general ${name}`, reaction };
+        for (const automation of (Array.isArray(entry?.reactions) ? entry.reactions : [entry]))
+            yield { label: `general ${name}`, automation };
 }
 
 function* savedStartupScripts()
 {
-    for (const script of ReactionManager.getStartupScripts())
+    for (const script of AutomationManager.getStartupScripts())
         yield { label: `startup script ${script?.name || 'unnamed'}`, code: typeof script?.code === 'string' ? script.code : '' };
 }
 
 /** True when any user-authored code field on the reaction matches the pattern. */
-function reactionCodeMentions(reaction, pattern)
+function automationCodeMentions(automation, pattern)
 {
-    return !!reaction && typeof reaction === 'object'
-        && Object.values(reaction).some(value => typeof value === 'string' && pattern.test(value));
+    return !!automation && typeof automation === 'object'
+        && Object.values(automation).some(value => typeof value === 'string' && pattern.test(value));
 }
 
 /** @type {DeprecationCheck} */
@@ -48,11 +48,12 @@ const endActivationCheck = {
         const endTriggers = ['onEndActivation', 'onInitEndActivation'];
         const hits = [];
 
-        for (const { label, reaction } of savedReactions())
+        for (const { label, automation } of savedAutomations())
         {
-            if (!reactionCodeMentions(reaction, /endActivation/))
+            if (!automationCodeMentions(automation, /endActivation/))
                 continue;
-            const triggers = Array.isArray(reaction.triggers) ? reaction.triggers : [];
+
+            const triggers = Array.isArray(automation.triggers) ? automation.triggers : [];
             if (!triggers.some(trigger => endTriggers.includes(trigger)))
                 hits.push(label);
         }
@@ -77,11 +78,12 @@ const involuntaryMoveCheck = {
     scan()
     {
         const hits = [];
-        for (const { label, reaction } of savedReactions())
+
+        for (const { label, automation } of savedAutomations())
         {
-            const triggers = Array.isArray(reaction?.triggers) ? reaction.triggers : [];
+            const triggers = Array.isArray(automation?.triggers) ? automation.triggers : [];
             if (triggers.some(trigger => INVOLUNTARY_TRIGGERS.includes(trigger))
-                && reactionCodeMentions(reaction, LEGACY_INVOLUNTARY_FIELDS))
+                && automationCodeMentions(automation, LEGACY_INVOLUNTARY_FIELDS))
                 hits.push(label);
         }
 
@@ -105,9 +107,10 @@ const defenseSubtypeCheck = {
     scan()
     {
         const hits = [];
-        for (const { label, reaction } of savedReactions())
+
+        for (const { label, automation } of savedAutomations())
         {
-            if (reactionCodeMentions(reaction, LEGACY_DEFENSE_CODE))
+            if (automationCodeMentions(automation, LEGACY_DEFENSE_CODE))
                 hits.push(label);
         }
 
@@ -127,8 +130,41 @@ const defenseSubtypeCheck = {
     }
 };
 
+const LEGACY_MOVEMENT_CODE = /subtype\s*:\s*['"](elevation|terrain|obstacle)['"]|(getImmunityBonuses|consumeImmunityUse)\s*\([^)]*['"](elevation|terrain|obstacle)['"]/;
+
+const movementSubtypeCheck = {
+    id: 'movementSubtypes',
+    message: 'Movement immunities are now the "movement" bonus type. Replace { type: "immunity", subtype: "elevation" } with '
+        + '{ type: "movement", subtype: "climber" }, "terrain" with "terrain_immunity" and "obstacle" with "phasing". '
+        + 'getImmunityBonuses and consumeImmunityUse become getMovementBonuses and consumeMovementUse. Update these:',
+    scan()
+    {
+        const hits = [];
+
+        for (const { label, automation } of savedAutomations())
+        {
+            if (automationCodeMentions(automation, LEGACY_MOVEMENT_CODE))
+                hits.push(label);
+        }
+
+        for (const { label, code } of savedStartupScripts())
+        {
+            if (LEGACY_MOVEMENT_CODE.test(code))
+                hits.push(label);
+        }
+
+        for (const macro of game.macros ?? [])
+        {
+            if (macro.type === 'script' && LEGACY_MOVEMENT_CODE.test(macro.command ?? ''))
+                hits.push(`macro ${macro.name}`);
+        }
+
+        return hits;
+    }
+};
+
 /** @type {DeprecationCheck[]} */
-const CHECKS = [endActivationCheck, involuntaryMoveCheck, defenseSubtypeCheck];
+const CHECKS = [endActivationCheck, involuntaryMoveCheck, defenseSubtypeCheck, movementSubtypeCheck];
 
 /**
  * Run every deprecation check and report the results. GM only, the fixes are world-level.
@@ -142,9 +178,11 @@ export function runDeprecationScans()
         return results;
 
     let total = 0;
+
     for (const check of CHECKS)
     {
         let hits = [];
+
         try
         {
             hits = check.scan() ?? [];
@@ -154,6 +192,7 @@ export function runDeprecationScans()
             console.error(`lancer-automations | Deprecation check "${check.id}" failed:`, error);
             continue;
         }
+
         if (!hits.length)
             continue;
         results[check.id] = hits;

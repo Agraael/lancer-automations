@@ -2,9 +2,9 @@
 
 [← Back to Home](../index.md)
 
-With **Attack HUD Target Picker** (**`attackTargeting`**) on, the attack HUD gains a picker for choosing your target or placing your area straight from the accuracy/difficulty dialog. Whatever you pick becomes a normal Foundry target the roll reads as usual, and it stays targeted after the roll unless **Clear Targets After Roll** (**`clearTargetsAfterRoll`**) is on, which it is not by default.
+With **Attack HUD Target Picker** (**`attackTargeting`**) on, the attack HUD gains a picker for choosing your target or placing your area straight from the accuracy/difficulty dialog. Whatever you pick becomes a normal Foundry target the roll reads as usual. It stays targeted after the roll, unless **Clear Targets After Roll** (**`clearTargetsAfterRoll`**) is on (it's off by default).
 
-Separately, a standalone **measure toolbar** (**Shift+R**) puts the same shapes, marks, and range readouts on the canvas any time - see [Advanced Measure tool](#advanced-measure-tool) below.
+There's also a standalone **measure toolbar** (**Shift+R**) with the same shapes, marks and range readouts, usable any time. See [Advanced Measure tool](#advanced-measure-tool) below.
 
 ---
 
@@ -20,11 +20,16 @@ Separately, a standalone **measure toolbar** (**Shift+R**) puts the same shapes,
 
 <img align="right" src="../img/at-buttons.png" width="45%"/>
 
-When the attack HUD opens, a targeting button joins its range row. A simple-range weapon gets a **Range N** button, a melee weapon gets **Threat N**, a tech attack gets **Sensors N**, and an area-of-effect (AoE) weapon gets one button per pattern, **Blast / Burst / Cone / Line**, in place of the system's template buttons, with an **Elevation / Terrain / Spread** toggle row below them (plus **Line of sight** when [range pulse LOS](./VISION.md#range-pulse-line-of-sight) is on).
+When the attack HUD opens, a targeting button joins its range row:
+
+- A simple-range weapon gets a **Range N** button.
+- A melee weapon gets **Threat N**.
+- A tech attack gets **Sensors N**.
+- An area-of-effect (AoE) weapon gets one button per pattern, **Blast / Burst / Cone / Line**, in place of the system's template buttons. It also gets an **Elevation / Terrain / Spread** toggle row below them (plus **Line of sight** when [range pulse LOS](./VISION.md#range-pulse-line-of-sight) is on).
 
 A weapon that has both a Range and a Threat, and whose two values differ, also gets a swap arrow beside the button to flip the label between them.
 
-Click a button to start picking, click it again (or Esc) to stop.
+Click a button to start picking, click it again (or right-click, or Esc) to stop. A right drag moves the camera without stopping.
 
 <br clear="right"/>
 
@@ -34,7 +39,7 @@ Click a button to start picking, click it again (or Esc) to stop.
 
 <img align="right" src="../img/at-single.png" width="45%"/>
 
-**There is no range gate: the button's range is only a label.** The cursor highlights what's under it: blue over a token, red over empty ground. Click a token to target it, and hold **Shift** to keep targeting more. Esc or a re-click ends it.
+**There is no range gate: the button's range is only a label.** The cursor highlights what's under it: blue over a token, red over empty ground. Click a token to target it, and hold **Shift** to keep targeting more. Esc, a right-click or clicking the button again stops picking.
 
 <br clear="right"/>
 
@@ -58,7 +63,7 @@ Each targeted token gets a live **hit chance** and **damage range** label. **`ta
 
 | Throwing | Landing |
 |:---------|:--------|
-| Tick a throwable weapon's **Thrown** box in the HUD and the button becomes **Throw N**, previewing the throw distance in place of the melee reach. Clear it to go back to the weapon's normal range. A weapon whose box is ticked but carries no Thrown tag keeps its normal range. | Rolling the attack then lands the weapon on the field as a token and disables it on the sheet until you [pick it back up](./INTERACTIVE_TOOLS.md). With **`enableThrowFlow`** on, attacking a throwable weapon first asks whether to attack with it or throw it. |
+| Tick the **Thrown** box in the HUD to throw the weapon. Any melee weapon can be thrown. With a Thrown tag, the button becomes **Throw N** and previews the throw distance in place of the melee reach. Without the tag it keeps its normal range. Clear the box to go back to a normal attack. | Rolling the attack then lands the weapon on the field as a token and disables it on the sheet until you [pick it back up](./INTERACTIVE_TOOLS.md). |
 | <img src="../img/at-throw.png" width="100%"/> | <img src="../img/at-throw-placed.png" width="100%"/> |
 
 ---
@@ -67,9 +72,18 @@ Each targeted token gets a live **hit chance** and **damage range** label. **`ta
 
 <img align="right" src="../img/at-area.png" width="45%"/>
 
-Placing a template catches every token inside it as a target. **Blast** drops a disk on the hovered cell, **Burst** centers on the token under the cursor, and **Cone** and **Line** aim from the cursor and rotate with **Ctrl + mouse-wheel** (a line also tilts into a slope). Hold **Shift** while placing to stack more shapes onto the same target set.
+Placing a template catches every token inside it as a target. **Blast** drops a disk on the hovered cell, **Burst** centers on the token under the cursor, and **Cone** and **Line** start on the cell under the cursor (a line also tilts into a slope). Hold **Shift** while placing to stack more shapes onto the same target set.
+
+To aim a **Cone** or **Line**:
+
+- Press on the cell where it starts, drag toward the target, and release.
+- Press on a token and drag out to start it on the cell next to that token.
+- A click without a drag places it with its current facing.
+- Esc or a right-click during the drag drops the aim and keeps the shape.
 
 <br clear="right"/>
+
+<img src="../vid/at-drag-aim.gif" width="70%"/>
 
 ---
 
@@ -85,13 +99,19 @@ The toggle row controls the 3-D side. **Elevation** catches tokens by vertical o
 
 ## Keybinds
 
-**E / Q** raise and lower the area's elevation, **W / S** tilt a line, and **Z** resets the elevation offset, rotation and tilt. **Ctrl + wheel** rotates a cone or line. The keys are rebindable under Configure Controls → Lancer Automations.
+- **E / Q** raise and lower the area's elevation.
+- **W / S** tilt a line.
+- **Z** resets the elevation offset, rotation and tilt.
+- **Left drag** aims a cone or line.
+- **Right-click** stops placing. A right drag moves the camera.
+
+The keys are rebindable under Configure Controls → Lancer Automations.
 
 ---
 
 ## After the roll
 
-Closing the HUD stops the picker and clears its shapes. Your targets stay on after the roll unless **Clear Targets After Roll** (**`clearTargetsAfterRoll`**) is on, which it is not by default. Your in-progress aiming can also be shown to other players, see [Share Interactive Tools](./INTERACTIVE_TOOLS.md).
+Closing the HUD stops the picker and clears its shapes. Your targets stay on after the roll, unless **Clear Targets After Roll** (**`clearTargetsAfterRoll`**) is on (it's off by default). Your in-progress aiming can also be shown to other players, see [Share Interactive Tools](./INTERACTIVE_TOOLS.md).
 
 ---
 
@@ -99,12 +119,16 @@ Closing the HUD stops the picker and clears its shapes. Your targets stay on aft
 
 Press **Shift+R**, or its button under the Ruler in the Token controls, to toggle a standalone measure toolbar, docked above the macro hotbar. It's per-client and works outside any attack or flow. It greys out while an attack, damage or HASE HUD is open. On it:
 
-- **Blast / Burst / Cone / Line** - arm a shape, then set its size and the **Elevation / Terrain / Spread** toggles in the panel above it. Each click drops a shape, and a click inside one removes it. With no shape armed you move and drag tokens as usual.
-- **Mark** (the reticle) - click a token or a hex to put a gold mark on it, click again or right-click to remove it. Marks never target.
-- the **range source** selector - **Threat**, **Sensor**, **Max Reach**, **Weapon**, or **Manual**, pulsing that range around the reference token. Click the active one again to turn it off. **Manual** opens a range stepper and **Weapon** your weapon list. The reference is the token you hover, else your selection. [Range pulse LOS](./VISION.md#range-pulse-line-of-sight) clips it, with a **Sight** toggle per source in the list.
-- **Movement reach** - the reference token's movement, in the ruler's speed tiers.
-- **Tactical distance labels** - distances from the reference token.
-- the **eye** - [line of sight](./VISION.md#lancer-line-of-sight) to your marks, or to your targets when nothing is marked. [What the colors mean](./VISION.md#reading-the-sightlines).
+- **Blast / Burst / Cone / Line**: arm a shape, then set its size and the **Elevation / Terrain / Spread** toggles in the panel above it. Each click drops a shape, a drag aims a cone or line, and a click inside one removes it. A right-click stops placing. With no shape armed you move and drag tokens as usual.
+- **Mark** (the reticle): click a token or a hex to put a gold mark on it, click again or right-click to remove it. Marks never target.
+- the **range source** selector: **Threat**, **Sensor**, **Max Reach**, **Weapon**, or **Manual**, pulsing that range around the reference token. The reference is the token you hover, else your selection.
+    - Click the active source again to turn it off.
+    - **Manual** opens a range stepper.
+    - **Weapon** opens your weapon list.
+    - [Range pulse LOS](./VISION.md#range-pulse-line-of-sight) clips the pulse, with a **Sight** toggle per source in the list.
+- **Movement reach**: the reference token's movement, in the ruler's speed tiers.
+- **Tactical distance labels**: distances from the reference token.
+- the **eye**: [line of sight](./VISION.md#lancer-line-of-sight) to your marks, or to your targets when nothing is marked. [What the colors mean](./VISION.md#reading-the-sightlines).
 
 **Max Reach** is your furthest weapon reach. A weapon's Blast, Burst, Cone or Line size adds to its Range, never to its Threat.
 

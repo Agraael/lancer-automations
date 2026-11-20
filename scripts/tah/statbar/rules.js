@@ -47,14 +47,17 @@ export function statBarHidden(tokenDoc)
 {
     return tokenBoolFlag(tokenDoc, FLAG_HIDDEN, SETTING_DEFAULT_HIDDEN);
 }
+
 export function statBarDisabled(tokenDoc)
 {
     return getLAFlag(tokenDoc,FLAG_DISABLED) === true;
 }
+
 export function statBarCombatOnly(tokenDoc)
 {
     return tokenBoolFlag(tokenDoc, FLAG_COMBAT_ONLY, SETTING_DEFAULT_COMBAT_ONLY);
 }
+
 export function statBarAlwaysShown(tokenDoc)
 {
     const mode = getLAFlag(tokenDoc, FLAG_SHOW_MODE);
@@ -62,6 +65,7 @@ export function statBarAlwaysShown(tokenDoc)
         return mode === SHOW_ALWAYS;
     return getWorldSetting(SETTING_DEFAULT_ALWAYS_SHOW, false) === true;
 }
+
 export function showsPilotStress(tokenDoc)
 {
     return tokenBoolFlag(tokenDoc, FLAG_PILOT_STRESS, SETTING_DEFAULT_PILOT_STRESS);
@@ -72,6 +76,7 @@ export function statBarRowHeight(tokenDoc)
     const flagValue = getLAFlag(tokenDoc,FLAG_ROW_HEIGHT);
     if (Number.isFinite(flagValue) && flagValue > 0)
         return Number(flagValue);
+
     const fallback = getWorldSetting(SETTING_DEFAULT_ROW_HEIGHT, 0);
     return Number.isFinite(fallback) && fallback > 0 ? Number(fallback) : 0;
 }
@@ -82,6 +87,7 @@ function resolveVisibilityMode(tokenDoc, inCombat)
     const flagKey = inCombat ? FLAG_VIS_IN_COMBAT : FLAG_VIS_OUT_OF_COMBAT;
     const settingKey = inCombat ? SETTING_VIS_IN_COMBAT : SETTING_VIS_OUT_OF_COMBAT;
     const mode = getLAFlag(tokenDoc,flagKey);
+
     if (mode === VIS_ALL || mode === VIS_OWNER || mode === VIS_NONE || mode === VIS_SCANNED)
         return mode;
     return getWorldSetting(settingKey, VIS_ALL);
@@ -112,6 +118,7 @@ export function statBarAccess(token)
         return null;
     if (statBarHidden(token.document))
         return null;
+
     const inCombat = isTokenInCombat(token);
     if (statBarCombatOnly(token.document) && !inCombat)
         return null;
@@ -140,7 +147,11 @@ export function shouldShowBars(token)
 export function belowBarsY(token)
 {
     const entry = _overlayHubs.get(token.id);
-    if (!entry || !shouldShowBars(token))
+    if (!entry)
+        return null;
+    if (entry.barsShown === undefined)
+        entry.barsShown = shouldShowBars(token);
+    if (!entry.barsShown)
         return null;
     return token.h + 10 + (entry.totalHeight ?? 0) * ((entry.wrapper?.scale?.y ?? 1) - 1);
 }
@@ -150,12 +161,14 @@ export function _isActorScannedByUser(actor, user)
 {
     if (!actor || !user)
         return false;
+
     try
     {
         return isActorScannedForUser(actor, user);
     }
     catch
     { /* ignore */ }
+
     return false;
 }
 

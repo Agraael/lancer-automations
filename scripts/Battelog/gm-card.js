@@ -12,6 +12,7 @@ export function openBattleLogGMCard(battle)
     const players = battle?.players ?? [];
     const mission = battle?.mission ?? {};
     const awardsDisabled = !!getModuleSetting('tah.disableAwards');
+
     const state = {
         outcome: mission.outcome ?? 'VICTORY',
         mvpId: null,
@@ -86,6 +87,7 @@ export function openBattleLogGMCard(battle)
             const $root = html instanceof $ ? html : $(html);
 
             const $list = $root.find('.battelog-extra-list');
+
             const renderExtraRows = () =>
             {
                 $list.empty();
@@ -99,11 +101,13 @@ export function openBattleLogGMCard(battle)
                             <button type="button" class="battelog-extra-remove" title="Remove"><i class="fas fa-times"></i></button>
                         </div>
                     `);
+
                     $list.append(rowEl);
                 });
                 // Foundry Dialogs pin height at render; nudge the popup to reflow.
                 dlg.setPosition({ height: 'auto' });
             };
+
             renderExtraRows();
 
             $root.on('click', '.battelog-extra-add', () =>
@@ -140,6 +144,7 @@ export function openBattleLogGMCard(battle)
             $root.on('click', '[data-mvp]', function ()
             {
                 const clicked = String($(this).data('mvp'));
+
                 if (state.mvpId === clicked)
                 {
                     state.mvpId = null;
@@ -156,9 +161,11 @@ export function openBattleLogGMCard(battle)
             $root.on('click', '[data-action="broadcast"]', async () =>
             {
                 const mvp = players.find(player => player.id === state.mvpId);
+
                 const extraLines = state.extraLines
                     .map(line => ({ label: line.label.trim(), result: line.result.trim() }))
                     .filter(line => line.label || line.result);
+
                 console.log('lancer-automations | Battle Log broadcast', { outcome: state.outcome, mvp, extraLines, battle });
                 dlg.close();
                 // Foundry sockets don't echo to sender; GM plays locally after emitting.
@@ -175,6 +182,7 @@ export function openBattleLogGMCard(battle)
         classes: ['lancer-dialog-base', 'lancer-no-title', 'battelog-dialog'],
         width: 560,
     });
+
     dlg.render(true);
     return dlg;
 }

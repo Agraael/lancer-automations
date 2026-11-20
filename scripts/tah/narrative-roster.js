@@ -12,6 +12,7 @@ export function getNarrativeLinkedActor()
     const uuid = getModuleSetting('tah.narrativeLinkedActorUuid');
     if (!uuid)
         return null;
+
     const actor = /** @type {any} */ (fromUuidSync(uuid));
     if (!actor || !NARRATIVE_TYPES.includes(actor.type))
         return null;
@@ -21,11 +22,14 @@ export function getNarrativeLinkedActor()
 export function getNarrativeRoster()
 {
     const stored = getModuleSetting('tah.narrativeRosterUuids');
+
     const uuids = Array.isArray(stored) && stored.length
         ? stored
         : [getModuleSetting('tah.narrativeLinkedActorUuid')].filter(Boolean);
+
     const seen = new Set();
     const pilots = [];
+
     for (const uuid of uuids)
     {
         if (!uuid || seen.has(uuid))
@@ -35,6 +39,7 @@ export function getNarrativeRoster()
         if (actor?.isOwner && NARRATIVE_TYPES.includes(actor.type))
             pilots.push(actor);
     }
+
     return pilots;
 }
 
@@ -45,12 +50,14 @@ export async function openNarrativePilotMenu({ setActor, onEnter, onLeave })
         return openNarrativeLinkDialog(setActor);
 
     const activeUuid = getModuleSetting('tah.narrativeLinkedActorUuid');
+
     const rows = roster.map(pilot => ({
         value: pilot.uuid,
         label: escapeHtml(pilot.name),
         glyph: pilot.uuid === activeUuid ? '●' : '○',
         cls: pilot.uuid === activeUuid ? 'la-menu-popup-active' : '',
     }));
+
     if (activeUuid)
         rows.push({ value: '', label: localize('LA.tokenHud.label.unlink'), glyph: '✕', cls: 'la-menu-popup-danger' });
     rows.push({ value: '__manage', label: localize('LA.tokenHud.label.manageRoster'), glyph: '⚙' });
@@ -61,6 +68,7 @@ export async function openNarrativePilotMenu({ setActor, onEnter, onLeave })
         onEnter,
         onLeave,
     });
+
     if (picked === null)
         return;
     if (picked === '__manage')
@@ -79,6 +87,7 @@ export async function openNarrativeLinkDialog(setActor)
     const roster = getNarrativeRoster().map(entry => entry.uuid);
     const subtitle = currentActor ? `Driving: ${escapeHtml(currentActor.name)}` : 'Nothing linked';
     const tokenImg = (entry) => entry?.prototypeToken?.texture?.src || entry?.img || 'icons/svg/mystery-man.svg';
+
     const cardHtml = (entry) =>
     {
         const sel = roster.includes(entry.uuid);
@@ -89,16 +98,20 @@ export async function openNarrativeLinkDialog(setActor)
             <span class="la-narrative-pilot-active" style="font-size:0.75em;letter-spacing:1px;color:var(--primary-color);${active ? '' : 'visibility:hidden;'}">DRIVING</span>
         </div>`;
     };
+
     const listHtml = (entries, emptyText) => entries.length
         ? entries.map(cardHtml).join('')
         : `<div style="font-size:0.85em;color:#888;font-style:italic;">${emptyText}</div>`;
+
     const tabStyle = (on) => `flex:1;padding:4px 8px;font-weight:600;font-size:0.85em;letter-spacing:0.5px;text-transform:uppercase;border:1px solid ${on ? 'var(--primary-color)' : '#999'};border-radius:3px;background:${on ? BG_ACTIVE : BG_DEFAULT};color:${on ? TEXT_ACTIVE : TEXT_DEFAULT};cursor:pointer;`;
     const byUuid = new Map(owned.map(entry => [entry.uuid, entry]));
+
     const chipHtml = (uuid) =>
     {
         const entry = byUuid.get(uuid);
         if (!entry)
             return '';
+
         const active = uuid === current;
         return `<div class="la-narrative-chip" data-uuid="${uuid}" title="Remove from roster" style="display:inline-flex;align-items:center;gap:5px;padding:2px 6px 2px 2px;border:1px solid ${active ? 'var(--primary-color)' : '#999'};border-radius:3px;background:${active ? BG_HOVER : BG_DEFAULT};cursor:pointer;max-width:100%;">
             <img src="${escapeHtml(tokenImg(entry))}" style="width:22px;height:22px;object-fit:cover;border-radius:2px;background:#1a1a1a;flex-shrink:0;">
@@ -106,7 +119,9 @@ export async function openNarrativeLinkDialog(setActor)
             <i class="fas fa-times" style="font-size:0.75em;opacity:0.6;"></i>
         </div>`;
     };
+
     const rosterEmpty = '<div style="font-size:0.85em;color:#888;font-style:italic;align-self:center;">Nothing linked yet. Pick from the lists below.</div>';
+
     const content = `
         <div class="lancer-dialog-base">
             <div class="lancer-dialog-header">
@@ -140,6 +155,7 @@ export async function openNarrativeLinkDialog(setActor)
             </div>
         </div>
     `;
+
     const dlg = new Dialog({
         title: localize('LA.dialogTitle.linkNarrativeHud'),
         content,
@@ -179,10 +195,12 @@ export async function openNarrativeLinkDialog(setActor)
                     'border-color': on ? 'var(--primary-color)' : '#999',
                 });
             };
+
             const syncRoster = () =>
             {
                 const picked = $html.find('.la-narrative-pilot-card.selected')
                     .map((_index, el) => String($(el).attr('data-uuid') || '')).get();
+
                 $html.find('[name="pilot-uuid"]').val(picked.join(','));
                 $html.find('.la-narrative-roster-count').text(picked.length);
                 $html.find('.la-narrative-roster').html(picked.length ? picked.map(chipHtml).join('') : rosterEmpty);
@@ -217,6 +235,7 @@ export async function openNarrativeLinkDialog(setActor)
                     $(el).css('display', $(el).attr('data-list') === tab ? 'flex' : 'none');
                 });
             };
+
             $html.find('.la-narrative-tab').on('click', function ()
             {
                 showTab(String($(this).attr('data-tab') || 'pilot'));
@@ -245,5 +264,6 @@ export async function openNarrativeLinkDialog(setActor)
             });
         },
     }, { classes: ['lancer-dialog-base', 'lancer-no-title'], width: 480 }).render(true);
+
     return dlg;
 }

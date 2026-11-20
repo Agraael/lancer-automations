@@ -41,6 +41,7 @@ function retunedModes(doc, range)
 {
     const modes = (doc._source?.detectionModes ?? []).map(mode =>
         SIGHT_MODES.has(mode.id) ? { ...mode, range } : { ...mode });
+
     if (range !== null && !modes.some(mode => mode.id === 'lightPerception'))
         modes.push({ id: 'lightPerception', enabled: true, range });
     return modes;
@@ -51,8 +52,10 @@ async function applyBlindSight(token)
     const doc = token?.document ?? token;
     if (!doc?.sight?.enabled)
         return;
+
     const rangeLimit = blindRange();
     const isClamped = getLAFlag(doc,FLAG_CLAMPED) !== undefined;
+
     if (isClamped && doc.sight.range === rangeLimit && !(doc.detectionModes ?? []).some(mode => overRange(mode, rangeLimit)))
         return;
     await doc.update({
@@ -78,8 +81,10 @@ async function reconcileToken(token)
 {
     if (!token)
         return;
+
     const doc = token.document ?? token;
     const blinded = enabled() && isBlinded(doc.actor ?? token.actor);
+
     if (blinded)
         await applyBlindSight(token);
     else
@@ -123,6 +128,7 @@ export function initBlindedVision()
             return;
         reconcileActor(document.parent);
     };
+
     Hooks.on('createActiveEffect', onEffectChange);
     Hooks.on('deleteActiveEffect', onEffectChange);
 

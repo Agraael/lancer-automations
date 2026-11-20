@@ -20,6 +20,7 @@ export function injectDisabledSchemaField()
     const BooleanField = foundry.data.fields.BooleanField;
     const modelKeys = ['mech_weapon', 'mech_system', 'npc_feature', 'weapon_mod'];
     let injected = 0;
+
     for (const key of modelKeys)
     {
         const model = CONFIG.Item.dataModels?.[key];
@@ -39,6 +40,7 @@ export function injectDisabledSchemaField()
             }
         }
     }
+
     if (injected)
         console.log(`lancer-automations | Injected disabled field into ${injected} item schema(s)`);
 }
@@ -97,10 +99,12 @@ async function checkItemDisabled(state)
         const isSystem =
             state.item.type === 'mech_system' ||
             (state.item.type === 'npc_feature' && state.item.system?.type !== 'Weapon');
+
         const label = isSystem ? 'System' : 'Weapon';
         ui.notifications.warn(localizeFormat('LA.notify.labelledItemDisabled', { label, name: state.item.name }));
         return false;
     }
+
     return true;
 }
 
@@ -119,6 +123,7 @@ export function registerDisabledFlowSteps(flowSteps, flows)
         'SystemFlow',
         'CoreActiveFlow',
     ];
+
     for (const name of targets)
         flows.get(name)?.insertStepAfter('checkItemDestroyed', 'lancer-automations:checkItemDisabled');
 
@@ -131,7 +136,9 @@ async function clearDisabledOnRepair(state)
 {
     if (!state.actor)
         return true;
+
     const updates = [];
+
     for (const item of state.actor.items)
     {
         const update = { _id: item.id };
@@ -142,6 +149,7 @@ async function clearDisabledOnRepair(state)
         if (Object.keys(update).length > 1)
             updates.push(update);
     }
+
     if (updates.length)
         await state.actor.updateEmbeddedDocuments('Item', updates);
     return true;
@@ -162,9 +170,11 @@ async function snapshotPermanentEffects(state)
 {
     if (!state.actor || !state.data)
         return true;
+
     const keptEffects = state.actor.effects.filter(effect => getLAFlags(effect) && durationEntries(effect).some(entry => entry.label === 'permanent'));
     if (keptEffects.length)
         await state.actor.updateEmbeddedDocuments('ActiveEffect', keptEffects.map(effect => ({ _id: effect.id, [`flags.${MODULE_ID}.repairKeep`]: true })));
+
     const perm = keptEffects
         .map(effect =>
         {
@@ -178,6 +188,7 @@ async function snapshotPermanentEffects(state)
                 foundry.utils.mergeObject(effectData.flags.statuscounter, { value: stack, visible: stack > 1 });
             return effectData;
         });
+
     state.data._permEffects = perm;
     return true;
 }
@@ -187,27 +198,33 @@ async function restorePermanentEffects(state)
     const perm = state.data?._permEffects;
     if (!state.actor || !perm?.length)
         return true;
+
     const actor = state.actor;
     const survivors = perm.filter(effectData => actor.effects.has(effectData._id));
     const missing = perm.filter(effectData => !actor.effects.has(effectData._id));
+
     if (survivors.length)
         await actor.updateEmbeddedDocuments('ActiveEffect', survivors.map(effectData => ({ _id: effectData._id, [`flags.${MODULE_ID}.-=repairKeep`]: null })));
     if (missing.length)
         await actor.createEmbeddedDocuments('ActiveEffect', missing, { keepId: true });
+
     for (const effectData of missing)
     {
         const statDirect = getLAFlags(effectData)?.statDirect;
         if (!statDirect?.key)
             continue;
+
         const current = Number(foundry.utils.getProperty(actor, statDirect.key)) || 0;
         const maxPath = statDirect.key.replace('.value', '.max');
         const max = maxPath !== statDirect.key ? foundry.utils.getProperty(actor, maxPath) : undefined;
         let next = Math.max(0, current + (Number(statDirect.value) || 0));
+
         if (max !== undefined)
             next = Math.min(next, Number(max));
         await actor.update({ [statDirect.key]: next });
         await actor.effects.get(effectData._id)?.update({ [`flags.${MODULE_ID}.statDirect.preBonusValue`]: current });
     }
+
     return true;
 }
 
@@ -219,8 +236,10 @@ function _resolveItem(el)
     const domEl = el instanceof $ ? el[0] : el;
     const setEl = domEl?.closest?.('.set[data-uuid]') ?? domEl?.closest?.('[data-uuid]');
     const uuid = setEl?.dataset?.uuid;
+
     if (!uuid)
         return null;
+
     try
     {
         return fromUuidSync(uuid);
@@ -243,11 +262,13 @@ function _injectItemStateContextMenu(jHtml)
         const item = _resolveItem(this);
         const canDisable = isDisableable(item);
         const canCascade = canMarkCascading(item);
+
         if (!item || (!canDisable && !canCascade))
             return;
 
         // Wrap onShow to inject our entry each time the menu opens
         const origOnShow = tippyInstance.props.onShow;
+
         tippyInstance.props.onShow = (instance) =>
         {
             if (origOnShow)
@@ -264,6 +285,7 @@ function _injectItemStateContextMenu(jHtml)
                 content.querySelectorAll('.la-disabled-entry, .la-cascading-entry').forEach(el => el.remove());
 
                 const entries = [];
+
                 if (canDisable)
                 {
                     const disabled = isItemDisabled(item);
@@ -280,6 +302,7 @@ function _injectItemStateContextMenu(jHtml)
                     });
                     entries.push(entry);
                 }
+
                 if (canCascade)
                 {
                     const cascading = isItemCascading(item);
@@ -294,8 +317,10 @@ function _injectItemStateContextMenu(jHtml)
                     });
                     entries.push(entry);
                 }
+
                 // Insert after Edit entry
                 let anchor = content.querySelector('.lancer-context-item');
+
                 for (const entry of entries)
                 {
                     if (anchor?.nextSibling)
@@ -315,6 +340,7 @@ export function onRenderActorSheet(app, html, _data)
 {
     const jHtml = /** @type {JQuery} */ (html instanceof $ ? html : $(html));
     const actor = app.actor ?? app.document;
+
     if (!actor)
         return;
 
@@ -324,7 +350,9 @@ export function onRenderActorSheet(app, html, _data)
         const uuid = this.dataset.uuid;
         if (!uuid)
             return;
+
         let item;
+
         try
         {
             item = fromUuidSync(uuid);
@@ -333,6 +361,7 @@ export function onRenderActorSheet(app, html, _data)
         {
             return;
         }
+
         if (!isDisableable(item) || !isItemDisabled(item))
             return;
 
@@ -351,7 +380,9 @@ export function onRenderActorSheet(app, html, _data)
         const uuid = this.dataset.uuid;
         if (!uuid)
             return;
+
         let item;
+
         try
         {
             item = fromUuidSync(uuid);
@@ -360,6 +391,7 @@ export function onRenderActorSheet(app, html, _data)
         {
             return;
         }
+
         if (!isDisableable(item) || !isItemDisabled(item))
             return;
         // Don't override if already destroyed
@@ -389,7 +421,9 @@ export function onRenderActorSheet(app, html, _data)
         const uuid = setEl.dataset.uuid;
         if (!uuid)
             return;
+
         let item;
+
         try
         {
             item = fromUuidSync(uuid);
@@ -398,6 +432,7 @@ export function onRenderActorSheet(app, html, _data)
         {
             return;
         }
+
         if (!isItemCascading(item) || item.system?.destroyed)
             return;
 
@@ -413,7 +448,9 @@ export function onRenderActorSheet(app, html, _data)
         const uuid = cardEl.dataset.uuid;
         if (!uuid)
             return;
+
         let item;
+
         try
         {
             item = fromUuidSync(uuid);
@@ -422,6 +459,7 @@ export function onRenderActorSheet(app, html, _data)
         {
             return;
         }
+
         if (!isItemCascading(item) || item.system?.destroyed)
             return;
 
@@ -447,9 +485,11 @@ function _injectPilotStressBar(jHtml, actor)
 {
     if (actor.type !== 'pilot')
         return;
+
     const stress = actor.system?.bond_state?.stress;
     if (!(stress?.max > 0))
         return;
+
     try
     {
         if (!getModuleSetting('statBarDefaultPilotStress'))
@@ -459,11 +499,13 @@ function _injectPilotStressBar(jHtml, actor)
     {
         return;
     }
+
     if (jHtml.find('.la-pilot-stress-bar, .la-pilot-stress-stat').length)
         return;
 
     // Newer alt sheets ship their own bond stress bar; injecting a second same-named input breaks the form.
     const $altStress = jHtml.find('input[name="system.bond_state.stress.value"]').first();
+
     if ($altStress.length)
     {
         $altStress.closest('.la-statusbar').find('.la-bar-h-current.la-bckg-bar-heat').each(function ()
@@ -480,6 +522,7 @@ function _injectPilotStressBar(jHtml, actor)
 
     // Alt sheet: clone the HP StatusBar and replay its focus/blur editing (Svelte reactivity doesn't clone).
     const $hpBar = $hpInput.closest('.la-statusbar');
+
     if ($hpBar.length)
     {
         const $bar = $hpBar.clone().addClass('la-pilot-stress-bar');
@@ -491,6 +534,7 @@ function _injectPilotStressBar(jHtml, actor)
         const $lbl = $bar.find('.la-damage__span').first();
         if ($lbl.length)
             $lbl.text('STRESS');
+
         const $input = $bar.find('input').first();
         const $span = $bar.find('.la-bar-h-progress__span');
         $input.attr('name', 'system.bond_state.stress.value').val(stressValue);
@@ -512,6 +556,7 @@ function _injectPilotStressBar(jHtml, actor)
         {
             const raw = String(this.value).trim();
             const next = /^[+-]/.test(raw) ? stressValue + Number(raw) : Number(raw);
+
             if (Number.isFinite(next))
                 await actor.update({ 'system.bond_state.stress.value': Math.max(0, Math.min(max, Math.round(next))) });
         });
@@ -523,6 +568,7 @@ function _injectPilotStressBar(jHtml, actor)
     const $hpStat = $hpInput.closest('.compact-stat');
     if (!$hpStat.length)
         return;
+
     const $stat = $hpStat.clone().addClass('la-pilot-stress-stat');
     $stat.find('i').first().attr('class', 'mdi mdi-brain i--4 i--dark');
     $stat.find('input[name="system.hp.value"]').attr('name', 'system.bond_state.stress.value').val(stressValue);
@@ -540,7 +586,9 @@ function _injectAmmoDisplay(jHtml, actor)
         const uuid = this.dataset?.uuid;
         if (!uuid)
             return;
+
         let item;
+
         try
         {
             item = fromUuidSync(uuid);
@@ -549,6 +597,7 @@ function _injectAmmoDisplay(jHtml, actor)
         {
             return;
         }
+
         if (item?.type !== 'mech_system')
             return;
 
@@ -568,11 +617,13 @@ function _injectAmmoDisplay(jHtml, actor)
         const iconClass = _ammoActivationIcon(activation);
 
         let entries = '';
+
         for (let i = 0; i < ammoList.length; i++)
         {
             const ammo = ammoList[i];
             if (!ammo.name)
                 continue;
+
             const cost = ammo.cost ?? 1;
             const typeSizeTags = _buildTypeSizeTags(ammo.allowed_types, ammo.allowed_sizes);
 
@@ -630,7 +681,9 @@ function _injectAmmoDisplayAltSheet(jHtml, actor)
         const uuid = this.dataset?.uuid;
         if (!uuid)
             return;
+
         let item;
+
         try
         {
             item = fromUuidSync(uuid);
@@ -639,6 +692,7 @@ function _injectAmmoDisplayAltSheet(jHtml, actor)
         {
             return;
         }
+
         if (item?.type !== 'mech_system')
             return;
 
@@ -655,6 +709,7 @@ function _injectAmmoDisplayAltSheet(jHtml, actor)
 
         const firstAction = item.system?.actions?.[0];
         const activation = firstAction?.activation || 'Free';
+
         const colorClass = {
             'Full': 'la-bckg-action--full',
             'Quick': 'la-bckg-action--quick',
@@ -667,11 +722,13 @@ function _injectAmmoDisplayAltSheet(jHtml, actor)
         }[activation] || 'la-bckg-action--free';
 
         let entries = '';
+
         for (let i = 0; i < ammoList.length; i++)
         {
             const ammo = ammoList[i];
             if (!ammo.name)
                 continue;
+
             const cost = ammo.cost ?? 1;
             const typeSizeTags = _buildTypeSizeTags(ammo.allowed_types, ammo.allowed_sizes);
 
@@ -719,6 +776,7 @@ function _injectAmmoDisplayAltSheet(jHtml, actor)
 export function TriggerUseAmmoFlow(itemUuid, ammoIndex)
 {
     const flowDef = game.lancer?.flows?.get('UseAmmoFlow');
+
     if (!flowDef)
     {
         ui.notifications?.error(localize('LA.notify.useammoflowNotRegisteredIsTheFlowRegistration'));
@@ -726,6 +784,7 @@ export function TriggerUseAmmoFlow(itemUuid, ammoIndex)
     }
 
     const item = fromUuidSync(itemUuid);
+
     if (!item?.actor)
     {
         ui.notifications?.error(localize('LA.notify.couldNotResolveItemOrActorFor'));
@@ -735,6 +794,7 @@ export function TriggerUseAmmoFlow(itemUuid, ammoIndex)
     // Build GenericFlow from step-based definition
     const StatRollFlow = game.lancer?.flows?.get('StatRollFlow');
     const FlowBase = typeof StatRollFlow === 'function' ? Object.getPrototypeOf(StatRollFlow) : null;
+
     if (!FlowBase)
     {
         ui.notifications?.error(localize('LA.notify.couldNotResolveFlowBaseClass'));
@@ -748,6 +808,7 @@ export function TriggerUseAmmoFlow(itemUuid, ammoIndex)
             super(uuid, data || {});
         }
     };
+
     GenericFlow.steps = flowDef.steps;
 
     new GenericFlow(item.actor.uuid, { itemUuid, ammoIndex }).begin();
@@ -789,6 +850,7 @@ async function checkAmmoItemDestroyed(state)
         ui.notifications.warn(localizeFormat('LA.notify.systemDestroyed', { name: state.item.name }));
         return false;
     }
+
     return true;
 }
 
@@ -799,6 +861,7 @@ async function checkAmmoItemDisabled(state)
         ui.notifications.warn(localizeFormat('LA.notify.systemDisabled', { name: state.item.name }));
         return false;
     }
+
     return true;
 }
 
@@ -806,13 +869,16 @@ async function checkAmmoItemLimited(state)
 {
     if (!state.item?.isLimited?.())
         return true;
+
     const uses = state.item.system.uses;
     const cost = state.data.ammoCost ?? 1;
+
     if ((uses?.value ?? 0) < cost)
     {
         ui.notifications.warn(localizeFormat('LA.notify.notEnoughCharges', { name: state.item.name, need: cost, have: uses?.value ?? 0 }));
         return false;
     }
+
     return true;
 }
 
@@ -820,6 +886,7 @@ async function deductAmmoCost(state)
 {
     if (!state.item?.isLimited?.())
         return true;
+
     const cost = state.data.ammoCost ?? 1;
     const current = state.item.system.uses?.value ?? 0;
     await state.item.update({ 'system.uses': Math.max(current - cost, 0) });
@@ -845,17 +912,21 @@ function _ammoActivationIcon(activation)
 function _buildTypeSizeTags(allowedTypes, allowedSizes)
 {
     const tags = [];
+
     const _collect = (checklist) =>
     {
         if (!checklist)
             return;
+
         const enabled = Object.entries(checklist).filter(([, isChecked]) => isChecked).map(([k]) => k);
         const total = Object.keys(checklist).length;
+
         if (enabled.length === 0 || enabled.length === total)
             return;
         for (const name of enabled)
             tags.push(`<span class="lancer-tag compact-tag">${name}</span>`);
     };
+
     _collect(allowedSizes);
     _collect(allowedTypes);
     return tags.join(' ');
@@ -866,6 +937,7 @@ async function printAmmoCard(state)
     const typeSizeTags = _buildTypeSizeTags(
         state.data.ammoAllowedTypes, state.data.ammoAllowedSizes
     );
+
     const cost = state.data.ammoCost ?? 1;
 
     const content = `
@@ -892,6 +964,7 @@ async function recordAmmoChip(state)
 {
     const actor = state.actor;
     const token = actor?.token ? canvas.tokens.get(actor.token.id) : actor?.getActiveTokens?.()?.[0];
+
     if (token)
         await recordAction(token, { name: state.data.ammoName, activation: 'Free', icon: 'cci cci-ammo', item: state.item, changes: flowChanges({ state }, actor) });
     return true;
@@ -928,6 +1001,7 @@ export function injectDisabledCSS()
 {
     if (document.getElementById('la-item-disabled-css'))
         return;
+
     const style = document.createElement('style');
     style.id = 'la-item-disabled-css';
     style.textContent = `
@@ -983,6 +1057,7 @@ export function injectDisabledCSS()
 export async function patchStatRollCardTemplate()
 {
     const path = 'systems/lancer/templates/chat/stat-roll-card.hbs';
+
     try
     {
         let src = await fetch(path).then(response => response.text());
@@ -992,6 +1067,7 @@ export async function patchStatRollCardTemplate()
             '{{/if}}\n</div>',
             '{{/if}}\n  {{#if embedButtons}}\n    {{#each embedButtons}}\n      {{{this}}}\n    {{/each}}\n  {{/if}}\n</div>'
         );
+
         const compiled = Handlebars.compile(src);
         Handlebars.registerPartial(path, compiled);
     }
@@ -1009,6 +1085,7 @@ function _buildAmmoEditorHTML(item)
     const path = 'system.ammo';
 
     let ammoDetail = '';
+
     for (let i = 0; i < ammoList.length; i++)
     {
         const ammo = ammoList[i];
@@ -1060,6 +1137,7 @@ export function onRenderItemSheet(app, html, _data)
 
     // Inject after INTEGRATED ITEMS section
     const $sections = jHtml.find('.item-edit-arrayed');
+
     const $integrated = $sections.filter(function ()
     {
         return $(this).find('.lancer-header').text().trim() === 'INTEGRATED ITEMS';
@@ -1069,6 +1147,7 @@ export function onRenderItemSheet(app, html, _data)
         return;
 
     const ammoHtml = _buildAmmoEditorHTML(item);
+
     if ($integrated.length)
         $integrated.after(ammoHtml);
     else
@@ -1101,6 +1180,7 @@ async function stripCoverForMelee(state)
         for (const t of state.data.acc_diff.targets)
             t.cover = 0;
     }
+
     return true;
 }
 
@@ -1109,7 +1189,6 @@ export function registerMeleeCoverFix(flowSteps, flows)
     flowSteps.set('lancer-automations:stripCoverForMelee', stripCoverForMelee);
 
     // Before showAttackHUD so the HUD displays correct cover
-    flows.get('WeaponAttackFlow')?.insertStepBefore('showAttackHUD', 'lancer-automations:stripCoverForMelee');
     flows.get('BasicAttackFlow')?.insertStepBefore('showAttackHUD', 'lancer-automations:stripCoverForMelee');
 }
 
@@ -1124,6 +1203,7 @@ export function registerExtraTrackableAttributes()
     {
         if (!attrs?.[key])
             return;
+
         for (const attr of vals)
         {
             if (!attrs[key].includes(attr))
@@ -1171,6 +1251,7 @@ export function initCustomFlowDispatch()
         ev.preventDefault();
 
         const actorId = button.dataset.actorId;
+
         if (!actorId)
         {
             ui.notifications?.error(localizeFormat('LA.notify.noActorIdOnPrompt', { flow: flowType }));
@@ -1179,6 +1260,7 @@ export function initCustomFlowDispatch()
 
         const actor = CONFIG.Actor.documentClass.fromUuidSync?.(actorId)
             ?? fromUuidSync(actorId);
+
         if (!actor)
         {
             ui.notifications?.error(localizeFormat('LA.notify.invalidActorIdOnPrompt', { flow: flowType }));
@@ -1190,11 +1272,13 @@ export function initCustomFlowDispatch()
         else if (customFlow.steps)
         {
             const Flow = game.lancer?.flows?.get('StatRollFlow')?.__proto__;
+
             if (!Flow)
             {
                 ui.notifications?.error(localizeFormat('LA.notify.cannotResolveFlowBase', { flow: flowType }));
                 return;
             }
+
             const GenericFlow = class extends Flow
             {
                 constructor(uuid, data)
@@ -1202,11 +1286,13 @@ export function initCustomFlowDispatch()
                     super(uuid, data || {});
                 }
             };
+
             GenericFlow.steps = customFlow.steps;
 
             let initialData = {};
             if (button.dataset.checkType)
                 initialData.path = `system.${button.dataset.checkType}`;
+
             // Forward all data-* attributes
             for (const [key, value] of Object.entries(button.dataset))
             {
@@ -1235,6 +1321,7 @@ export async function repairLCPData()
         content: localize('LA.lancerModif.content.thisWillFixKnownDataIssues'),
         defaultYes: true
     });
+
     if (!confirmed)
         return;
 
@@ -1243,15 +1330,20 @@ export async function repairLCPData()
         const entryText = await (await fetch('/systems/lancer/lancer.mjs')).text();
         // v3 moved getOfficialData out of lancer.mjs into lancer-actor-<hash>.mjs.
         const actorMatch = entryText.match(/from\s+["']\.\/(lancer-actor-[^"']+\.mjs)["']/);
+
         if (!actorMatch)
             throw new Error('Could not find lancer-actor bundle in lancer.mjs');
+
         const actorText = await (await fetch(`/systems/lancer/${actorMatch[1]}`)).text();
         // minifier renames the export each build; pull the current alias from the export block
         const aliasMatch = actorText.match(/getOfficialData as (\w+)/);
+
         if (!aliasMatch)
             throw new Error(`Could not locate getOfficialData export in ${actorMatch[1]}`);
+
         const bundle = await import(`/systems/lancer/${actorMatch[1]}`);
         const getOfficialData = bundle[aliasMatch[1]];
+
         if (typeof getOfficialData !== 'function')
             throw new Error(`Resolved getOfficialData alias "${aliasMatch[1]}" is not callable`);
 
@@ -1262,6 +1354,7 @@ export async function repairLCPData()
         const rawWeaponByLid = new Map();
         const rawActionsByLid = new Map();
         const _actionBuckets = ['systems', 'weapons', 'frames', 'mods', 'pilot_gear', 'core_bonuses', 'talents', 'npc_features'];
+
         for (const data of allData)
         {
             for (const sys of data?.cp?.data?.systems ?? [])
@@ -1269,11 +1362,13 @@ export async function repairLCPData()
                 if (sys.ammo?.length && sys.id)
                     rawAmmoByLid.set(sys.id, sys.ammo);
             }
+
             for (const weapon of data?.cp?.data?.weapons ?? [])
             {
                 if (weapon.id)
                     rawWeaponByLid.set(weapon.id, weapon);
             }
+
             for (const bucket of _actionBuckets)
             {
                 for (const entry of data?.cp?.data?.[bucket] ?? [])
@@ -1289,42 +1384,53 @@ export async function repairLCPData()
         // swallow locked-compendium toasts; one persistent warn summarises at the end
         const _origError = ui.notifications.error.bind(ui.notifications);
         const _lockedRe = /locked compendium/i;
+
         ui.notifications.error = (msg, opts) =>
         {
             const msgStr = typeof msg === 'string' ? msg : String(msg ?? '');
+
             if (_lockedRe.test(msgStr))
             {
                 console.warn('lancer-automations | suppressed:', msgStr);
                 return null;
             }
+
             return _origError(msg, opts);
         };
 
         const lockedPacks = [];
+
         try
         {
             const lancerPacks = ['world.mech-items', 'world.pilot-items', 'world.npc-items'];
+
             for (const packId of lancerPacks)
             {
                 let pack = game.packs.get(packId);
                 if (!pack)
                     continue;
+
                 const wasLocked = pack.locked;
+
                 if (wasLocked)
                 {
                     await pack.configure({ locked: false });
                     pack = game.packs.get(packId) ?? pack;
                 }
+
                 if (pack.locked)
                 {
                     lockedPacks.push(packId);
                     continue;
                 }
+
                 let packFailed = false;
+
                 for (const doc of await pack.getDocuments())
                 {
                     if (packFailed)
                         break;
+
                     try
                     {
                         if (await _fixItem(doc, rawAmmoByLid, rawWeaponByLid, rawActionsByLid))
@@ -1343,6 +1449,7 @@ export async function repairLCPData()
                             console.warn(`lancer-automations | _fixItem failed for ${doc.name} (${packId})`, e);
                     }
                 }
+
                 if (wasLocked)
                     await (game.packs.get(packId) ?? pack).configure({ locked: true });
             }
@@ -1351,6 +1458,7 @@ export async function repairLCPData()
         {
             ui.notifications.error = _origError;
         }
+
         if (lockedPacks.length)
         {
             ui.notifications.warn(
@@ -1411,23 +1519,29 @@ async function _fixItem(item, rawAmmoByLid, rawWeaponByLid, rawActionsByLid)
 
     // Action name fixes
     const rawActions = rawActionsByLid?.get(lid);
+
     if (Array.isArray(item.system?.actions) && item.system.actions.length)
     {
         let actionsChanged = false;
+
         const fixedActions = item.system.actions.map((action, i) =>
         {
             const cur = (action?.name ?? '').trim();
             if (cur && cur.toLowerCase() !== 'action')
                 return action;
+
             const raw = rawActions?.[i]?.name?.trim?.();
+
             const newName = (raw && raw.toLowerCase() !== 'action')
                 ? raw
                 : (item.system.actions.length > 1 ? `${item.name} ${i + 1}` : item.name);
+
             if (newName === cur)
                 return action;
             actionsChanged = true;
             return { ...action, name: newName };
         });
+
         if (actionsChanged)
         {
             updates['system.actions'] = fixedActions;
@@ -1437,6 +1551,7 @@ async function _fixItem(item, rawAmmoByLid, rawWeaponByLid, rawActionsByLid)
 
     // Ammo fixes
     const rawAmmo = rawAmmoByLid.get(lid);
+
     if (rawAmmo && item.system?.ammo?.length)
     {
         const fixedAmmo = item.system.ammo.map((ammoEntry, i) =>
@@ -1444,6 +1559,7 @@ async function _fixItem(item, rawAmmoByLid, rawWeaponByLid, rawActionsByLid)
             const raw = rawAmmo[i];
             if (!raw)
                 return ammoEntry;
+
             const fix = { ...ammoEntry };
 
             if (!fix.description && raw.detail)
@@ -1451,32 +1567,39 @@ async function _fixItem(item, rawAmmoByLid, rawWeaponByLid, rawActionsByLid)
                 fix.description = raw.detail;
                 changed = true;
             }
+
             if (raw.allowed_types && Array.isArray(raw.allowed_types))
             {
                 const correct = _makeTypeChecklist(raw.allowed_types, _WEAPON_TYPES);
+
                 if (JSON.stringify(fix.allowed_types) !== JSON.stringify(correct))
                 {
                     fix.allowed_types = correct;
                     changed = true;
                 }
             }
+
             if (raw.allowed_sizes && Array.isArray(raw.allowed_sizes))
             {
                 const correct = _makeTypeChecklist(raw.allowed_sizes, _WEAPON_SIZES);
+
                 if (JSON.stringify(fix.allowed_sizes) !== JSON.stringify(correct))
                 {
                     fix.allowed_sizes = correct;
                     changed = true;
                 }
             }
+
             return fix;
         });
+
         if (changed)
             updates['system.ammo'] = fixedAmmo;
     }
 
     // Weapon profile text merging
     const rawWeapon = rawWeaponByLid.get(lid);
+
     if (rawWeapon && item.system?.profiles?.length && rawWeapon.profiles?.length > 1)
     {
         const wpnEffect = rawWeapon.effect || '';
@@ -1491,6 +1614,7 @@ async function _fixItem(item, rawAmmoByLid, rawWeaponByLid, rawActionsByLid)
                 const rawProf = rawWeapon.profiles[i];
                 if (!rawProf)
                     return prof;
+
                 const fix = { ...prof };
                 const name = rawProf.name ?? `${rawWeapon.name} :: ${i + 1}`;
                 let profChanged = false;
@@ -1499,8 +1623,10 @@ async function _fixItem(item, rawAmmoByLid, rawWeaponByLid, rawActionsByLid)
                 {
                     const wpnText = rawWeapon[field] || '';
                     const profText = rawProf[field] || '';
+
                     if (!wpnText)
                         continue;
+
                     if (!profText)
                     {
                         if (fix[field] !== wpnText)
@@ -1511,16 +1637,19 @@ async function _fixItem(item, rawAmmoByLid, rawWeaponByLid, rawActionsByLid)
                     else if (wpnText !== profText)
                     {
                         const merged = wpnText + '<br><br>' + name + ':: ' + profText;
+
                         if (fix[field] !== merged)
                         {
                             fix[field] = merged; profChanged = true;
                         }
                     }
                 }
+
                 if (profChanged)
                     changed = true;
                 return fix;
             });
+
             if (changed)
                 updates['system.profiles'] = fixedProfiles;
         }
@@ -1538,6 +1667,7 @@ async function _fixItem(item, rawAmmoByLid, rawWeaponByLid, rawActionsByLid)
             return false;
         }
     }
+
     return changed;
 }
 
@@ -1553,9 +1683,11 @@ export function wrapInitTechAttackData(flowSteps)
         const savedTitle = state.data?.title;
         const init = !state.item && state.actor?.is_deployable?.() ? flowSteps.get('initAttackData') : orig;
         const result = await init(state, options);
+
         if (savedTitle && state.data?.title === "TECH ATTACK")
         {
             state.data.title = savedTitle;
+
             try
             {
                 state.data.acc_diff.title = savedTitle;
@@ -1563,6 +1695,7 @@ export function wrapInitTechAttackData(flowSteps)
             catch
             { /* */ }
         }
+
         return result;
     });
 }
@@ -1579,11 +1712,14 @@ export function wrapInitAttackData(flowSteps)
         const savedAction = state.data?.action;
         const savedEffect = state.data?.effect;
         const result = await orig(state, options);
+
         if (!state.data)
             return result;
+
         if (savedTitle && state.data.title === "BASIC ATTACK")
         {
             state.data.title = savedTitle;
+
             try
             {
                 state.data.acc_diff.title = savedTitle;
@@ -1591,6 +1727,7 @@ export function wrapInitAttackData(flowSteps)
             catch
             { /* */ }
         }
+
         if (savedAction && !state.data.action)
             state.data.action = savedAction;
         if (savedEffect && !state.data.effect)
@@ -1608,19 +1745,23 @@ export function wrapSetDamageTags(flowSteps)
     flowSteps.set('setDamageTags', async function (state, options)
     {
         const item = state.item;
+
         if (item?.is_npc_feature?.() && item.system.type !== 'Weapon')
         {
             state.data.tags = item.system.tags ?? [];
             state.data.ap = !!state.data.tags.find(tag => tag.is_ap);
             state.data.overkill = !!state.data.tags.find(tag => tag.is_overkill);
             const reliableTag = state.data.tags.find(tag => tag.is_reliable);
+
             if (reliableTag)
             {
                 state.data.reliable = true;
                 state.data.reliable_val = Number.parseInt(reliableTag.tierVal((state.actor?.is_npc?.() && state.actor.system.tier) || 1) || "0");
             }
+
             return true;
         }
+
         return orig(state, options);
     });
 }
@@ -1630,15 +1771,19 @@ async function forceNonTechAttack(state)
 {
     if (!state.la_extraData?.forceNonTech)
         return true;
+
     const accDiff = state.data?.acc_diff;
     if (!accDiff)
         return true;
+
     const weapon = accDiff.weapon;
+
     if (weapon)
     {
         weapon.tech = false;
         weapon.smart = false;
     }
+
     // the HUD derives its tech look from lancerItem's type, not weapon.tech
     accDiff.lancerItem = undefined;
     if (!accDiff.lancerActor)
@@ -1650,13 +1795,16 @@ async function applyAccDiffPatch(state)
 {
     const patch = state.la_extraData?.accDiffPatch;
     const accDiff = state.data?.acc_diff;
+
     if (!patch || !accDiff?.base || !accDiff.weapon)
         return true;
+
     for (const [key, value] of Object.entries(patch.weapon ?? {}))
     {
         if (value)
             accDiff.weapon[key] = true;
     }
+
     const base = accDiff.base;
     if (patch.grit != null)
         base.grit = Number(patch.grit) || 0;
@@ -1694,6 +1842,7 @@ Hooks.on('preCreateToken', (tokenDoc, _data, _options, userId) =>
         return;
     if (!getModuleSetting('autoTokenHeight'))
         return;
+
     const actor = tokenDoc.actor;
     if (!isLancerActor(actor))
         return;
@@ -1709,19 +1858,23 @@ export async function syncAllTokenHeights()
         ui.notifications.error(localize('LA.notify.onlyTheGmCanSyncTokenHeights'));
         return;
     }
+
     if (!game.modules.get('wall-height')?.active)
         ui.notifications.warn(localize('LA.notify.wallHeightIsNotActiveValuesWritten'));
+
     const confirmed = await Dialog.confirm({
         title: localize('LA.dialogTitle.lancerAutomationsSyncTokenHeights'),
         content: localize('LA.lancerModif.content.setWallHeightTokenheightOnEvery'),
         defaultYes: true
     });
+
     if (!confirmed)
         return;
 
     let protoUpdated = 0;
     let protoSkipped = 0;
     const protoUpdates = [];
+
     for (const actor of game.actors)
     {
         if (!isLancerActor(actor))
@@ -1729,18 +1882,22 @@ export async function syncAllTokenHeights()
             protoSkipped++;
             continue;
         }
+
         const desired = getDesiredWallHeight(actor);
+
         if (actor.prototypeToken?.flags?.['wall-height']?.tokenHeight === desired)
         {
             protoSkipped++;
             continue;
         }
+
         protoUpdates.push({
             _id: actor.id,
             prototypeToken: { flags: { 'wall-height': { tokenHeight: desired } } }
         });
         protoUpdated++;
     }
+
     if (protoUpdates.length)
     {
         try
@@ -1757,30 +1914,37 @@ export async function syncAllTokenHeights()
 
     let sceneUpdated = 0;
     let sceneSkipped = 0;
+
     for (const scene of game.scenes)
     {
         /** @type {any[]} */
         const tokenUpdates = [];
+
         for (const tokenDoc of scene.tokens)
         {
             const actor = /** @type {any} */ (tokenDoc).actor;
+
             if (!isLancerActor(actor))
             {
                 sceneSkipped++;
                 continue;
             }
+
             const desired = getDesiredWallHeight(actor);
+
             if (/** @type {any} */ (tokenDoc).flags?.['wall-height']?.tokenHeight === desired)
             {
                 sceneSkipped++;
                 continue;
             }
+
             tokenUpdates.push({
                 _id: tokenDoc.id,
                 flags: { 'wall-height': { tokenHeight: desired } }
             });
             sceneUpdated++;
         }
+
         if (tokenUpdates.length)
         {
             try
@@ -1810,6 +1974,7 @@ export async function syncAllActorImgs()
         content: localize('LA.lancerModif.content.forEveryWorldActorSetActor'),
         defaultYes: true
     });
+
     if (!confirmed)
         return;
 
@@ -1817,27 +1982,32 @@ export async function syncAllActorImgs()
     let nameUpdated = 0;
     let skipped = 0;
     const updates = [];
+
     for (const actor of game.actors)
     {
         const tokenImg = actor.prototypeToken?.texture?.src;
         const tokenName = actor.prototypeToken?.name;
         /** @type {any} */
         const update = { _id: actor.id };
+
         if (tokenImg && actor.img !== tokenImg)
         {
             update.img = tokenImg;
             imgUpdated++;
         }
+
         if (tokenName && actor.name !== tokenName)
         {
             update.name = tokenName;
             nameUpdated++;
         }
+
         if (Object.keys(update).length > 1)
             updates.push(update);
         else
             skipped++;
     }
+
     if (updates.length)
     {
         try
@@ -1851,6 +2021,7 @@ export async function syncAllActorImgs()
             return;
         }
     }
+
     ui.notifications.info(localizeFormat('LA.notify.syncedPortraits', { images: imgUpdated, imagePlural: imgUpdated === 1 ? '' : 's', names: nameUpdated, namePlural: nameUpdated === 1 ? '' : 's', skipped }));
 }
 
@@ -1859,14 +2030,18 @@ Hooks.on('lancer.postFlow.FullRepairFlow', async (flow, success) =>
 {
     if (!success)
         return;
+
     const actor = flow?.state?.actor;
     const api = game.modules.get(MODULE_ID)?.api;
+
     if (!actor || !api)
         return;
+
     for (const item of actor.items)
     {
         const flags = getLAFlags(item) ?? {};
         const stale = {};
+
         if (flags.activeStateData)
             stale.activeStateData = true;
         if (flags.actionLocks?.length)
@@ -1876,6 +2051,7 @@ Hooks.on('lancer.postFlow.FullRepairFlow', async (flow, success) =>
         if (Object.keys(stale).length)
             await api.removeItemFlags(item, stale);
     }
+
     const actorStale = {};
     if (getLAFlag(actor,'lockedActions'))
         actorStale.lockedActions = true;
@@ -1885,14 +2061,16 @@ Hooks.on('lancer.postFlow.FullRepairFlow', async (flow, success) =>
         await api.removeActorFlags(actor, actorStale);
 
     const token = actor.getActiveTokens?.()?.[0] ?? null;
+
     if (token)
     {
-        await api.checkOnInitReactions(token);
+        await api.checkOnInitAutomations(token);
         // The repair wiped the materialized copies. The templates on items/actor survived it.
         await runInOnInitTriggerContext(async () =>
         {
             await api.applyActorTemplatesToTokens(actor, [token]);
             await api.applyActorBonusTemplatesToTokens(actor, [token]);
+
             for (const item of actor.items)
             {
                 await api.applyItemTemplatesToTokens(item, [token]);
@@ -1900,6 +2078,7 @@ Hooks.on('lancer.postFlow.FullRepairFlow', async (flow, success) =>
             }
         });
     }
+
     await api.updateAllEngagements?.();
     if (token)
         await api.handleTrigger('onFullRepair', { triggeringToken: token });

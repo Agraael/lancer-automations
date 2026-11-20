@@ -3,9 +3,11 @@ Hooks.once('ready', () =>
 {
     if (!game.modules.get('csm-lancer-qol')?.active)
         return;
+
     const entry = (Hooks.events?.updateCombat ?? []).find(item => item.fn?.name === 'combatTracking');
     if (!entry)
         return;
+
     const original = entry.fn;
     Hooks.off('updateCombat', original);
     Hooks.on('updateCombat', (combat, changed, options, userId) =>

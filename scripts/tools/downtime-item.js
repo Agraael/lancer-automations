@@ -75,6 +75,7 @@ class DowntimeItemSheet extends BaseItemSheet
     {
         const expanded = foundry.utils.expandObject(formData);
         const raw = expanded.system?.results;
+
         if (raw && !Array.isArray(raw))
             expanded.system.results = Object.keys(raw).sort((a, b) => Number(a) - Number(b)).map(key => raw[key]);
         return this.item.update(expanded);
@@ -97,6 +98,7 @@ export async function ensureDowntimePack()
     const existing = game.packs.get(`world.${DOWNTIME_PACK}`);
     if (existing)
         return existing;
+
     const Compendium = foundry.documents?.collections?.CompendiumCollection ?? globalThis.CompendiumCollection;
     const pack = await Compendium.createCompendium({ type: 'Item', name: DOWNTIME_PACK, label: 'LA - Downtime Activities' });
     await pack.configure({ locked: true });
@@ -120,6 +122,7 @@ function v2DowntimeItem(entry)
             info: result.info ?? result.Info ?? '',
         }))
         : [{ min: 0, max: 0, short: 'Result', long: '', info: entry.detail ?? '' }];
+
     return { name: entry.name, lid: entry.id, description: entry.terse || entry.detail || '', bands };
 }
 
@@ -127,16 +130,19 @@ function v3DowntimeItem(entry)
 {
     const results = Array.isArray(entry.table?.results) ? entry.table.results : [];
     const highestMax = Math.max(0, ...results.map(result => Number(result.max) || 0));
+
     const bands = results.length
         ? results.map(result =>
         {
             const min = Number(result.min) || 0;
             const max = Number(result.max) || 0;
+
             if (max === highestMax)
                 return { min, max: 100, short: `${min}+`, long: '', info: result.text ?? '' };
             return { min, max, short: min === max ? String(min) : `${min}-${max}`, long: '', info: result.text ?? '' };
         })
         : [{ min: 0, max: 0, short: 'Result', long: '', info: entry.detail ?? '' }];
+
     const tableDetailHtml = entry.table?.detail ? `<p><b>${entry.table.detail}</b></p>` : '';
     return { name: entry.name, lid: entry.id, description: `${entry.detail || entry.terse || ''}${tableDetailHtml}`, bands };
 }
@@ -163,9 +169,12 @@ async function importDowntimeItems(items)
 
     const pack = await ensureDowntimePack();
     const wasLocked = pack.locked;
+
     if (wasLocked)
         await pack.configure({ locked: false });
+
     const docs = await pack.getDocuments();
+
     for (const entry of items)
     {
         const itemData = {
@@ -180,12 +189,14 @@ async function importDowntimeItems(items)
                 hidden: false,
             },
         };
+
         const found = docs.find(doc => (itemData.system.lid && doc.system?.lid === itemData.system.lid) || doc.name === itemData.name);
         if (found)
             await found.update(itemData);
         else
             await Item.create(itemData, { pack: pack.collection });
     }
+
     await pack.configure({ locked: true });
     ui.notifications.info(localizeFormat('LA.notify.downtimeImported', { count: items.length, pack: pack.title ?? localize('LA.downtime.activitiesPack') }));
     return items.length;
@@ -201,6 +212,7 @@ async function importDowntimeItems(items)
 export async function importDowntimeActionsJson(text)
 {
     let list;
+
     try
     {
         list = parseDowntimeList(text);
@@ -210,6 +222,7 @@ export async function importDowntimeActionsJson(text)
         ui.notifications.error(localize('LA.notify.downtimeImportInvalidJson'));
         return 0;
     }
+
     return importDowntimeItems(downtimeItems(list));
 }
 
@@ -218,6 +231,7 @@ async function readZipEntry(buffer, fileName)
     const view = new DataView(buffer);
     const bytes = new Uint8Array(buffer);
     let eocd = -1;
+
     for (let index = buffer.byteLength - 22; index >= 0; index--)
     {
         if (view.getUint32(index, true) === 0x06054b50)
@@ -226,15 +240,19 @@ async function readZipEntry(buffer, fileName)
             break;
         }
     }
+
     if (eocd < 0)
         return null;
+
     const count = view.getUint16(eocd + 10, true);
     let offset = view.getUint32(eocd + 16, true);
     const decoder = new TextDecoder();
+
     for (let index = 0; index < count; index++)
     {
         if (view.getUint32(offset, true) !== 0x02014b50)
             break;
+
         const method = view.getUint16(offset + 10, true);
         const compSize = view.getUint32(offset + 20, true);
         const nameLen = view.getUint16(offset + 28, true);
@@ -245,18 +263,22 @@ async function readZipEntry(buffer, fileName)
         offset += 46 + nameLen + extraLen + commentLen;
         if (name.toLowerCase().split('/').pop() !== fileName)
             continue;
+
         const localNameLen = view.getUint16(localOffset + 26, true);
         const localExtraLen = view.getUint16(localOffset + 28, true);
         const dataStart = localOffset + 30 + localNameLen + localExtraLen;
         const compressed = bytes.subarray(dataStart, dataStart + compSize);
+
         if (method === 0)
             return decoder.decode(compressed);
+
         if (method === 8)
         {
             const stream = new Blob([compressed]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
             return new Response(stream).text();
         }
     }
+
     return null;
 }
 
@@ -276,7 +298,9 @@ export function openDowntimeImportDialog()
                     const file = html.find('input[type=file]')[0]?.files?.[0];
                     if (!file)
                         return ui.notifications.warn(localize('LA.notify.downtimeImportNoFileSelected'));
+
                     let text;
+
                     if (file.name.toLowerCase().endsWith('.json'))
                         text = await file.text();
                     else
@@ -286,6 +310,7 @@ export function openDowntimeImportDialog()
                         if (text == null)
                             return ui.notifications.warn(localize('LA.notify.downtimeImportNoActionsJsonInThis'));
                     }
+
                     await importDowntimeActionsJson(text);
                 },
             },

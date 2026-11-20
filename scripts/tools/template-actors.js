@@ -1,7 +1,15 @@
 import { MODULE_ID } from "./constants.js";
-import { getLAFlag } from "./flag-utils.js";
+import { getLAFlag, getLAFlags } from "./flag-utils.js";
+import { getModuleSetting } from "./settings-utils.js";
+import { isExecutorGM } from "../utils/lancer-token.js";
 
 const TEMPLATE_FOLDER_NAME = "Lancer Automations";
+
+function hardCoverLosFlags()
+{
+    const flagOnly = getModuleSetting('lancerLosFlagOnly') === true;
+    return { blocksLineOfSight: !flagOnly, blocksLaLosOnly: flagOnly };
+}
 
 const TEMPLATE_DEFINITIONS = {
     throw: {
@@ -53,7 +61,7 @@ const TEMPLATE_DEFINITIONS = {
                 displayBars: CONST.TOKEN_DISPLAY_MODES.NONE,
                 disposition: CONST.TOKEN_DISPOSITIONS.NEUTRAL,
                 bar1: { attribute: 'hp' },
-                flags: { [MODULE_ID]: { awarenessMode: 'simple' } }
+                flags: { [MODULE_ID]: { awarenessMode: 'simple', solid: true, ...hardCoverLosFlags() } }
             }
         })
     },
@@ -127,19 +135,23 @@ export async function getOrCreateTemplateActor(key)
     const definition = TEMPLATE_DEFINITIONS[key];
     const data = definition.data();
     const actor = findTemplateActor(key, data.name);
+
     if (!actor)
     {
         const folder = await getTemplateFolder();
         return Actor.create(/** @type {any} */ ({ ...withTemplateFlags(data, key, definition.version), folder: folder?.id ?? null }));
     }
+
     if (!game.user.isGM)
         return actor;
 
     const folder = actor.folder ? null : await getTemplateFolder();
+
     const update = {
         ...(getLAFlag(actor, 'templateActor') === key ? {} : { [`flags.${MODULE_ID}.templateActor`]: key }),
         ...(folder ? { folder: folder.id } : {})
     };
+
     if (Object.keys(update).length > 0)
         await actor.update(update);
     return actor;
@@ -149,24 +161,55 @@ export async function syncTemplateActors({ force = false } = {})
 {
     if (!game.user.isGM)
         return;
+
     for (const [key, definition] of Object.entries(TEMPLATE_DEFINITIONS))
     {
         const data = definition.data();
         const actor = findTemplateActor(key, data.name);
+
         if (!actor || (!force && (getLAFlag(actor, 'templateVersion') ?? 0) >= definition.version))
             continue;
+
         const update = withTemplateFlags(data, key, definition.version);
         delete update.type;
         await actor.update(update);
     }
 }
 
+export async function ensureTemplateActors()
+{
+    if (!game.user.isGM)
+        return;
+
+    for (const key of Object.keys(TEMPLATE_DEFINITIONS))
+        await getOrCreateTemplateActor(key);
+}
+
+export async function syncHardCoverFlags()
+{
+    if (!game.user.isGM)
+        return;
+
+    const actor = findTemplateActor('hardCover', TEMPLATE_DEFINITIONS.hardCover.data().name);
+    if (!actor)
+        return;
+
+    const wanted = { ...hardCoverLosFlags(), solid: true };
+    const current = getLAFlags(actor.prototypeToken) ?? {};
+    const changed = Object.entries(wanted).filter(([key, value]) => !!current[key] !== value);
+    if (!changed.length)
+        return;
+
+    await actor.update(Object.fromEntries(changed.map(([key, value]) => [`prototypeToken.flags.${MODULE_ID}.${key}`, value])));
+}
+
 Hooks.once('ready', async () =>
 {
-    if (!game.users.activeGM?.isSelf)
+    if (!isExecutorGM())
         return;
     await syncTemplateActors();
-    await getEnvironmentActor();
+    await ensureTemplateActors();
+    await syncHardCoverFlags();
 });
 
 export const TemplateActorsAPI = { syncTemplateActors, getEnvironmentActor };

@@ -1,7 +1,7 @@
 import { removeEffectsByNameFromTokens, applyEffectsToTokens, findEffectOnToken } from "../bonuses/flagged-effects.js";
 import { MODULE_ID } from "./constants.js";
 import { getLAFlag, setLAFlag, unsetLAFlag } from "./flag-utils.js";
-import { getMaxGroundHeightUnderToken } from "../combat/terrain-utils.js";
+import { getRestingElevationUnderToken } from "../combat/terrain-utils.js";
 import { playStandingUpFX, playTeleportFX } from "../fx/actionFX.js";
 import { executeDamageRoll, executeSimpleActivation } from "./misc-tools.js";
 import { localize, localizeFormat } from "./string-utils.js";
@@ -11,6 +11,7 @@ async function addVirtualMovement(token, cost)
 {
     const tokenDoc = token.document;
     const laHistory = getLAFlag(tokenDoc,'moveHistory') ?? { moves: [] };
+
     const moves = [...(laHistory.moves || []), {
         distanceMoved: cost,
         movementCost: cost,
@@ -19,6 +20,7 @@ async function addVirtualMovement(token, cost)
         virtual: true,
         startPos: { x: tokenDoc.x, y: tokenDoc.y },
     }];
+
     await tokenDoc.update({ 'flags.lancer-automations.moveHistory': { ...laHistory, moves } }, /** @type {any} */ ({ laResetMoveCache: true }));
 }
 
@@ -40,12 +42,15 @@ export async function executeStandingUp(token)
 {
     if (!token?.actor)
         return;
+
     const hasProne = !!findEffectOnToken(token, effect => effect.statuses?.has('prone'));
+
     if (!hasProne)
     {
         ui.notifications.info(localizeFormat('LA.notify.notProne', { name: token.name }));
         return;
     }
+
     const speed = token.actor.system?.speed ?? 0;
     await executeSimpleActivation(token.actor, {
         title: 'Standing Up',
@@ -65,9 +70,11 @@ export async function boostMove(token, options = {})
 {
     if (!token?.actor)
         return null;
+
     const api = game.modules.get(MODULE_ID)?.api;
     if (!api)
         return null;
+
     const activation = await api.activateGeneralAction(token, "Boost");
     if (!activation?.completed)
         return null;
@@ -84,11 +91,14 @@ export async function executeTeleport(token, cost)
 {
     if (!token?.actor)
         return;
+
     const api = game.modules.get(MODULE_ID)?.api;
     if (!api)
         return;
+
     const speed = token.actor.system?.speed ?? 0;
     const moveCost = cost ?? speed;
+
     const result = await api.moveToken(token, {
         teleport: true,
         range: speed,
@@ -96,6 +106,7 @@ export async function executeTeleport(token, cost)
         title: localize('LA.dialogTitle.teleportCaps'),
         description: localizeFormat('LA.movement.teleportPrompt', { range: speed, cost: moveCost })
     });
+
     if (result)
     {
         playTeleportFX(token);
@@ -120,6 +131,7 @@ export async function executeFall(targetToken)
 
     // falling implies not flying
     const hasFlyingStatus = !!findEffectOnToken(targetToken, "flying");
+
     if (hasFlyingStatus)
     {
         await removeEffectsByNameFromTokens({
@@ -129,7 +141,7 @@ export async function executeFall(targetToken)
     }
 
     const tokenElevation = tokenDoc.elevation || 0;
-    const maxGroundHeight = terrainAPI ? getMaxGroundHeightUnderToken(targetToken, terrainAPI) : 0;
+    const maxGroundHeight = terrainAPI ? getRestingElevationUnderToken(targetToken, terrainAPI) : 0;
 
     const hasFallingEffect = !!findEffectOnToken(targetToken, "falling");
 
@@ -143,6 +155,7 @@ export async function executeFall(targetToken)
                 effectNames: ["Falling"]
             });
         }
+
         return;
     }
 

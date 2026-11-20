@@ -17,13 +17,16 @@ function _onRenderCombatTracker(_app, htmlOrEl)
     const root = _rootElement(htmlOrEl);
     if (!root)
         return;
+
     for (const row of root.querySelectorAll('li.combatant'))
     {
         const actor = game.combat?.combatants.get(row.dataset.combatantId)?.actor;
         if (!actor)
             continue;
+
         // the tracker draws temporaryEffects in order, one icon each, so repeats of an img map to repeats of an effect
         const seen = new Map();
+
         for (const icon of row.querySelectorAll('img.token-effect'))
         {
             const src = icon.getAttribute('src');
@@ -31,8 +34,10 @@ function _onRenderCombatTracker(_app, htmlOrEl)
             seen.set(src, skip + 1);
             const effect = _nthEffectByImg(actor, src, skip);
             const count = effect ? effectStack(effect) : 0;
+
             if (count <= 1)
                 continue;
+
             const wrap = document.createElement('span');
             wrap.className = 'la-effect-counter-wrap';
             icon.replaceWith(wrap);
@@ -56,5 +61,6 @@ function _nthEffectByImg(actor, img, index)
             return effect;
         index--;
     }
+
     return null;
 }

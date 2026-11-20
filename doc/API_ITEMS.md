@@ -33,9 +33,9 @@ await api.removeItemTag(item, "tg_heat_self")                   // removes tag b
 api.isItemUsable(item)
 ```
 
-Whether the item can be used right now, matching the TAH row state: false when destroyed, disabled, unloaded, uncharged, out of uses or per-round/turn/scene limits, or lock-blocked.
+Whether the item can be used right now, matching the TAH row state: false when destroyed, disabled, unloaded, uncharged, out of uses or per-round/turn/encounter limits, or lock-blocked.
 
-The per-round/turn/scene part only counts when the `enablePerRoundTurnTags` setting is on. Those three are the `perRound` / `perTurn` / `perScene` resources of [Extra Config](#extra-config).
+The per-round/turn/encounter part only counts when **Enforce Use Limits** (`enablePerRoundTurnTags`) is on. Those three are the `perRound` / `perTurn` / `perScene` resources of [Extra Config](#extra-config).
 
 </details>
 
@@ -75,23 +75,27 @@ await api.setItemAsActivated(item, token, 'Quick', 'Deactivate the shield.', { b
 </details>
 
 <details id="getActivatedItems">
-<summary><b><code>getActivatedItems</code></b> → <code>Array&lt;Item&gt;</code></summary>
+<summary><b><code>getActivatedItems</code></b> → <code>Array&lt;Item&gt;</code><br><b><code>isItemActivated</code></b> → <code>boolean</code></summary>
 
 <br>
 
 ```js
 api.getActivatedItems(token)
+api.isItemActivated(token, item)
 ```
 
-Items on the token carrying `lancer-automations.activeStateData.active`, the flag `setItemAsActivated` writes.
+Items on the token carrying `lancer-automations.activeStateData.active`, the flag `setItemAsActivated` writes. `isItemActivated` checks one item by id, `false` for no item or no actor.
 
 | Param | Type | Description |
 |:------|:-----|:------------|
 | <kbd>token</kbd> | `Token` | The token to inspect |
+| <kbd>item</kbd> | `Item` | `isItemActivated` only |
 
 ```js
 const active = api.getActivatedItems(token);
 if (active.some(i => i.name === 'Aegis Shield Generator')) return false;
+
+if (!api.isItemActivated(reactorToken, item)) return false;
 ```
 
 </details>
@@ -146,7 +150,7 @@ await api.restoreItem(item)
 
 **Params:** <kbd>item</kbd> `Item`
 
-`destroyItem` sets `system.destroyed`, `disableItem` sets `system.disabled`, and `restoreItem` clears both. Destroyed/disabled items are skipped by the reaction engine and the action-lock system, and Lancer greys them on the sheet. Returns the item, or `null` if the argument is not an Item.
+`destroyItem` sets `system.destroyed`, `disableItem` sets `system.disabled`, and `restoreItem` clears both. Destroyed/disabled items are skipped by the automation engine and the action-lock system, and Lancer greys them on the sheet. Returns the item, or `null` if the argument is not an Item.
 
 ```js
 await api.disableItem(weapon);
@@ -293,7 +297,7 @@ if (api.hasTurnAvailable(reactorToken) === 0) return false;
 await api.setItemResource(item, value, counterIndex)
 ```
 
-Auto-detects the resource type.
+Auto-detects the resource type. Writes through the GM when you do not own the item.
 
 Detection order:
 1. **Talent** → `system.counters[counterIndex].value` (clamped to counter `min`/`max`)
@@ -496,7 +500,7 @@ await api.consumeItemResource(item, 'uses', 2);
 await api.consumeItemResource(item, 'loading');
 ```
 
-Force a consume regardless of opt-out. Throws if the item does not have the resource type. Booleans set to `false`.
+Force a consume regardless of opt-out. Throws if the item does not have the resource type. Booleans set to `false`. Writes through the GM when you do not own the item.
 
 Only `uses` clamps to a real ceiling (`system.uses.max`). `perTurn` and `perRound` are floored at 0 with no upper bound, so a recharge past the tag's limit is not caught here.
 

@@ -8,7 +8,7 @@ import { isFreshWorld } from './settings-onboarding.js';
 import { afterFirstRun } from './first-run-queue.js';
 
 /**
- * Registry default has no `enabled` field → defaults to true (line 420 in reaction-manager.js).
+ * Registry default has no `enabled` field → defaults to true (line 420 in automation-manager.js).
  * Users can disable it via the reactions UI, which stores { enabled: false } in generalReactions.
  */
 function isEngagementReactionEnabled()
@@ -17,6 +17,7 @@ function isEngagementReactionEnabled()
     {
         const general = getModuleSetting('generalReactions') || {};
         const entry = general['Engagement'];
+
         if (!entry)
             return true;
         if (entry.enabled !== undefined)
@@ -47,9 +48,11 @@ function getConflictRules()
             {
                 if (!game.modules.get('csm-lancer-qol')?.active)
                     return false;
+
                 const statusFXConfig = getModuleSetting('statusFXConfig') ?? {};
                 if (!statusFXConfig.master)
                     return false;
+
                 try
                 {
                     return game.settings.get('csm-lancer-qol', 'enableAutomation') === true;
@@ -73,9 +76,11 @@ function getConflictRules()
             {
                 if (!game.modules.get('csm-lancer-qol')?.active)
                     return false;
+
                 const statusFXConfig = getModuleSetting('statusFXConfig') ?? {};
                 if (!statusFXConfig.master)
                     return false;
+
                 try
                 {
                     return game.settings.get('csm-lancer-qol', 'enableConditionEffects') === true;
@@ -99,6 +104,7 @@ function getConflictRules()
             {
                 if (!game.modules.get('csm-lancer-qol')?.active)
                     return false;
+
                 try
                 {
                     if (!getModuleSetting('enableAltStruct'))
@@ -143,6 +149,7 @@ function getConflictRules()
                     return false;
                 if (!isEngagementReactionEnabled())
                     return false;
+
                 try
                 {
                     return game.settings.get('csm-lancer-qol', 'enableEngageAutomation') === true;
@@ -166,6 +173,7 @@ function getConflictRules()
             {
                 if (!game.modules.get('csm-lancer-qol')?.active)
                     return false;
+
                 try
                 {
                     const statusFXConfig = getModuleSetting('statusFXConfig') ?? {};
@@ -207,6 +215,7 @@ function getConflictRules()
             {
                 if (!game.modules.get('csm-lancer-qol')?.active)
                     return false;
+
                 try
                 {
                     if (!getModuleSetting('enableWrecks'))
@@ -221,27 +230,33 @@ function getConflictRules()
             async fix()
             {
                 await game.settings.set('csm-lancer-qol', 'enableAutomationWrecks', false);
+
                 // Migrate per-token wreck flags from csm-lancer-qol to lancer-automations.
                 const flagKeys = [
                     'wreckImgPath', 'wreckEffectPath', 'wreckSoundPath', 'wreckScale',
                     'spawnWreckImage', 'playWreckSound', 'playWreckEffect',
                     'spawnDifficultTerrain', 'isWreck', 'isDead', 'tokenDocument',
                 ];
+
                 let patched = 0;
+
                 for (const actor of game.actors)
                 {
                     // Get the raw source data to reliably access flags.
                     const rawProto = actor.toObject()?.prototypeToken;
                     const qolFlags = rawProto?.flags?.['csm-lancer-qol'] ?? null;
+
                     if (!qolFlags || typeof qolFlags !== 'object')
                         continue;
                     console.log(`${MODULE_ID} | Found QoL flags on ${actor.name}:`, Object.keys(qolFlags));
                     const flagsToMigrate = {};
+
                     for (const key of flagKeys)
                     {
                         if (qolFlags[key] !== undefined && qolFlags[key] !== null)
                             flagsToMigrate[key] = qolFlags[key];
                     }
+
                     if (Object.keys(flagsToMigrate).length > 0)
                     {
                         try
@@ -260,23 +275,30 @@ function getConflictRules()
                         }
                     }
                 }
+
                 if (patched > 0)
                     console.log(`${MODULE_ID} | Migrated wreck flags on ${patched} actor prototype(s)`);
+
                 let scenePatched = 0;
+
                 for (const scene of game.scenes)
                 {
                     const tokenUpdates = [];
+
                     for (const token of scene.tokens)
                     {
                         const qolFlags = token.toObject?.()?.flags?.['csm-lancer-qol'] ?? token.flags?.['csm-lancer-qol'];
                         if (!qolFlags || typeof qolFlags !== 'object')
                             continue;
+
                         const flagsToMigrate = {};
+
                         for (const key of flagKeys)
                         {
                             if (qolFlags[key] !== undefined && qolFlags[key] !== null)
                                 flagsToMigrate[key] = qolFlags[key];
                         }
+
                         if (Object.keys(flagsToMigrate).length > 0)
                         {
                             tokenUpdates.push({
@@ -285,6 +307,7 @@ function getConflictRules()
                             });
                         }
                     }
+
                     if (tokenUpdates.length > 0)
                     {
                         try
@@ -298,6 +321,7 @@ function getConflictRules()
                         }
                     }
                 }
+
                 if (scenePatched > 0)
                     console.log(`${MODULE_ID} | Migrated wreck flags on ${scenePatched} placed token(s)`);
             }
@@ -345,6 +369,7 @@ function getConflictRules()
                     return false;
                 if (!getModuleSetting('enableBuiltinSpeedProvider'))
                     return false;
+
                 try
                 {
                     return game.settings.get('terrain-height-tools', 'displayLosMeasurementGm') === true
@@ -439,6 +464,7 @@ export function checkCompatibility()
     const silent = isFreshWorld() ? rules.filter(rule => rule.freshWorldSilent && rule.check()) : [];
     for (const rule of silent)
         rule.fix().catch(err => console.warn(`${MODULE_ID} | Compatibility: silent fix failed for ${rule.id}`, err));
+
     const detected = rules.filter(rule => !silent.includes(rule) && rule.check());
 
     const conflicts = detected.filter(rule => typeof rule.fix === 'function');
@@ -486,6 +512,7 @@ export function checkCompatibility()
                         console.error(`${MODULE_ID} | Compatibility: failed to fix ${conflict.id}:`, e);
                     }
                 }
+
                 ui.notifications.info(localize('LA.notify.migrationCompleteReloadingIn1Second'));
                 setTimeout(() => foundry.utils.debouncedReload(), 1000);
             }

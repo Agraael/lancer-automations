@@ -19,13 +19,17 @@ export function findActivationConflicts({ items, generals, userItemSettings, use
         {
             if (!sub || sub.enabled === false)
                 return;
+
             const triggers = activeTriggers(sub);
             if (!triggers.length)
                 return;
+
             const path = sub.reactionPath || '';
+
             const pathName = (path.startsWith('extraActions.') || path.startsWith('actions.'))
                 ? path.slice(path.indexOf('.') + 1)
                 : (itemInfo ? resolveActionName(itemInfo.system, path) : null);
+
             const actionName = pathName ?? ((!path && sub.onlyOnSourceMatch) ? (itemInfo?.name ?? null) : null);
             itemEntries.push({
                 kind: 'item',
@@ -51,6 +55,7 @@ export function findActivationConflicts({ items, generals, userItemSettings, use
         {
             if (!sub || (sub.enabled ?? entry.enabled) === false)
                 return;
+
             const triggers = activeTriggers(sub);
             if (!triggers.length)
                 return;
@@ -69,6 +74,7 @@ export function findActivationConflicts({ items, generals, userItemSettings, use
     }
 
     const cards = new Map();
+
     const addCollision = (keyLabel, keyValue, note, trigger, members) =>
     {
         const ids = members.map(entryId).sort();
@@ -77,9 +83,11 @@ export function findActivationConflicts({ items, generals, userItemSettings, use
         card.triggers.push(trigger);
         cards.set(cardKey, card);
     };
+
     const groupBy = (list, keyOf) =>
     {
         const groups = new Map();
+
         for (const entry of list)
         {
             const groupKey = keyOf(entry);
@@ -89,8 +97,10 @@ export function findActivationConflicts({ items, generals, userItemSettings, use
                 groups.set(groupKey, []);
             groups.get(groupKey).push(entry);
         }
+
         return groups;
     };
+
     const triggersOf = (list) => [...new Set(list.flatMap(entry => entry.triggers))];
     const noteSame = localize('LA.reactionConfig.conflictNoteSame');
 
@@ -100,6 +110,7 @@ export function findActivationConflicts({ items, generals, userItemSettings, use
         {
             const withTrigger = group.filter(entry => entry.triggers.includes(trigger));
             const byPath = activationTriggers.has(trigger) ? groupBy(withTrigger, entry => entry.path) : new Map([['', withTrigger]]);
+
             for (const members of byPath.values())
             {
                 if (members.length > 1)
@@ -119,18 +130,22 @@ export function findActivationConflicts({ items, generals, userItemSettings, use
     }
 
     const itemsByAction = groupBy(itemEntries, entry => entry.actionName);
+
     for (const [name, group] of groupBy(generalEntries.filter(entry => entry.actionBased), entry => entry.key))
     {
         const itemGroup = itemsByAction.get(name);
         if (!itemGroup)
             continue;
+
         for (const trigger of triggersOf(group))
         {
             if (!activationTriggers.has(trigger))
                 continue;
+
             const itemMembers = itemGroup.filter(entry => entry.triggers.includes(trigger));
             if (!itemMembers.length)
                 continue;
+
             const generalMembers = group.filter(entry => entry.triggers.includes(trigger));
             addCollision('LA.reactionConfig.conflictKeyAction', name,
                 localizeFormat('LA.reactionConfig.conflictNoteAction', { action: name }), trigger, [...generalMembers, ...itemMembers]);
@@ -145,10 +160,11 @@ export function collectEditedDefaults(defaultList)
     const rows = defaultList.flatMap(entry => entry.isGroup
         ? entry.reactions.map(sub => ({ row: sub, multi: true }))
         : [{ row: entry, multi: false }]);
+
     return rows.filter(({ row }) => row.isOverridden).map(({ row, multi }) => ({
         kind: row.isGeneral ? 'general' : 'item',
         key: row.isGeneral ? row.name : row.lid,
-        index: Number.isFinite(row.reactionIndex) ? row.reactionIndex : null,
+        index: Number.isFinite(row.automationIndex) ? row.automationIndex : null,
         isCustom: false,
         actionBased: !!row.onlyOnSourceMatch,
         name: row.name,
@@ -183,6 +199,7 @@ function renderDrawer(report, refs)
 {
     const sourceCustom = localize('LA.reactionConfig.conflictFromCustom');
     const sourceDefault = localize('LA.reactionConfig.conflictFromDefault');
+
     const cards = report.conflicts.map(card =>
     {
         const rows = card.members.map(member =>
@@ -190,6 +207,7 @@ function renderDrawer(report, refs)
             refs.push({ revealRef: member, editRef: member.isCustom ? member : null });
             return renderRow(member, refs.length - 1, { source: member.isCustom ? sourceCustom : sourceDefault, editable: member.isCustom });
         }).join('');
+
         return `
             <div class="la-conflict-card">
                 <div class="la-conflict-head">
@@ -207,6 +225,7 @@ function renderDrawer(report, refs)
         refs.push({ revealRef: entry, editRef: { ...entry, isCustom: true } });
         return renderRow(entry, refs.length - 1, { source: null, editable: true });
     }).join('');
+
     const editedSection = report.edited.length ? `
         <div class="la-conflict-section">
             <div class="la-conflict-section-title"><span>${escapeHtml(localize('LA.reactionConfig.editedDefaults'))}</span><span>${report.edited.length}</span></div>
@@ -229,8 +248,10 @@ function renderDrawer(report, refs)
 function findRows(app, tab, ref)
 {
     const rows = app.element.find(`.tab[data-tab="${tab}"] .scrollable:not(.scrollable-by-trigger) .reaction-item:not(.group-header):not(.folder-header)`).toArray();
+
     const sameKey = rows.filter(el => (el.dataset.isGeneral === 'true') === (ref.kind === 'general')
         && (ref.kind === 'general' ? el.dataset.name : el.dataset.lid) === ref.key);
+
     const wantedIndex = ref.index === null ? '' : String(ref.index);
     const exact = sameKey.filter(el => (el.dataset.index ?? '') === wantedIndex);
     return exact.length ? exact : sameKey;
@@ -255,17 +276,21 @@ function revealRow(app, ref)
         $(content).show();
         $(content).prev('.folder-header').find('.folder-expand-icon').removeClass('fa-folder').addClass('fa-folder-open');
     });
+
     if (!$(row).is(':visible'))
     {
         tabEl.find('.trigger-filter').val('');
         tabEl.find('.search-input').val('').trigger('input');
     }
+
     const scroller = $(row).closest('.scrollable')[0];
+
     if (scroller)
     {
         const delta = row.getBoundingClientRect().top - scroller.getBoundingClientRect().top;
         scroller.scrollTo({ top: scroller.scrollTop + delta - scroller.clientHeight / 3, behavior: 'smooth' });
     }
+
     row.classList.remove('la-conflict-flash');
     row.getBoundingClientRect();
     row.classList.add('la-conflict-flash');
@@ -287,11 +312,13 @@ function setDrawerOpen(app, open)
     app._conflictFollow?.disconnect();
     app._conflictFollow = null;
     const appEl = app.element?.[0];
+
     if (!open || !appEl)
     {
         drawer.classList.remove('open');
         return;
     }
+
     const place = () =>
     {
         const rect = appEl.getBoundingClientRect();
@@ -304,6 +331,7 @@ function setDrawerOpen(app, open)
         drawer.style.height = (rect.height - 28) + 'px';
         drawer.style.zIndex = String(Number.isFinite(appZ) ? appZ - 1 : 90);
     };
+
     place();
     drawer.getBoundingClientRect();
     drawer.classList.add('open');
@@ -314,27 +342,33 @@ function setDrawerOpen(app, open)
 function onDrawerClick(app, event)
 {
     const target = /** @type {HTMLElement} */ (event.target);
+
     if (target.closest('.la-conflict-close'))
     {
         setDrawerOpen(app, false);
         return;
     }
+
     const rowEl = /** @type {HTMLElement} */ (target.closest('.la-conflict-row'));
     const entry = rowEl ? app._conflictRefs?.[Number(rowEl.dataset.ref)] : null;
+
     if (!entry)
         return;
+
     if (target.closest('.la-conflict-edit'))
     {
         if (entry.editRef)
             editRow(app, entry.editRef);
         return;
     }
+
     revealRow(app, entry.revealRef);
 }
 
 export function bindConflictDrawer(app, html)
 {
     let drawer = app._conflictDrawer;
+
     if (!drawer)
     {
         drawer = document.createElement('aside');
@@ -351,6 +385,7 @@ export function bindConflictDrawer(app, html)
         document.body.appendChild(drawer);
         app._conflictDrawer = drawer;
     }
+
     const refs = [];
     drawer.innerHTML = renderDrawer(app._conflictReport ?? { conflicts: [], edited: [] }, refs);
     app._conflictRefs = refs;

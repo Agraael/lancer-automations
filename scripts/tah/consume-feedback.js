@@ -5,7 +5,8 @@ import { isActorScannedForUser } from '../tools/scan-lookup.js';
 
 import { MODULE_ID } from '../tools/constants.js';
 import { getLAFlag } from '../tools/flag-utils.js';
-import { getExternalSetting } from '../tools/settings-utils.js';
+import { floatTokenText } from '../tools/float-text.js';
+import { signedNumber } from '../tools/string-utils.js';
 const _lastConsume = new Map();
 const _seenDocs = new Set();
 const SUB_FIELDS = { uses_per_turn: 'perTurn', uses_per_round: 'perRound', uses_per_scene: 'perScene', uses_per_mission: 'perMission' };
@@ -17,6 +18,7 @@ function _subEntries(item)
 {
     const map = getLAFlag(item,'perFreqSub') ?? {};
     const out = [];
+
     for (const [subKey, entry] of Object.entries(map))
     {
         for (const [field, type] of Object.entries(SUB_FIELDS))
@@ -27,6 +29,7 @@ function _subEntries(item)
             out.push({ key: `${item.uuid}:sub:${subKey}:${field}`, type, subKey, value: Number(raw) });
         }
     }
+
     return out;
 }
 
@@ -48,6 +51,7 @@ function _readUses(root)
     const nested = foundry.utils.getProperty(root, 'system.uses.value');
     if (nested !== undefined && nested !== null)
         return Number(nested);
+
     const raw = foundry.utils.getProperty(root, 'system.uses');
     if (typeof raw === 'number')
         return raw;
@@ -60,6 +64,7 @@ function _changeUses(change)
     const nested = foundry.utils.getProperty(change, 'system.uses.value');
     if (nested !== undefined)
         return Number(nested);
+
     const raw = foundry.utils.getProperty(change, 'system.uses');
     if (typeof raw === 'number')
         return raw;
@@ -79,18 +84,17 @@ const RESOURCE_FIELDS = {
 
 function _formatLabel(type, pre, post)
 {
-    const signedDelta = (delta) => `${delta > 0 ? '+' : ''}${delta}`;
     switch (type)
     {
-        case 'uses':        return `Uses ${signedDelta(post - pre)}`;
+        case 'uses':        return `Uses ${signedNumber(post - pre)}`;
         case 'loading':     return post ? 'Loaded' : 'Unloaded';
         case 'charged':     return post ? 'Charged' : 'Discharged';
-        case 'perTurn':     return `Per-Turn ${signedDelta(pre - post)}`;
-        case 'perRound':    return `Per-Round ${signedDelta(pre - post)}`;
-        case 'perScene':    return `Per-Encounter ${signedDelta(pre - post)}`;
-        case 'perMission':  return `Per-Mission ${signedDelta(pre - post)}`;
+        case 'perTurn':     return `Per-Turn ${signedNumber(pre - post)}`;
+        case 'perRound':    return `Per-Round ${signedNumber(pre - post)}`;
+        case 'perScene':    return `Per-Encounter ${signedNumber(pre - post)}`;
+        case 'perMission':  return `Per-Mission ${signedNumber(pre - post)}`;
         case 'reserveUsed': return post ? 'Reserve Used' : 'Reserve Restored';
-        case 'core':        return `Core Power ${signedDelta(post - pre)}`;
+        case 'core':        return `Core Power ${signedNumber(post - pre)}`;
         default:            return '';
     }
 }
@@ -103,11 +107,6 @@ function _canSeeConsume(actor)
     if (actor?.type === 'pilot' || actor?.type === 'mech')
         return true;
     return isActorScannedForUser(actor, game.user);
-}
-
-function _floatingNumbersOn()
-{
-    return !!getExternalSetting('lancer', 'floatingNumbers', true);
 }
 
 function _feedbackTokens(actor)
@@ -124,31 +123,28 @@ export function spawnConsumeFeedback(actor, type, pre, post, labelOverride = nul
     {
         const tokens = _feedbackTokens(actor);
         const token = tokens.find(/** @type {any} */ activeToken => activeToken.visible) ?? tokens[0];
+
         if (!token || !token.visible)
             return;
+
         const revealed = _canSeeConsume(actor);
         const text = revealed ? (labelOverride ?? _formatLabel(type, pre, post)) : '???';
+
         if (!text)
             return;
+
         const rawDelta = (typeof pre === 'number' && typeof post === 'number') ? post - pre : 0;
         const delta = USED_COUNTER_TYPES.has(type) ? -rawDelta : rawDelta;
-        if (_floatingNumbersOn() && canvas?.interface?.createScrollingText)
-        {
-            const fill = !revealed ? '#888888' : (delta > 0 ? '#66cc66' : (delta < 0 ? '#ff9955' : '#cccccc'));
-            // Masked feedback uses a constant direction so scroll up/down never leaks gain-vs-spend.
-            const direction = !revealed
-                ? CONST.TEXT_ANCHOR_POINTS.TOP
-                : (delta > 0 ? CONST.TEXT_ANCHOR_POINTS.BOTTOM : CONST.TEXT_ANCHOR_POINTS.TOP);
-            canvas.interface.createScrollingText(token.center, text, {
-                anchor: CONST.TEXT_ANCHOR_POINTS.BOTTOM,
-                direction,
-                fontSize: 28,
-                fill,
-                stroke: 0,
-                strokeThickness: 4,
-                jitter: 0.25,
-            });
-        }
+
+        const fill = !revealed ? '#888888' : (delta > 0 ? '#66cc66' : (delta < 0 ? '#ff9955' : '#cccccc'));
+
+        // Masked feedback uses a constant direction so scroll up/down never leaks gain-vs-spend.
+        const direction = !revealed
+            ? CONST.TEXT_ANCHOR_POINTS.TOP
+            : (delta > 0 ? CONST.TEXT_ANCHOR_POINTS.BOTTOM : CONST.TEXT_ANCHOR_POINTS.TOP);
+
+        floatTokenText(token, text, fill, direction);
+
         if (revealed)
             playStatsSound('generic_stat');
     }
@@ -163,14 +159,17 @@ function _snapshotItem(item)
     if (!item?.uuid)
         return;
     _seenDocs.add(item.uuid);
+
     for (const [type, { read }] of Object.entries(RESOURCE_FIELDS))
     {
         const value = read(item);
         if (value !== undefined)
             _lastConsume.set(`${item.uuid}:${type}`, value);
     }
+
     for (const entry of _subEntries(item))
         _lastConsume.set(entry.key, entry.value);
+
     if (item.type === 'bond')
     {
         (item.system?.powers ?? []).forEach((/** @type {any} */ power, /** @type {number} */ powerIdx) =>
@@ -211,11 +210,13 @@ function _seedFromCanvas()
 {
     _lastConsume.clear();
     _seenDocs.clear();
+
     for (const token of canvas?.tokens?.placeables ?? [])
     {
         const actor = token.actor;
         if (!actor)
             continue;
+
         for (const owner of [actor, actor.system?.pilot?.value])
         {
             if (!owner)
@@ -239,16 +240,20 @@ export function initConsumeFeedback()
         {
             if (!item?.uuid)
                 return;
+
             const actor = item.parent;
             if (actor?.documentName !== 'Actor')
                 return;
+
             // Suppressed updates still refresh the snapshot so the next real delta stays correct.
             const suppressed = /** @type {any} */ (options)?.laConsumeFeedback === false;
+
             for (const [type, { get }] of Object.entries(RESOURCE_FIELDS))
             {
                 const post = get(change);
                 if (post === undefined)
                     continue;
+
                 const key = `${item.uuid}:${type}`;
                 const prev = _lastConsume.get(key);
                 _lastConsume.set(key, post);
@@ -257,8 +262,10 @@ export function initConsumeFeedback()
                     continue;
                 spawnConsumeFeedback(actor, type, prev, post);
             }
+
             if (Object.keys(foundry.utils.flattenObject(change)).some(key => key.includes('perFreqSub')))
                 _spawnSubChanges(item, actor, suppressed);
+
             if (item.type === 'bond' && change.system?.powers !== undefined)
             {
                 (/** @type {any[]} */ (item.system?.powers ?? [])).forEach((power, powerIdx) =>
@@ -266,14 +273,16 @@ export function initConsumeFeedback()
                     const raw = power?.uses?.value;
                     if (raw === undefined || raw === null)
                         return;
+
                     const post = Number(raw);
                     const key = `${item.uuid}:power:${powerIdx}`;
                     const prev = _lastConsume.get(key);
                     _lastConsume.set(key, post);
                     if (prev === undefined || prev === post || suppressed)
                         return;
+
                     const delta = post - prev;
-                    spawnConsumeFeedback(actor, 'uses', prev, post, `${power.name} ${delta > 0 ? '+' : ''}${delta}`);
+                    spawnConsumeFeedback(actor, 'uses', prev, post, `${power.name} ${signedNumber(delta)}`);
                 });
             }
         }
@@ -289,8 +298,10 @@ export function initConsumeFeedback()
         {
             if (!actor?.uuid)
                 return;
+
             const suppressed = /** @type {any} */ (options)?.laConsumeFeedback === false;
             const core = _readNum(change, 'system.core_energy');
+
             if (core !== undefined)
             {
                 const key = `${actor.uuid}:core`;
@@ -299,6 +310,7 @@ export function initConsumeFeedback()
                 if (prev !== undefined && prev !== core && !suppressed)
                     spawnConsumeFeedback(actor, 'core', prev, core);
             }
+
             if (Object.keys(foundry.utils.flattenObject(change)).some(key => key.includes('perFreqSub')))
                 _spawnSubChanges(actor, actor, suppressed);
         }

@@ -145,15 +145,18 @@ await api.toggleAura(actorOrToken, auraName, on?)      // → boolean|null - fli
 </details>
 
 <details id="getTokenOwnerUserId">
-<summary><b><code>getTokenOwnerUserId</code></b> → <code>Array&lt;string&gt;</code></summary>
+<summary><b><code>getTokenOwnerUserId</code></b> → <code>Array&lt;string&gt;</code><br><b><code>getActiveGMId</code></b> → <code>string | null</code></summary>
 
 <br>
 
 ```js
 api.getTokenOwnerUserId(token)
+api.getActiveGMId()
 ```
 
-Returns the user IDs that own a token. Checks active non-GM players first, falls back to the active GM. Always an array, empty only when no GM is active either.
+`getTokenOwnerUserId` returns the user IDs that own a token. Checks active non-GM players first, falls back to the active GM. Always an array, empty only when no GM is active either.
+
+`getActiveGMId` is the active GM's user id, `null` when no GM is online. It is the usual `userIdControl` or `sendMessageToReactor` target for GM work.
 
 | Param | Type | Description |
 |:------|:-----|:------------|
@@ -161,6 +164,30 @@ Returns the user IDs that own a token. Checks active non-GM players first, falls
 
 ```js
 const [userId] = api.getTokenOwnerUserId(target);
+```
+
+</details>
+
+<details id="asOwner">
+<summary><b><code>asOwner</code></b> → <code>object</code></summary>
+
+<br>
+
+```js
+api.asOwner(token, wait)
+```
+
+Runs one interactive call on the client that controls `token`: its active player owner, else the active GM. Local when that is you. Available: `rollCard`, `chooseToken`, `placeZone`, `moveTokenRuler`, `boostMove`, `knockBackToken`, `attackWith`, `executeDamageRoll`, `executeItemActivation`, `executeSimpleActivation`, `executeStatRoll`, `activateGeneralAction`, `usePrepared`.
+
+Arguments and results cross as data: tokens, actors, items and rolls are rebuilt, functions in options are dropped, a returned `flow` is not sent back.
+
+| Param | Type | Description |
+|:------|:-----|:------------|
+| <kbd>token</kbd> | `Token` | Whose controller runs the call |
+| <kbd>wait</kbd> | `{ title, description, item, relatedToken }` | Optional. Waiting card shown here while the call runs remotely |
+
+```js
+const result = await api.asOwner(reactorToken).rollCard({ title: "REBOUND", roll: "1d6", originToken: reactorToken, item });
 ```
 
 </details>
@@ -183,10 +210,15 @@ const result = await api.openHaseContestCard(options)
 | <kbd>skillA</kbd> | `string` | `null` | Contender A stat: `HULL` / `AGI` / `SYS` / `ENG` / `GRIT` |
 | <kbd>tokenB</kbd> | `Token` | `null` | Contender B |
 | <kbd>skillB</kbd> | `string` | `null` | Contender B stat |
-| <kbd>title</kbd> | `string` | `"HASE Contest"` | Card and chat title |
+| <kbd>title</kbd> | `string` | `"HASE Contest"` | Chat title, passed to the contest roll |
+| <kbd>cardTitle</kbd> | `string` | `"HASE CONTEST"` | Header of the setup card |
+| <kbd>description</kbd> | `string` | `""` | Text on the setup card |
+| <kbd>cancelText</kbd> | `string` | `""` | Label of the card's cancel button. Empty keeps the default |
 | <kbd>sendToOwner</kbd> | `boolean` | `true` | Route each roll to its token owner |
 | <kbd>accuracy1</kbd> / <kbd>difficulty1</kbd> / <kbd>flatModifier1</kbd> | `number` | `0` | Pre-fill contender A's HASE HUD. `2` variants do the same for B |
-| <kbd>sourceItem</kbd> / <kbd>sourceAction</kbd> / <kbd>extraData</kbd> | | `null` | Attribution, forwarded to [`executeContestedCheck`](API_COMBAT.md#executeContestedCheck) |
+| <kbd>sourceItem</kbd> | `Item\|string` | `null` | Item the check belongs to. Forwarded to [`executeContestedCheck`](API_COMBAT.md#executeContestedCheck) |
+| <kbd>sourceAction</kbd> | `string` | `null` | Action the check belongs to. Forwarded the same way |
+| <kbd>extraData</kbd> | `Object` | `null` | Merged into both rolls' `la_extraData` |
 
 Card to set up and run a HASE contest between two tokens. Returns the [`executeContestedCheck`](API_COMBAT.md) result, or `null` if cancelled. Pre-set fields stay editable, and any missing token/skill is prompted for.
 
@@ -216,7 +248,7 @@ const result = await api.openForceCheckCard(options)
 | <kbd>sendToOwner</kbd> | `boolean` | `true` | Route each roll to its token owner |
 | <kbd>accuracy</kbd> / <kbd>difficulty</kbd> / <kbd>flatModifier</kbd> | `number \| ((rollerToken: Token) => number)` | `0` | Pre-fill each roller's HASE HUD |
 
-Card to force HASE checks: targets pick like an attack roll, the save target like a stat-roll save. Returns the [`executeForceCheck`](API_COMBAT.md) result, or `null` if cancelled.
+Card to force HASE checks: targets are picked as for an attack roll, the save target as for a stat-roll save. Returns the [`executeForceCheck`](API_COMBAT.md) result, or `null` if cancelled.
 
 ```js
 const result = await api.openForceCheckCard({ tokenA: casterToken, skill: 'ENG', range: 5, saveVs: casterToken });
@@ -243,19 +275,54 @@ await api.startChoiceCard(options)
 | <kbd>icon</kbd> | `string` | `"fas fa-list"` | FontAwesome class |
 | <kbd>headerClass</kbd> | `string` | `""` | Optional CSS class |
 | <kbd>userIdControl</kbd> | `string\|string[]\|null` | `null` | User IDs for broadcast/vote targets |
+| <kbd>owner</kbd> | `Token` | `null` | Routes control to that token's owner, active-GM fallback. An explicit `userIdControl` wins |
 | <kbd>originToken</kbd> | `Token` | `null` | Token the card is attributed to |
 | <kbd>relatedToken</kbd> | `Token` | `null` | Second token shown on the card |
 | <kbd>item</kbd> | `Item` | `null` | Source item shown on the card |
 | <kbd>traceData</kbd> | `Object` | `null` | Trigger data carried through for tracing |
 | <kbd>forceSocket</kbd> | `boolean` | `false` | Always route through the socket, even for the local user |
 | <kbd>urgent</kbd> | `boolean` | `false` | Show immediately instead of waiting in the card queue |
+| <kbd>cancelKey</kbd> | `string` | `null` | Lets [`cancelChoiceCardByKey`](#startWaitCard) close the card, shown or still queued. Local cards only |
 
 **Choice Object:**
 ```js
 { text: "Label", icon: "fas fa-check", data: { id: 1 }, callback: async (data) => { ... } }
 ```
 
-For vote modes, `userIdControl` lists the voters. A single ID string is accepted and normalized to an array, and inactive users are dropped. The creator sees all votes and confirms the winner.
+For vote modes, `userIdControl` lists the voters. A single ID string is accepted and normalized to an array, and inactive users are dropped. The creator sees all votes and confirms the winner. Vote modes ignore `owner` and `cancelKey`.
+
+</details>
+
+<details id="startWaitCard">
+<summary><b><code>startWaitCard</code></b> → <code>{ remove: () => void }</code><br><b><code>cancelChoiceCardByKey</code></b> → <code>void</code></summary>
+
+<br>
+
+```js
+const wait = api.startWaitCard(options)
+api.cancelChoiceCardByKey(cancelKey)
+```
+
+`startWaitCard` shows a "waiting for X" card right away, outside the queue, until you call `remove()`.
+
+| Param | Type | Default | Description |
+|:------|:-----|:--------|:------------|
+| **inside `options`** | | | |
+| <kbd>title</kbd> | `string` | `"WAITING"` | Card header |
+| <kbd>description</kbd> | `string` | `""` | Card text |
+| <kbd>waitMessage</kbd> | `string` | `"Waiting for response…"` | Status line |
+| <kbd>originToken</kbd> / <kbd>relatedToken</kbd> | `Token` | `null` | Tokens shown on the card |
+| <kbd>item</kbd> | `Item` | `null` | Source item shown on the card |
+| <kbd>onCancel</kbd> | `() => void` | no-op | Runs when the card's Cancel button is clicked. The card stays until `remove()` |
+
+`cancelChoiceCardByKey` closes the `startChoiceCard` started with that `cancelKey`, as if cancelled: it resolves `null` and no choice callback runs. A queued card resolves `null` without showing. An unknown or settled key does nothing.
+
+```js
+const wait = api.startWaitCard({ title: 'MOVING TARGET', onCancel: () => wait.remove() });
+wait.remove();
+
+api.cancelChoiceCardByKey('rebound-ask');
+```
 
 </details>
 
@@ -322,11 +389,11 @@ const ask = await api.askCard({ title, description, yesText, noText, owner, ... 
 const entry = await api.pickCard(entries, { label, entryIcon, title, description, ... })
 ```
 
-Sugar over `startChoiceCard`. Extra options (`originToken`, `relatedToken`, `item`, `userIdControl`, ...) pass through.
+Sugar over `startChoiceCard`. Extra options (`owner`, `originToken`, `relatedToken`, `item`, `userIdControl`, ...) pass through.
 
 `confirmCard` shows a single button (`confirmText`, default `"Confirm"`). Resolves `true` when clicked, `false` on dismiss.
 
-`askCard` shows two buttons (`yesText`/`noText`, default `"Use"`/`"Skip"`, plus `yesIcon`/`noIcon`). `owner` (a Token) routes control to that token's owner with active-GM fallback. An explicit `userIdControl` wins. The interrupt `preConfirm` shape: `return (await api.askCard({...})).confirmed`.
+`askCard` shows two buttons (`yesText`/`noText`, default `"Use"`/`"Skip"`, plus `yesIcon`/`noIcon`). The interrupt `preConfirm` shape: `return (await api.askCard({...})).confirmed`.
 
 `pickCard` maps `entries` to buttons and resolves the picked entry (dismiss = `null`).
 
@@ -356,7 +423,7 @@ const { confirmed } = await api.askCard({ title: 'BRACE?', yesText: 'Brace', noT
 const result = await api.rollCard({ title, roll, originToken, relatedToken, item })
 ```
 
-Card with an editable roll input (preset by `roll`, default `"1d20"`). Rolls to chat as `originToken`. `null` on cancel.
+Card with an editable roll input (preset by `roll`, default `"1d20"`). Rolls to chat as `originToken`. `null` on cancel. Shows on the calling client, use [`asOwner`](#asOwner) to show it to the token's owner.
 
 ```js
 const result = await api.rollCard({ title: "REBOUND", roll: "1d6", originToken: reactorToken, item });
@@ -399,13 +466,15 @@ Passing `x` and `y` places the zone at that world point directly and skips the c
 | <kbd>tmacGraphics</kbd> | `Object` | `null` | templatemacro graphics-state overrides, merged over `preset` |
 | <kbd>useCustomRender</kbd> | `boolean` | `true` | Render in templatemacro's Advanced Mode. `false` opts out |
 | <kbd>hooks</kbd> | `Object` | `{}` | templatemacro hooks (see below) |
-| <kbd>dangerous</kbd> | `Object` | `null` | `{ damageType, damageValue }` - ENG check on entry/turn start |
+| <kbd>dangerous</kbd> | `Object` | `null` | `{ damageType, damageValue }`: ENG check on entry/turn start |
 | <kbd>statusEffects</kbd> | `Array` | `[]` | Status effect IDs applied to tokens inside |
-| <kbd>difficultTerrain</kbd> | `Object` | `null` | `{ movementPenalty, isFlatPenalty }` - Lancer Automations Ruler movement cost |
+| <kbd>difficultTerrain</kbd> | `Object` | `null` | `{ movementPenalty, isFlatPenalty }`: Lancer Automations Ruler movement cost |
 | <kbd>centerLabel</kbd> | `string` | `""` | Text at center of template on canvas |
 | <kbd>preset</kbd> | `string` | `null` | Template Macro library preset (name or id): its graphics and actions become the zone's base look |
 | <kbd>title</kbd> | `string` | `"PLACE ZONE"` | Card header |
-| <kbd>expires</kbd> | `Object` | `null` | `{ on: 'ownerTurnStart'\|'ownerTurnEnd', originToken?, turns? }` - template auto-deletes on that combat event (default origin = caster, and `turns` > 1 survives that many occurrences) |
+| <kbd>expires</kbd> | `Object` | `null` | `{ on: 'ownerTurnStart'\|'ownerTurnEnd', originToken?, turns? }`: template auto-deletes on that combat event (default origin = caster, and `turns` > 1 survives that many occurrences) |
+| <kbd>key</kbd> | `string` | `null` | Stamps the placed templates with this key for the caster, for [`findZones`](#findZones) and `clearZones` |
+| <kbd>replace</kbd> | `boolean` | `false` | With `key`: delete the caster's zones with that key before placing. Cancelling the new placement still leaves them deleted |
 
 `hooks`, `dangerous`, `statusEffects`, `difficultTerrain`, `centerLabel` and `preset` all need templatemacro. Without it the zone falls back to a plain Lancer template and those options are ignored.
 
@@ -417,7 +486,7 @@ Each hook entry supports two formats:
 | Format | Description |
 |:-------|:------------|
 | `{ command: string, asGM: boolean }` | JS code stored in template flags (persists across reloads) |
-| `{ function: Function, asGM: boolean }` | Saved as source, so it must be a self-contained `function` expression, not an arrow. The placing client runs it in memory, other clients and reloads run the saved body with `context` as `this` |
+| `{ function: Function, asGM: boolean }` | Saved as source, so it must be a self-contained `function` expression, not an arrow. The placing client runs it in memory. Other clients and reloads run the saved body with `context` as `this` |
 
 Both formats **stack**.
 
@@ -451,16 +520,38 @@ api.placeZone(token, {
 
 </details>
 
+<details id="findZones">
+<summary><b><code>findZones</code></b> → <code>MeasuredTemplateDocument[]</code><br><b><code>clearZones</code></b> <sup>async</sup> → <code>Promise&lt;number&gt;</code></summary>
+
+<br>
+
+```js
+api.findZones(owner, key)
+await api.clearZones(owner, key)
+```
+
+**Params:** <kbd>owner</kbd> `Token|TokenDocument` the caster · <kbd>key</kbd> `string` the `key` given to `placeZone`
+
+`findZones` returns the zones that token placed with that key, on the viewed scene. The match is on the token id, so unlinked copies keep separate zones. `clearZones` deletes them, through the GM when you can't, and returns how many it found.
+
+```js
+if (api.findZones(reactorToken, 'rift').length === 0) return false;
+await api.clearZones(reactorToken, 'rift');
+```
+
+</details>
+
 <details id="smokeZoneGraphics">
-<summary><b><code>smokeZoneGraphics</code></b> → <code>Object</code></summary>
+<summary><b><code>smokeZoneGraphics</code></b> → <code>Object</code><br><b><code>healCloudGraphics</code></b> → <code>Object</code></summary>
 
 <br>
 
 ```js
 api.smokeZoneGraphics()
+api.healCloudGraphics()
 ```
 
-The "Smoke" preset's templatemacro graphics state (animated JB2A smoke fill, grey outline, above tokens), ready for `placeZone`'s `tmacGraphics`. Picks whichever JB2A module is installed.
+The "Smoke" preset's templatemacro graphics state (animated JB2A smoke fill, grey outline, above tokens), ready for `placeZone`'s `tmacGraphics`. Picks whichever JB2A module is installed. `healCloudGraphics` is the same for the blue healing cloud of the "Nanite Cloud" preset.
 
 **Example:**
 ```js
@@ -583,7 +674,7 @@ await api.moveToken(token, { teleport: true, range: 5 });
 await api.moveTokenRuler(tokenOrTokens, options)
 ```
 
-Interactive drag-ruler with pathfinding: Ctrl+click adds a waypoint, right-click removes the last one, Confirm commits. Several tokens are planned in turn and committed together. Used by `moveToken` without `destination`, `knockBackToken` and `boostMove`.
+Interactive drag-ruler with pathfinding: Ctrl+click adds a waypoint, right-click removes the last one, Confirm commits. Several tokens are planned in turn and committed together. Used by `knockBackToken`, `boostMove` and `moveToken` without `destination`.
 
 | Param | Type | Default | Description |
 |:------|:-----|:--------|:------------|
@@ -600,6 +691,8 @@ Interactive drag-ruler with pathfinding: Ctrl+click adds a waypoint, right-click
 | <kbd>urgent</kbd> | `boolean` | `false` | Jump the card queue |
 | <kbd>planOnly</kbd> | `boolean` | `false` | Resolve the planned paths without moving. Returns `Array<{token, path}>` |
 | <kbd>awayFrom</kbd> | `Token \| {x, y}` | `null` | Lights only the spaces directly away from this token or point. Others warn but still work |
+| <kbd>presets</kbd> | `Record<tokenId, {x, y}>` | `{}` | Destination already picked per token, top-left in pixels. Confirm accepts it as is: a straight path, not checked against range or `awayFrom` |
+| <kbd>stayAdjacentTo</kbd> | `Token` | `null` | A click must pick a space next to this token, otherwise it warns and is refused |
 
 Returns the moved document(s), the plans with `planOnly`, or `null` on cancel.
 
@@ -645,6 +738,7 @@ Knockback with the drag-ruler picker: plan a destination per token, Confirm comm
 | <kbd>headerClass</kbd> | `string` | `""` | Extra CSS class on the card header |
 | <kbd>urgent</kbd> | `boolean` | `true` | Pass `false` to wait in the card queue |
 | <kbd>awayFrom</kbd> | `Token \| {x, y}` | `null` | Point of origin, see `moveTokenRuler` |
+| <kbd>presets</kbd> / <kbd>stayAdjacentTo</kbd> | | | Passed to `moveTokenRuler`, see there. Grapple uses them to drag a held token |
 
 ```js
 await api.knockBackToken([target], 3, { triggeringToken: reactorToken, awayFrom: reactorToken });
@@ -682,6 +776,109 @@ while (!await api.revertMovement(token))
 
 ## Deployables & Thrown Weapons
 
+<details id="addDeployableSpec">
+<summary><b><code>addDeployableSpec</code></b> <sup>async</sup> → <code>string | null</code><br><b><code>getDeployableSpecs</code></b> → <code>Object[]</code><br><b><code>updateDeployableSpec</code></b> <sup>async</sup> → <code>string | null</code><br><b><code>removeDeployableSpec</code></b> <sup>async</sup> → <code>Promise&lt;any&gt;</code></summary>
+
+<br>
+
+```js
+await api.addDeployableSpec(target, spec, opts)
+api.getDeployableSpecs(target)
+await api.updateDeployableSpec(target, lid, patch)
+await api.removeDeployableSpec(target, lid)
+```
+
+Defines a deployable from plain data, no LCP or compendium needed. The spec is stored on the holder and its LID is listed like `addExtraDeploymentLids`, so it deploys, links and fires `onDeploy` like an LCP deployable. `addDeployableSpec` returns the LID and skips the write when the stored spec is the same, so it is safe in `onInit`.
+
+The first deploy creates a world actor "Name [Owner]" in the **Deployable Folder** (`deployableFolderName`). Players without actor creation rights go through the GM. Later deploys reuse that actor, and a changed spec updates it on the next deploy.
+
+**Spec:** an LCP v2 deployable object (`name`, `type`, `detail`, `activation`, `deactivation`, `recall`, `redeploy`, `instances`, `hp`, `armor`, `evasion`, `edef`, `heatcap`, `save`, `size`, `speed`, `actions`, `tags`, `counters`) plus:
+
+| Key | Type | Default | Description |
+|:----|:-----|:--------|:------------|
+| <kbd>lid</kbd> | `string` | `la_dep_<name>` | Deployable LID |
+| <kbd>img</kbd> | `string` | type icon | Actor image |
+| <kbd>tokenImg</kbd> | `string` | `img` | Token image |
+| <kbd>extraActions</kbd> | `Array` | `[]` | Extra actions on the deployable, same entries as [`addExtraActions`](API_HUD.md#addExtraActions) |
+
+`hp` takes a number or a formula with `{grit}` / `{ll}`. `type` is `Deployable`, `Drone` or `Mine`.
+
+| Param | Type | Description |
+|:------|:-----|:------------|
+| <kbd>target</kbd> | `Item\|Actor\|Token` | Holder. Token/Actor stores on the actor |
+| <kbd>spec</kbd> | `Object` | Deployable spec |
+| <kbd>opts</kbd> | `{ tier?, range?, count? }` | Same as the `addExtraDeploymentLids` entry opts |
+| <kbd>lid</kbd> | `string` | Spec LID |
+| <kbd>patch</kbd> | `Object` | Keys merged into the stored spec |
+
+`removeDeployableSpec` also removes the LID and its opts. The world actor it created stays.
+
+```js
+onInit: async function (token, item, api) {
+    for (const tier of [1, 2, 3])
+        await api.addDeployableSpec(item, {
+            lid: `la_dep_engineer_turret_t${tier}_npc`,
+            name: "Engineer Turret",
+            type: "Deployable",
+            size: 0.5,
+            hp: [5, 8, 10][tier - 1],
+            evasion: 10,
+            edef: 10,
+            activation: "Quick",
+            actions: [{ name: "Turret Attack", activation: "Free", detail: "Attack the nearest hostile within Range 10." }]
+        }, { tier });
+}
+```
+
+</details>
+
+<details id="registerDeployables">
+<summary><b><code>registerDeployables</code></b> → <code>void</code><br><b><code>findDeployableSpec</code></b> → <code>Object | null</code></summary>
+
+<br>
+
+```js
+api.registerDeployables(specs)
+api.findDeployableSpec(lid, { item, actor })
+```
+
+`registerDeployables` registers specs in memory, keyed by LID. Call it from a startup script: it runs on every client at ready, and the registry is empty after a reload. Items still list the LIDs with `addExtraDeploymentLids`.
+
+`findDeployableSpec` returns the spec a LID resolves to: on the item, then the actor, then the actor's items, then the registry.
+
+| Param | Type | Description |
+|:------|:-----|:------------|
+| <kbd>specs</kbd> | `Object<string, Object>` | Specs keyed by LID. A spec's own `lid` wins over its key |
+| <kbd>lid</kbd> | `string` | Deployable LID |
+| <kbd>item</kbd> / <kbd>actor</kbd> | `Item` / `Actor` | Holders to search |
+
+```js
+api.registerDeployables({
+    la_dep_miner_pulverizer_charge_t1_npc: { name: "Pulverizer Charge", type: "Mine", size: 0.5, hp: 1, evasion: 10, edef: 10 }
+});
+```
+
+</details>
+
+<details id="createDeployableActor">
+<summary><b><code>createDeployableActor</code></b> <sup>async</sup> → <code>Actor | null</code><br><b><code>buildDeployableData</code></b> → <code>Object</code></summary>
+
+<br>
+
+```js
+await api.createDeployableActor(spec, { owner })
+api.buildDeployableData(spec)
+```
+
+`createDeployableActor` creates the owner's world actor for a spec without placing a token, or returns the existing one, updated when the spec changed. `buildDeployableData` returns the actor data a spec builds, without creating anything.
+
+| Param | Type | Description |
+|:------|:-----|:------------|
+| <kbd>spec</kbd> | `Object` | Deployable spec, see [`addDeployableSpec`](#addDeployableSpec) |
+| <kbd>owner</kbd> | `Actor` | *required*. Owner actor |
+
+</details>
+
 <details id="addExtraDeploymentLids">
 <summary><b><code>addExtraDeploymentLids</code></b> <sup>async</sup> → <code>Promise&lt;any&gt;</code><br><b><code>addExtraDeploymentActor</code></b> <sup>async</sup> → <code>Promise&lt;any&gt;</code><br><b><code>removeExtraDeploymentActor</code></b> <sup>async</sup> → <code>Promise&lt;any&gt;</code></summary>
 
@@ -695,7 +892,12 @@ await api.removeExtraDeploymentActor(target, actors)
 
 Item / Actor / Token target. Item stores on itself and feeds `getItemDeployables`. Token/Actor stores on the actor and feeds `getActorDeployables`. Both apply the tier gate with the actor as owner.
 
-**NPC tier:** gate each entry inline - `addExtraDeploymentLids(item, [{ lid: 'dep_drone_t1', tier: 1 }, { lid: 'dep_drone_t2', tier: 2 }])` - or separately via `setExtraDeployableOpts(target, key, { tier })` (1-3, unset = all tiers). Entries are deduped by LID, so per-tier entries need distinct LIDs. Legacy: with no explicit tiers, 3 LIDs on an NPC still read positionally as T1/T2/T3.
+**NPC tier:** gate each entry to a tier (1-3, unset = all tiers), either:
+
+- inline: `addExtraDeploymentLids(item, [{ lid: 'dep_drone_t1', tier: 1 }, { lid: 'dep_drone_t2', tier: 2 }])`
+- or separately: `setExtraDeployableOpts(target, key, { tier })`
+
+Entries are deduped by LID, so per-tier entries need distinct LIDs. Legacy: with no explicit tiers, 3 LIDs on an NPC still read positionally as T1/T2/T3.
 
 | Param | Type | Description |
 |:------|:-----|:------------|
@@ -726,7 +928,7 @@ api.getLinkedDeployables(source)   // Item/Actor/Token, combined LIDs+UUIDs
 </details>
 
 <details id="getExtraDeployableOpts">
-<summary><b><code>getExtraDeployableOpts</code></b> → <code>{ range?: number; count?: number; tier?: 1 | 2 | 3 } | null</code><br><b><code>setExtraDeployableOpts</code></b> <sup>async</sup> → <code>Promise&lt;any&gt;</code></summary>
+<summary><b><code>getExtraDeployableOpts</code></b> → <code>{ range?, count?, tier?, ownMove?, speed?, ownActions? } | null</code><br><b><code>setExtraDeployableOpts</code></b> <sup>async</sup> → <code>Promise&lt;any&gt;</code></summary>
 
 <br>
 
@@ -735,16 +937,25 @@ api.getExtraDeployableOpts(target, key)
 await api.setExtraDeployableOpts(target, key, opts)
 ```
 
-Per-deployable range / count / tier override keyed by LID or UUID. `tier` gates the entry to an NPC owner tier. Pass `null` / `''` to clear.
+Per-deployable settings keyed by LID or UUID. `opts` is a patch merged into the stored entry, and a `null` or `''` value removes that key.
 
 | Param | Type | Description |
 |:------|:-----|:------------|
 | <kbd>target</kbd> | `Item\|Actor\|Token` | Holder |
 | <kbd>key</kbd> | `string` | LID or actor UUID |
-| <kbd>opts</kbd> | `{ range?: number\|null, count?: number\|null, tier?: 1\|2\|3\|null }` | Patch |
+| **inside `opts`** | | |
+| <kbd>range</kbd> | `number` | Placement range. Wins over the `deployRange` flag |
+| <kbd>count</kbd> | `number` | How many to place. Wins over `deployCount` |
+| <kbd>tier</kbd> | `1\|2\|3` | NPC owner tier gate |
+| <kbd>ownMove</kbd> | `boolean` | Moves on its own: the deployable has its own movement while its owner is in a started combat, reset at the owner's turn start |
+| <kbd>speed</kbd> | `number` | With `ownMove`. Empty uses the deployable's own speed, else the owner's |
+| <kbd>ownActions</kbd> | `boolean` | Own actions: its actions are paid by the deployable, not the owner |
+
+`ownMove`, `speed` and `ownActions` are read from the granting item first, then the owner actor, keyed by the deployable's LID.
 
 ```js
 await api.setExtraDeployableOpts(actor, 'dep_turret_drone', { count: 2, range: 3 });
+await api.setExtraDeployableOpts(item, 'dep_turret_drone', { ownMove: true, ownActions: true });
 ```
 
 </details>
@@ -800,7 +1011,12 @@ Picker that toggles the deployable-owner link flag (`ownerActorUuid` + `ownerNam
 api.getItemDeployables(item, actor)
 ```
 
-Effective deployable LIDs for an item: `system.deployables` + extra flags, tier-gated for NPC owners (explicit `tier` opts win, honoring `tier_override`, and no explicit tiers = legacy 1-or-3 positional slice). `getAllItemDeployables(item)` = same list unfiltered. `linkTierGate(entry, actor, item?)` / `getOwnerTier(actor, item?)` expose the gate.
+Effective deployable LIDs for an item: `system.deployables` (`system.core_system.deployables` on frames) + extra flags, tier-gated for NPC owners, honoring `tier_override`:
+
+- Explicit `tier` opts win.
+- No explicit tiers = legacy 1-or-3 positional slice.
+
+`getAllItemDeployables(item)` = same list unfiltered. `linkTierGate(entry, actor, item?)` / `getOwnerTier(actor, item?)` expose the gate.
 
 | Param | Type | Description |
 |:------|:-----|:------------|
@@ -810,7 +1026,7 @@ Effective deployable LIDs for an item: `system.deployables` + extra flags, tier-
 </details>
 
 <details id="placeDeployable">
-<summary><b><code>placeDeployable</code></b> <sup>async</sup> → <code>Promise&lt;Object|null&gt;</code></summary>
+<summary><b><code>placeDeployable</code></b> <sup>async</sup> → <code>Promise&lt;TokenDocument[] | null&gt;</code></summary>
 
 <br>
 
@@ -821,22 +1037,30 @@ await api.placeDeployable(options)
 | Param | Type | Default | Description |
 |:------|:-----|:--------|:------------|
 | **inside `options`** | | | |
-| <kbd>deployable</kbd> | `Actor\|string\|Array<Actor\|string>` | *required* | LID, Actor, or array (shows selector) |
+| <kbd>deployable</kbd> | `Actor\|string\|Object\|Array` | *required* | LID, Actor, [spec](#addDeployableSpec), or array (shows selector) |
 | <kbd>ownerActor</kbd> | `Actor` | *required* | Owner |
 | <kbd>systemItem</kbd> | `Item` | `null` | Parent item |
 | <kbd>consumeUse</kbd> | `boolean` | `false` | Consumes system use |
 | <kbd>fromCompendium</kbd> | `boolean` | `false` | Creates new actor if not in world |
 | <kbd>width</kbd> | `number` | `null` | Width override |
 | <kbd>height</kbd> | `number` | `null` | Height override |
-| <kbd>range</kbd> | `number` | `deployRange` flag, else `1` | Placement range. The option wins over the flag |
+| <kbd>range</kbd> | `number` | `deployRange` flag, else `1` | Placement range. The option wins over the flag. With neither, a Drone uses the owner's Sensors (5 for a pilot) |
 | <kbd>count</kbd> | `number` | `deployCount` flag, else `1` | Total to place. The option wins over the flag |
 | <kbd>at</kbd> | `Token\|Object` | `null` | Measurement origin |
 | <kbd>title</kbd> | `string` | `"DEPLOY"` | Card title |
+| <kbd>description</kbd> | `string` | `""` | Card text |
 | <kbd>noCard</kbd> | `boolean` | `false` | Auto-confirm |
+| <kbd>disposition</kbd> | `number` | owner's | Token disposition of a deployable actor this call creates |
+| <kbd>team</kbd> | `string` | owner's | Token Factions team of a deployable actor this call creates |
 | <kbd>elevationOffset</kbd> | `number` | `deployElevationOffset` flag, else `0` | Added to the ground elevation at the placement |
+
+A LID resolves to the owner's world actor first, then a spec ([`findDeployableSpec`](#registerDeployables) order, starting with `systemItem`), then the compendium.
+
+A spec with no world actor for this owner yet creates one, named "Name [Owner]", in the Deployable Folder. A user without actor creation rights gets it through the GM.
 
 ```js
 await api.placeDeployable({ deployable: 'dep_turret_drone', ownerActor: actor, range: 2 });
+await api.placeDeployable({ deployable: { name: "Smoke Drone", type: "Drone", hp: 5 }, ownerActor: actor });
 ```
 
 </details>
@@ -909,6 +1133,30 @@ Both take the owner token (`ownerToken`) and open a picker over that owner's dep
 
 </details>
 
+<details id="removeDeployableToken">
+<summary><b><code>removeDeployableToken</code></b> <sup>async</sup> → <code>Promise&lt;void&gt;</code><br><b><code>pickUpThrownWeapon</code></b> <sup>async</sup> → <code>{ weaponName, weaponId }</code></summary>
+
+<br>
+
+```js
+await api.removeDeployableToken(token)
+await api.pickUpThrownWeapon(thrownToken)
+```
+
+**Params:** <kbd>token</kbd> / <kbd>thrownToken</kbd> `Token`, the placeable, not a TokenDocument
+
+No picker: they act on the token you pass. `removeDeployableToken` deletes it. `pickUpThrownWeapon` turns the weapon back on in its owner's sheet and deletes the token.
+
+- A player's call goes to the GM without waiting, and does nothing when no GM is online.
+- Neither checks that the token is a deployable or a thrown weapon.
+- Undo on the action tape puts the token back.
+
+```js
+await api.pickUpThrownWeapon(thrownToken);
+```
+
+</details>
+
 ---
 
 ## Hard Cover
@@ -938,22 +1186,5 @@ Places tokens of a shared "Template Hard Cover" deployable actor, created on fir
 ```js
 await api.spawnHardCover(casterToken, { count: 2, range: 3, name: 'Rampart Wall' });
 ```
-
-</details>
-
----
-
-## Reinforcements
-
-<details id="delayedTokenAppearance">
-<summary><b><code>delayedTokenAppearance</code></b> <sup>async</sup> → <code>Promise&lt;void&gt;</code></summary>
-
-<br>
-
-```js
-await api.delayedTokenAppearance()
-```
-
-Hides the currently selected tokens and schedules their arrival: enter how many rounds until they appear, and they show up at the start of that round with FX. Needs an active combat and at least one controlled token. The `L.A - Reinforcement` macro is this call.
 
 </details>

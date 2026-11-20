@@ -128,6 +128,7 @@ export function getIsoStateForToken(token, featureKey = null)
 {
     if (featureKey && !getModuleSetting(featureKey))
         return null;
+
     const provider = getIsoProvider(token?.scene);
     if (!provider || provider.isTokenDisabled(token))
         return null;
@@ -151,11 +152,13 @@ export function getIsoProvider(scene)
         if (activeScene.getFlag(ISO_PERSPECTIVE_ID, 'isometricEnabled'))
             return ISO_PERSPECTIVE_PROVIDER;
     }
+
     if (isGrapeIsoActive())
     {
         if (activeScene.getFlag(GRAPE_ISO_ID, 'is_isometric'))
             return GRAPE_PROVIDER;
     }
+
     return null;
 }
 
@@ -227,11 +230,14 @@ export function isoLabelTransform(scene, settingKey = null)
             return null;
         }
     }
+
     if (!getIsoProvider(scene))
         return null;
+
     const stage = canvas.app?.stage;
     if (!stage)
         return null;
+
     const transform = new PIXI.Transform();
     transform.rotation = stage.rotation;
     transform.skew.set(stage.skew.x, stage.skew.y);
@@ -252,6 +258,7 @@ Hooks.on('canvasReady', () =>
         return;
     if (getIsoProvider(canvas.scene))
         return; // iso scene: leave the transform to the iso module
+
     const stage = canvas.app?.stage;
     if (!stage)
         return;
@@ -266,6 +273,7 @@ Hooks.on('updateScene', (scene, changes) =>
 {
     if (!isAnyIsoModuleActive() || scene.id !== canvas.scene?.id)
         return;
+
     const flags = changes.flags ?? {};
     if (!(ISO_PERSPECTIVE_ID in flags) && !(GRAPE_ISO_ID in flags))
         return;
@@ -289,12 +297,14 @@ let _scrollContainer = null;
 function _tokenAtPoint(point)
 {
     const tokens = canvas.tokens?.placeables ?? [];
+
     for (const token of tokens)
     {
         const center = token.center;
         if (center && Math.abs(center.x - point.x) < 1 && Math.abs(center.y - point.y) < 1)
             return token;
     }
+
     return tokens.find(token => token.bounds?.contains?.(point.x, point.y)) ?? null;
 }
 
@@ -302,11 +312,14 @@ function _tokenAtPoint(point)
 Hooks.on('canvasReady', () =>
 {
     const container = _scrollTextContainer();
+
     if (!container)
     {
         _scrollContainer = null; return;
     }
+
     const iso = isIsoFeatureEnabled(ISO_SETTINGS.scrollingText) ? getIsoProvider(canvas.scene) : null;
+
     if (iso)
     {
         container.position.set(0, 0);
@@ -323,6 +336,7 @@ Hooks.on('canvasReady', () =>
         container.scale.set(1, 1);
         _scrollContainer = null;
     }
+
     container.transform.updateLocalTransform();
 });
 
@@ -337,13 +351,16 @@ function _isoSelectQuad()
     const interaction = canvas.mouseInteractionManager?.interactionData;
     if (!interaction?.origin || !interaction?.destination)
         return null;
+
     const worldTransform = canvas.stage.worldTransform;
     const screenOrigin = worldTransform.apply(new PIXI.Point(interaction.origin.x, interaction.origin.y));
     const screenDest = worldTransform.apply(new PIXI.Point(interaction.destination.x, interaction.destination.y));
+
     const screen = [
         new PIXI.Point(screenOrigin.x, screenOrigin.y), new PIXI.Point(screenDest.x, screenOrigin.y),
         new PIXI.Point(screenDest.x, screenDest.y), new PIXI.Point(screenOrigin.x, screenDest.y),
     ];
+
     return screen.map(screenPoint => worldTransform.applyInverse(screenPoint));
 }
 
@@ -358,6 +375,7 @@ function _inSelectPoly(poly, placeable)
     const center = placeable.center;
     if (center && poly.contains(center.x, center.y))
         return true;
+
     const meshPos = placeable.mesh?.position;
     return !!(meshPos && poly.contains(meshPos.x, meshPos.y));
 }
@@ -379,8 +397,10 @@ function _refreshTokenIsoDebug(token)
 {
     if (!token?.mesh)
         return;
+
     const on = _debugOverlayOn();
     const existing = token._laIsoDebugGfx;
+
     if (!on)
     {
         if (existing && !existing.destroyed)
@@ -388,25 +408,30 @@ function _refreshTokenIsoDebug(token)
         token._laIsoDebugGfx = null;
         return;
     }
+
     const gfx = existing && !existing.destroyed
         ? existing
         : new PIXI.Graphics();
+
     if (!existing || existing.destroyed)
     {
         token._laIsoDebugGfx = gfx;
         canvas.tokens?.addChild(gfx);
     }
+
     gfx.clear();
     const halfW = (token.w ?? 0) / 2;
     const halfH = (token.h ?? 0) / 2;
     const meshPos = token.mesh.position;
     gfx.lineStyle(2, 0xFF3B3B, 0.9)
         .drawRect(meshPos.x - halfW, meshPos.y - halfH, halfW * 2, halfH * 2);
+
     if (token.shape)
     {
         try
         {
             const bounds = token.shape.getBounds?.() ?? token.bounds ?? null;
+
             if (bounds)
             {
                 gfx.lineStyle(1, 0xFFEB3B, 0.5)
@@ -418,6 +443,7 @@ function _refreshTokenIsoDebug(token)
             // ignore bounds errors
         }
     }
+
     const center = token.center;
     if (center)
         gfx.beginFill(0x00E5FF, 1).drawCircle(center.x, center.y, 4).endFill();
@@ -440,6 +466,7 @@ Hooks.once('ready', () =>
             const container = _scrollContainer;
             if (!container || container.destroyed || !origin)
                 return wrapped.call(this, origin, content, options);
+
             const token = _tokenAtPoint(origin);
             const target = token?.mesh ? token.mesh.position : origin;
             // inverse-map through the recipe so it lands at `target` on screen, uprighted
@@ -453,6 +480,7 @@ Hooks.once('ready', () =>
         {
             if (!_marqueeActive())
                 return wrapped.call(this, coords);
+
             const quad = _isoSelectQuad();
             if (!quad)
                 return wrapped.call(this, coords);
@@ -466,21 +494,26 @@ Hooks.once('ready', () =>
         {
             if (!this.options.controllableObjects || !_marqueeActive())
                 return wrapped.call(this, coords, opts);
+
             const quad = _isoSelectQuad();
             if (!quad)
                 return wrapped.call(this, coords, opts);
+
             const poly = _isoSelectPolygon(quad);
             const releaseOthers = opts.releaseOthers ?? true;
             const oldSet = new Set(this.controlled);
             const newSet = new Set();
+
             for (const placeable of this.controllableObjects())
             {
                 if (_inSelectPoly(poly, placeable))
                     newSet.add(placeable);
             }
+
             const toRelease = oldSet.difference(newSet);
             if (releaseOthers)
                 toRelease.forEach(placeable => placeable.release());
+
             const toControl = newSet.difference(oldSet);
             toControl.forEach(placeable => placeable.control({ releaseOthers: false }));
             return (releaseOthers && toRelease.size > 0) || toControl.size > 0;
@@ -491,11 +524,14 @@ Hooks.once('ready', () =>
         {
             if (!_marqueeActive())
                 return wrapped.call(this, coords, opts);
+
             const quad = _isoSelectQuad();
             if (!quad)
                 return wrapped.call(this, coords, opts);
+
             const poly = _isoSelectPolygon(quad);
             const targets = [];
+
             for (const token of this.placeables)
             {
                 if (!token.visible || !token.renderable || token.document.isSecret)
@@ -503,6 +539,7 @@ Hooks.once('ready', () =>
                 if (_inSelectPoly(poly, token))
                     targets.push(token.id);
             }
+
             return this.setTargets(targets, { mode: (opts.releaseOthers ?? true) ? 'replace' : 'acquire' });
         }, 'MIXED');
 });
@@ -510,13 +547,16 @@ Hooks.once('ready', () =>
 // Sequencer's iso plugin skews stretchTo/overlay effects without checking the scene flag.
 // CanvasEffect isn't exported, so patch its prototype off the first effect we see.
 let _flatScenePatched = false;
+
 function _effectOnFlatScene(effect)
 {
     if (!isIsoFeatureEnabled(ISO_SETTINGS.effectAspect))
         return false;
+
     const scene = game.scenes.get(effect?.data?.sceneId) ?? canvas.scene;
     return !getIsoProvider(scene);
 }
+
 function _flattenIsoContainer(effect)
 {
     const container = effect?.isometricContainer;
@@ -526,24 +566,29 @@ function _flattenIsoContainer(effect)
     container.scale.set(1, 1);
     container.rotation = 0;
 }
+
 function _patchSequencerFlatScenes(effect)
 {
     if (_flatScenePatched)
         return;
+
     let proto = Object.getPrototypeOf(effect);
     while (proto && !Object.hasOwn(proto, '_transformSprite'))
         proto = Object.getPrototypeOf(proto);
     if (!proto)
         return;
     _flatScenePatched = true;
+
     for (const name of ['_transformSprite', '_rotateTowards', '_transformAttachedNoStretchSprite'])
     {
         const original = proto[name];
         if (typeof original !== 'function')
             continue;
+
         proto[name] = function (...args)
         {
             const result = original.apply(this, args);
+
             if (result instanceof Promise)
             {
                 return result.then((value) =>
@@ -552,11 +597,13 @@ function _patchSequencerFlatScenes(effect)
                     return value;
                 });
             }
+
             _flattenIsoContainer(this);
             return result;
         };
     }
 }
+
 Hooks.on('createSequencerEffect', _patchSequencerFlatScenes);
 
 // Sequencer's iso plugin stands effects up (45deg on isometricContainer) but skips the aspect
@@ -565,22 +612,28 @@ Hooks.on('createSequencerEffect', (effect) =>
 {
     if (!isIsoFeatureEnabled(ISO_SETTINGS.effectAspect))
         return;
+
     const iso = getIsoProvider(canvas.scene);
     if (!iso)
         return;
     if (effect?.data?.isometric?.overlay || effect?.data?.rotateTowards || effect?.data?.stretchTo)
         return;
+
     let tries = 0;
+
     const apply = () =>
     {
         const container = effect?.isometricContainer;
+
         if (!container || container.destroyed)
         {
             if (tries++ < 120)
                 requestAnimationFrame(apply);
             return;
         }
+
         container.scale.set(iso.counterScale, 1 / iso.counterScale);
     };
+
     apply();
 });

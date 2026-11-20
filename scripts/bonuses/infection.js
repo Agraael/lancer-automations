@@ -13,12 +13,12 @@
  *   - Stabilize and Full Repair also clear Infection.
  */
 
-import { checkDamageResistances, checkDamageVulnerabilities, consumeResistanceUse, consumeVulnerabilityUse } from './genericBonuses.js';
-import { getModuleSetting, getExternalSetting } from '../tools/settings-utils.js';
-import { broadcastFloatTokenText } from '../tools/float-text.js';
+import { checkDamageResistances, checkDamageVulnerabilities, consumeResistanceUse, consumeVulnerabilityUse, getResistanceBonuses, getVulnerabilityBonuses, judgedBonuses } from './genericBonuses.js';
+import { getModuleSetting } from '../tools/settings-utils.js';
+import { broadcastFloatTokenText, floatTokenText } from '../tools/float-text.js';
 
 import { MODULE_ID } from '../tools/constants.js';
-import { localize, localizeFormat } from '../tools/string-utils.js';
+import { localize, localizeFormat, signedNumber } from '../tools/string-utils.js';
 import { LANCER_ACTOR_TYPES } from '../utils/lancer-token.js';
 
 // Pending infection for preCreateChatMessage to modify the "took X damage" message
@@ -34,11 +34,13 @@ export function injectInfectionSchemaField()
 {
     const NumberField = foundry.data.fields.NumberField;
     let injected = 0;
+
     for (const key of LANCER_ACTOR_TYPES)
     {
         const model = CONFIG.Actor.dataModels?.[key];
         if (!model?.schema?.fields)
             continue;
+
         if (!model.schema.fields.infection)
         {
             try
@@ -52,6 +54,7 @@ export function injectInfectionSchemaField()
             }
         }
     }
+
     if (injected)
         console.log(`${MODULE_ID} | Injected infection field into ${injected} actor schema(s)`);
 }
@@ -66,6 +69,7 @@ export async function injectInfectionDamageType()
     try
     {
         const lancerScript = /** @type {HTMLScriptElement} */ (document.querySelector('script[type="module"][src$="/lancer.mjs"]'));
+
         const baseUrl = lancerScript
             ? lancerScript.src.replace(/lancer\.mjs$/, '')
             : '/systems/lancer/';
@@ -77,12 +81,15 @@ export async function injectInfectionDamageType()
 
         const isDamageTypeEnum = (obj) =>
             obj && typeof obj === 'object' && obj.Kinetic === 'Kinetic' && obj.Energy === 'Energy' && obj.Heat === 'Heat';
+
         let damageTypeEnum = null;
+
         for (const relPath of imports)
         {
             try
             {
                 const bundle = await import(`${baseUrl}${relPath}`);
+
                 for (const exportedValue of Object.values(bundle))
                 {
                     if (isDamageTypeEnum(exportedValue))
@@ -90,12 +97,14 @@ export async function injectInfectionDamageType()
                         damageTypeEnum = exportedValue; break;
                     }
                 }
+
                 if (damageTypeEnum)
                     break;
             }
             catch
             { /* try next */ }
         }
+
         if (damageTypeEnum && !damageTypeEnum.Infection)
         {
             damageTypeEnum.Infection = "Infection";
@@ -116,10 +125,12 @@ export async function injectInfectionDamageType()
     {
         if (!fields)
             return;
+
         for (const field of Object.values(fields))
         {
             if (field.fields)
                 traverseFields(field.fields);
+
             if (field.element)
             {
                 if (field.element.fields)
@@ -127,6 +138,7 @@ export async function injectInfectionDamageType()
                 if (field.element.element?.fields)
                     traverseFields(field.element.element.fields);
             }
+
             if (field instanceof foundry.data.fields.StringField &&
                 Array.isArray(field.choices) &&
                 field.choices.includes('Kinetic') &&
@@ -135,6 +147,7 @@ export async function injectInfectionDamageType()
                 field.choices.push('Infection');
                 patched++;
             }
+
             // DamageTypeChecklistField: SchemaField with one BooleanField per damage type.
             if (field instanceof foundry.data.fields.SchemaField &&
                 field.fields?.Kinetic instanceof foundry.data.fields.BooleanField &&
@@ -151,6 +164,7 @@ export async function injectInfectionDamageType()
         if (model?.schema?.fields)
             traverseFields(model.schema.fields);
     }
+
     for (const model of Object.values(CONFIG.Actor.dataModels ?? {}))
     {
         if (model?.schema?.fields)
@@ -165,6 +179,7 @@ export function injectInfectionCSS()
 {
     if (document.getElementById('la-infection-css'))
         return;
+
     const style = document.createElement('style');
     style.id = 'la-infection-css';
     style.textContent = `
@@ -212,6 +227,7 @@ async function initInfectionCheckData(state)
     state.data.damage = [{ type: "Heat", val: infection.toString() }];
 
     const tokens = state.actor.getActiveTokens();
+
     if (!tokens?.length)
     {
         ui.notifications?.error(localize('LA.notify.infectionFlowRequiresTheActorToHave'));
@@ -260,6 +276,7 @@ async function rollInfectionCheck(state)
         throw new TypeError('Infection flow state missing!');
 
     const StatRollFlow = game.lancer?.flows?.get('StatRollFlow');
+
     if (!StatRollFlow || typeof StatRollFlow !== 'function')
     {
         ui.notifications?.error(localize('LA.notify.couldNotFindStatrollflowForInfectionCheck'));
@@ -273,8 +290,8 @@ async function rollInfectionCheck(state)
 
     if (game.dice3d)
     {
-        const msg = game.messages?.contents?.[game.messages.contents.length - 1];
-        if (msg)
+        const msg = /** @type {any} */ (game.messages?.contents?.[game.messages.contents.length - 1]);
+        if (msg?._dice3danimating)
             await game.dice3d.waitFor3DAnimationByMessageID(msg.id);
     }
 
@@ -316,6 +333,7 @@ function onUpdateCombatInfection(combat, change, _options, _userId)
     const prevActor = combat.previous?.combatantId
         ? combat.combatants.get(combat.previous.combatantId)?.actor
         : null;
+
     if (!prevActor)
         return;
 
@@ -346,6 +364,7 @@ function _triggerInfectionFlow(actor)
             super(uuid, data || {});
         }
     };
+
     GenericFlow.steps = flowDef.steps;
 
     new GenericFlow(actor.uuid, {
@@ -384,12 +403,15 @@ async function clearInfectionOnStabilize(state)
         return true;
     if (!state.actor)
         return true;
+
     const infection = state.actor.system?.infection ?? 0;
+
     if (infection > 0)
     {
         await state.actor.update({ 'system.infection': 0 });
         ui.notifications.info(localizeFormat('LA.notify.infectionCleared', { name: state.actor.name }));
     }
+
     return true;
 }
 
@@ -399,6 +421,7 @@ async function clearInfectionOnRepair(state)
         return true;
     if (!state.actor)
         return true;
+
     const infection = state.actor.system?.infection ?? 0;
     if (infection > 0)
         await state.actor.update({ 'system.infection': 0 });
@@ -452,6 +475,7 @@ export function initInfectionHooks()
 
     // Per-client snapshot so the floating text fires for players too.
     const _prevInfection = new Map();
+
     const _seedInfection = () =>
     {
         for (const actor of game.actors ?? [])
@@ -460,6 +484,7 @@ export function initInfectionHooks()
                 _prevInfection.set(actor.id, Number(actor.system.infection ?? 0));
         }
     };
+
     Hooks.once('ready', _seedInfection);
     Hooks.on('canvasReady', _seedInfection);
     Hooks.on('createActor', (actor) =>
@@ -471,26 +496,17 @@ export function initInfectionHooks()
         const newInfection = change?.system?.infection;
         if (newInfection === undefined)
             return;
+
         const prev = _prevInfection.get(actor.id) ?? 0;
         const next = Number(newInfection);
         _prevInfection.set(actor.id, next);
         const delta = next - prev;
         if (!delta)
             return;
+
         const token = actor.token?.object ?? actor.getActiveTokens?.()[0];
-        if (!token || !canvas?.interface?.createScrollingText)
-            return;
-        if (!getExternalSetting('lancer', 'floatingNumbers', true))
-            return;
-        canvas.interface.createScrollingText(token.center, `${delta > 0 ? '+' : ''}${delta} Infection`, {
-            anchor: CONST.TEXT_ANCHOR_POINTS.BOTTOM,
-            direction: delta > 0 ? CONST.TEXT_ANCHOR_POINTS.BOTTOM : CONST.TEXT_ANCHOR_POINTS.TOP,
-            fontSize: 28,
-            fill: '0x006400',
-            stroke: 0,
-            strokeThickness: 4,
-            jitter: 0.25,
-        });
+        floatTokenText(token, `${signedNumber(delta)} Infection`, '0x006400',
+            delta > 0 ? CONST.TEXT_ANCHOR_POINTS.BOTTOM : CONST.TEXT_ANCHOR_POINTS.TOP);
     });
 
     // Modify "took X damage" messages to show infection
@@ -498,6 +514,7 @@ export function initInfectionHooks()
     {
         if (!_pendingInfection)
             return;
+
         let content = msg.content;
         if (!content?.includes('damage!') || !content?.includes('lancer-damage-undo'))
             return;
@@ -528,25 +545,34 @@ export function initInfectionHooks()
             const button = ev.target?.closest?.('.lancer-damage-apply');
             if (!button)
                 return;
+
             const chatMessageElement = button.closest('.chat-message.message');
             if (!chatMessageElement)
                 return;
+
             const chatMessage = game.messages?.get(chatMessageElement.dataset.messageId);
             const damageData = chatMessage?.flags?.lancer?.damageData;
+
             if (!damageData)
                 return;
+
             const buttonGroup = button.closest('.lancer-damage-button-group');
             const targetUuid = buttonGroup?.dataset?.target;
+
             if (!targetUuid)
                 return;
+
             const targetResult = damageData.targetDamageResults?.find(entry => entry.target === targetUuid);
             if (!targetResult)
                 return;
+
             const infectionDmg = targetResult.damage?.filter(damageEntry => damageEntry.type === 'Infection')?.reduce((sum, damageEntry) => sum + (damageEntry.amount ?? 0), 0) ?? 0;
             if (infectionDmg <= 0)
                 return;
+
             const multipleSelect = buttonGroup.querySelector('select');
             let multiple = multipleSelect ? parseFloat(multipleSelect.value) : 1;
+
             if (Number.isNaN(multiple))
                 multiple = 1;
             _pendingInfection = { actorUuid: targetResult.target, amount: Math.ceil(infectionDmg * multiple) };
@@ -565,11 +591,13 @@ export function initInfectionHooks()
 
             const chatMessage = game.messages?.get(chatMessageElement.dataset.messageId);
             const damageData = chatMessage?.flags?.lancer?.damageData;
+
             if (!damageData)
                 return;
 
             const buttonGroup = button.closest('.lancer-damage-button-group');
             const targetUuid = buttonGroup?.dataset?.target;
+
             if (!targetUuid)
                 return;
 
@@ -586,13 +614,13 @@ export function initInfectionHooks()
 
             const multipleSelect = buttonGroup.querySelector('select');
             let multiple = multipleSelect ? parseFloat(multipleSelect.value) : 1;
-            if (Number.isNaN(multiple))
-                multiple = 1;
 
-            const scaledInfection = Math.ceil(infectionDmg * multiple);
+            if (![0.5, 1, 2].includes(multiple))
+                multiple = 1;
 
             const target = await fromUuid(targetUuid);
             const actor = target?.actor;
+
             if (!actor?.isOwner)
                 return;
 
@@ -600,17 +628,22 @@ export function initInfectionHooks()
             setTimeout(async () =>
             {
                 const aoe = targetResult.laAoe === true;
-                const shredded = actor.system?.statuses?.shredded;
-                const nativeResist = !shredded && actor.system?.resistances?.infection;
-                const bonusResist = !shredded && !nativeResist && checkDamageResistances(actor, 'infection', null, aoe).length > 0;
+                const resistIds = Array.isArray(targetResult.laResistance) ? targetResult.laResistance : null;
+                const vulnerabilityIds = Array.isArray(targetResult.laVulnerability) ? targetResult.laVulnerability : null;
+                const mitigationBlocked = !!actor.system?.statuses?.shredded || !!targetResult.paracausal;
+                const nativeResist = !mitigationBlocked && actor.system?.resistances?.infection;
+                const bonusResist = !mitigationBlocked && !nativeResist && !targetResult.half_damage && checkDamageResistances(actor, 'infection', resistIds, aoe).length > 0;
                 const resistant = nativeResist || bonusResist;
-                const vulnerable = checkDamageVulnerabilities(actor, 'infection', null, aoe).length > 0;
-                const dealtInfection = vulnerable ? scaledInfection * 2 : scaledInfection;
-                const finalInfection = resistant ? Math.ceil(dealtInfection / 2) : dealtInfection;
+                const vulnerable = checkDamageVulnerabilities(actor, 'infection', vulnerabilityIds, aoe).length > 0;
+                const dealtInfection = infectionDmg * (multiple === 2 ? 2 : 1) * (vulnerable ? 2 : 1);
+                const halved = !mitigationBlocked && (multiple === 0.5 || resistant);
+                const finalInfection = halved ? Math.ceil(dealtInfection / 2) : dealtInfection;
+
                 if (bonusResist)
-                    await consumeResistanceUse(actor, null, { damageTypes: ['infection'], aoe });
+                    await consumeResistanceUse(actor, null, { damageTypes: ['infection'], aoe, bonuses: judgedBonuses(getResistanceBonuses(actor), resistIds) });
                 if (vulnerable)
-                    await consumeVulnerabilityUse(actor, null, { damageTypes: ['infection'], aoe });
+                    await consumeVulnerabilityUse(actor, null, { damageTypes: ['infection'], aoe, bonuses: judgedBonuses(getVulnerabilityBonuses(actor), vulnerabilityIds) });
+
                 const floatToken = target?.object ?? actor.getActiveTokens?.()?.[0];
                 if (resistant)
                     broadcastFloatTokenText(floatToken, 'Resisted', 0x4da6ff);
@@ -619,6 +652,7 @@ export function initInfectionHooks()
 
                 const currentInfection = actor.system?.infection ?? 0;
                 const updates = { 'system.infection': currentInfection + finalInfection };
+
                 if (actor.hasHeatcap?.())
                     updates['system.heat.value'] = actor.system.heat.value + finalInfection;
                 await actor.update(updates);
@@ -658,6 +692,7 @@ export function initInfectionHooks()
 
             const uuid = button.dataset.uuid;
             const heat = parseInt(button.dataset.heat) || 0;
+
             if (!uuid || !heat)
                 return;
 
@@ -670,6 +705,7 @@ export function initInfectionHooks()
 
             button.style.display = 'none';
             const undoBtn = button.parentElement?.querySelector('.la-infection-undo');
+
             if (undoBtn)
             {
                 undoBtn.style.display = '';
@@ -691,6 +727,7 @@ export async function applyInfection(actor, amount)
 {
     if (!actor || amount <= 0)
         return;
+
     const currentInfection = actor.system?.infection ?? 0;
     const currentHeat = actor.system?.heat?.value ?? 0;
 
@@ -719,6 +756,7 @@ export function onRenderActorSheetInfection(app, html, _data)
 {
     const jHtml = html instanceof $ ? html : $(html);
     const actor = app.actor ?? app.document;
+
     if (!actor)
         return;
 
@@ -732,6 +770,7 @@ export function onRenderActorSheetInfection(app, html, _data)
 
     // Base Lancer sheet
     const $burnCard = jHtml.find('input[name="system.burn"]').closest('.card.clipped');
+
     if ($burnCard.length)
     {
         _injectInfectionBaseSheet(jHtml, $burnCard, actor, infection);
@@ -740,6 +779,7 @@ export function onRenderActorSheetInfection(app, html, _data)
 
     // Alternative sheet
     const $altBurnInput = jHtml.find('input[name="system.burn"]');
+
     if ($altBurnInput.length)
     {
         _injectInfectionAltSheet(jHtml, $altBurnInput, actor, infection);
@@ -797,5 +837,6 @@ function _injectInfectionAltSheet(jHtml, $altBurnInput, actor, infection)
                    type="number" name="system.infection" value="${infection}" data-dtype="Number" />
             <span class="la-damage__span -fontsizesmall -heightfull -lineheight3">INFX</span>
         </div>`;
+
     $burnDiv.after(infectionAlt);
 }

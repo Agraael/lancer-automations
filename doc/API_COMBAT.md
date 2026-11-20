@@ -22,11 +22,17 @@ await api.damageWith(weapon, targets?, damageOptions?)                       // 
 
 **Params:** <kbd>reloadIfEmpty</kbd> `boolean` (default `false`) · <kbd>fxSourceToken</kbd> `Token` (default `null`) · <kbd>title</kbd> `string` card title override
 
-`attackWith` sets the given tokens as targets then starts the weapon's attack flow. `reloadIfEmpty: true` reloads instead and returns `{ reloaded: true }` when the weapon is unloaded. `fxSourceToken` plays the lancer-weapon-fx effect from that token instead of the attacker (the roll stays the attacker's) - reflected shots, turrets, drones.
+`attackWith` sets the given tokens as targets then starts the weapon's attack flow. `reloadIfEmpty: true` reloads instead and returns `{ reloaded: true }` when the weapon is unloaded. `fxSourceToken` plays the lancer-weapon-fx effect from that token instead of the attacker (the roll stays the attacker's), for reflected shots, turrets and drones.
 
-`attackRollWith` repeats the weapon's attack roll as a basic attack with the weapon's stats (tier-resolved for NPC features) and carries its damage/tags to the damage roll, but skips the weapon-fire mechanics: no loading gate, no self-heat, no item updates. Rebound pattern.
+`attackRollWith` repeats the weapon's attack roll as a basic attack with the weapon's stats (tier-resolved for NPC features) and carries its damage/tags to the damage roll. It skips the weapon-fire mechanics: no loading gate, no self-heat, no item updates. Rebound uses it.
 
-The chain is attack > hit > damage: `attackWith` runs all three stages, `hitWith` the last two (fires `onHit` with the upcoming damage flow as its flowState, then rolls the weapon's damage), `damageWith` the last one. `damageOptions` override the damage flow data and take the same keys as [`executeDamageRoll`](#executeDamageRoll)'s `options` (defaults: the weapon's tier-resolved damage and tags).
+The chain is attack > hit > damage:
+
+- `attackWith` runs all three stages.
+- `hitWith` runs the last two. It fires `onHit` with the upcoming damage flow as its flowState, then rolls the weapon's damage.
+- `damageWith` runs the last one.
+
+`damageOptions` override the damage flow data and take the same keys as [`executeDamageRoll`](#executeDamageRoll)'s `options` (defaults: the weapon's tier-resolved damage and tags).
 
 </details>
 
@@ -57,7 +63,7 @@ api.afterFlow(triggerData, callback)                          // run callback af
 
 **Params:** <kbd>triggerData</kbd> the trigger's data object · <kbd>callback</kbd> `(flow, success) => any`
 
-`afterFlow` runs the callback once the trigger's flow completes or aborts, after its card printed - one-shot, matched to that exact flow. Use it for anything that must not interleave with the flow (follow-up attacks, moves).
+`afterFlow` runs the callback once the trigger's flow completes or aborts, after its card printed. It's one-shot, matched to that exact flow. Use it for anything that must not interleave with the flow (follow-up attacks, moves).
 
 </details>
 
@@ -75,7 +81,7 @@ Starts a `BasicAttackFlow`.
 | Param | Type | Default | Description |
 |:------|:-----|:--------|:------------|
 | <kbd>actor</kbd> | `Actor` | *required* | The actor making the attack |
-| <kbd>extraData</kbd> | `Object` | `{}` | Injected into `state.la_extraData` |
+| <kbd>extraData</kbd> | `Object` | `{}` | Injected into `state.la_extraData`. `noDamage: true` removes the card's damage button and the auto damage roll |
 | **inside `options`** | | | |
 | <kbd>targets</kbd> | `Token\|Token[]` | `null` | Who is attacked. Avoids touching `setTarget` |
 | <kbd>tags</kbd> | `Array` | `undefined` | Weapon tags carried onto the attack card |
@@ -135,10 +141,14 @@ await api.executeSkirmish(actorOrToken, bypassMount, preTarget, weaponFilter, op
 | <kbd>bypassMount</kbd> | `Object` | `null` | Mount object to skip mount selection |
 | <kbd>preTarget</kbd> | `Token` | `null` | Pre-selected target token |
 | <kbd>weaponFilter</kbd> | `(weapon: Item) => boolean` | `null` | Filter for available weapons |
-| <kbd>options</kbd> | `Object` | `{}` | `noFX: true` skips the skirmish FX |
+| **inside `options`** | | | |
+| <kbd>noFX</kbd> | `boolean` | `false` | Skip the skirmish FX |
+| <kbd>firstWeapon</kbd> | `Item` | `null` | With `bypassMount`: fire this weapon first. Pass the actor's own item. It also skips the Aux bonus damage question |
+| <kbd>filterReason</kbd> | `(weapon: Item) => string` | `null` | Text on the weapon rows that `weaponFilter` refuses |
 
 ```js
 await api.executeSkirmish(token, null, targetToken);
+await api.executeSkirmish(token.actor, bypassMount, mover, null, { firstWeapon });
 ```
 
 </details>
@@ -149,7 +159,7 @@ await api.executeSkirmish(token, null, targetToken);
 <br>
 
 ```js
-await api.executeBarrage(actorOrToken, bypassMount, preTarget)
+await api.executeBarrage(actorOrToken, bypassMount, preTarget, options)
 ```
 
 Runs a Barrage: attacks with either two different mounts or one superheavy mount. Prompts for the mounts unless `bypassMount` supplies them.
@@ -159,9 +169,46 @@ Runs a Barrage: attacks with either two different mounts or one superheavy mount
 | <kbd>actorOrToken</kbd> | `Actor\|Token\|TokenDocument` | *required* | The acting entity |
 | <kbd>bypassMount</kbd> | `Object\|Array` | `null` | Mounts to use, skipping selection |
 | <kbd>preTarget</kbd> | `Token` | `null` | Pre-targeted before each attack flow |
+| **inside `options`** | | | |
+| <kbd>firstWeapon</kbd> | `Item` | `null` | With `bypassMount`: fire this weapon first on its mount |
 
 ```js
 await api.executeBarrage(token, null, targetToken);
+```
+
+</details>
+
+<details id="choseFiringOrder">
+<summary><b><code>choseFiringOrder</code></b> <sup>async</sup> → <code>Item[][] | null</code><br><b><code>choseBonusWeapons</code></b> <sup>async</sup> → <code>Item[][] | null</code><br><b><code>mountPickChoices</code></b> → <code>object[]</code></summary>
+
+<br>
+
+```js
+await api.choseFiringOrder(actorOrToken, options)
+await api.choseBonusWeapons(actor, mounts)
+api.mountPickChoices(actor, filterPredicate?, allowedMountTypes?, filterReason?)
+```
+
+The weapon pickers behind Skirmish and Barrage.
+
+`choseFiringOrder` opens the pick card. It returns one array per picked mount, in pick order, with the clicked weapon first. `[]` with a warning when the actor has no weapons, `null` on cancel. On an NPC or a pilot each weapon is its own group.
+
+| Param | Type | Default | Description |
+|:------|:-----|:--------|:------------|
+| <kbd>actorOrToken</kbd> | `Actor\|Token` | *required* | Who fires |
+| **inside `options`** | | | |
+| <kbd>count</kbd> | `number` | `1` | Max mounts. Above 1, rows toggle and a FIRE button confirms |
+| <kbd>filterPredicate</kbd> | `(weapon) => boolean` | `null` | A mech mount is pickable only when all its weapons pass |
+| <kbd>title</kbd> | `string` | `"CHOOSE MOUNT"` / `"CHOOSE WEAPON"` | Card header |
+| <kbd>selectionValidator</kbd> | `(items) => { valid, message, level }` | `null` | Checks a selection. It is also called on what-if selections to lock rows, so keep it free of side effects |
+| <kbd>filterReason</kbd> | `(weapon) => string` | `null` | Text on refused rows |
+
+`choseBonusWeapons` takes `mounts` as `Array<{ label, weapons: Item[] }>` and asks which weapon gets the bonus damage, only on a mount with two or more usable Auxiliary weapons and nothing else. The picked weapon moves to the front, other mounts come back unchanged. Cancelling any card returns `null`.
+
+`mountPickChoices` builds the pick card rows without showing anything: `{ item, id, selectable, disabled, warn, text, pickRows, ... }` per mount (mech) or weapon. `allowedMountTypes` is a list of mount types to keep, mech only.
+
+```js
+const mounts = await api.choseFiringOrder(actor, { count: 2, filterPredicate: weaponBarrageable, title: 'BARRAGE' });
 ```
 
 </details>
@@ -172,12 +219,12 @@ await api.executeBarrage(token, null, targetToken);
 <br>
 
 ```js
-await api.executeInvade(actorOrToken, bypassChoice)
+await api.executeInvade(actorOrToken, bypassChoice, extraData)
 ```
 
-Prompts for one of the actor's invade options, then fires the tech attack flow.
+For a mech or an NPC, rolls the Invade tech attack first, then asks which invade to use on each target hit. A missed target gets none. Other actor types pick the invade first, then roll.
 
-**Params:** <kbd>actorOrToken</kbd> `Actor|Token` · <kbd>bypassChoice</kbd> `Object` optional preselected invade option, skips the picker
+**Params:** <kbd>actorOrToken</kbd> `Actor|Token` · <kbd>bypassChoice</kbd> `Object` optional invade option, already picked in the card · <kbd>extraData</kbd> `Object` merged into `state.la_extraData`
 
 ```js
 await api.executeInvade(token);
@@ -236,7 +283,7 @@ await api.executeDamageRoll(attacker, targets, damageValue, damageType, title, o
 |:----|:-----|:--------|:--------|
 | <kbd>ap</kbd> | `boolean` | `false` | Armor Piercing. |
 | <kbd>paracausal</kbd> | `boolean` | `false` | Damage can't be reduced (bypasses armor **and** resistances). |
-| <kbd>overkill</kbd> | `boolean` | `false` | Overkill - the flow rerolls 1s on the damage dice (self-heat per reroll). |
+| <kbd>overkill</kbd> | `boolean` | `false` | Overkill: the flow rerolls 1s on the damage dice (self-heat per reroll). |
 | <kbd>reliable</kbd> | `boolean` | `false` | Reliable. |
 | <kbd>half_damage</kbd> | `boolean` | `false` | Halve all damage dealt. |
 | <kbd>add_burn</kbd> | `boolean` | `true` | Whether Burn-type damage also accumulates on the target's burn track. |
@@ -248,7 +295,7 @@ await api.executeDamageRoll(attacker, targets, damageValue, damageType, title, o
 | <kbd>hit_results</kbd> | `Array` | `[]` | Per-target hit outcomes that decide which targets take damage (chained damage rolls carry these instead of user targets). Element: `{ target: Token, total: string, hit: boolean, crit: boolean, usedLockOn?: boolean }`. |
 | <kbd>targeting</kbd> | `Object` | - | See below. |
 
-**`options.targeting`** `{ range?: number, pattern?: "target"|"blast"|"cone"|"line"|"burst", size?: number }` - opens the damage HUD with the targeting picker already engaged on that shape. Without it, the picker auto-engages only on weaponless rolls that start with no target. An area pattern makes the damage [AoE](API_REFERENCE.md#immunity-subtypes).
+**`options.targeting`** `{ range?: number, pattern?: "target"|"blast"|"cone"|"line"|"burst", size?: number }`: opens the damage HUD with the targeting picker already engaged on that shape. Without it, the picker auto-engages only on weaponless rolls that start with no target. An area pattern makes the damage [AoE](API_REFERENCE.md#immunity-subtypes).
 
 ```js
 await api.executeDamageRoll(reactorToken, [target], 2, 'Heat', 'Ring of Fire');
@@ -349,11 +396,17 @@ const res = await api.executeContestedCheck(input1, stat1, input2, stat2, option
 | <kbd>sourceAction</kbd> | `string` | `null` | Action the check belongs to, surfaced as `actionName` |
 | <kbd>extraData</kbd> | `object` | `null` | Extra keys merged into both rolls' `la_extraData` |
 
-Rolls both stats, posts an outcome card, plays the win/loss FX. `winner`/`loser` (and their `*Token`) are `null` on a tie. `results` always holds both `{ actor, stat, total, roll }`. When either roll does not complete, the result is `{ completed: false }` with `winner`, `loser` and `tie` set but no `winnerToken`/`loserToken` keys at all. This is what [`openHaseContestCard`](API_INTERACTIVE.md) returns.
+Rolls both stats, posts an outcome card, plays the win/loss FX. The result:
+
+- A tie goes to `input1`, the one who started the contest: it is the `winner`, and `tie` is `true`.
+- `results` always holds both `{ actor, stat, total, roll }`.
+- When either roll does not complete, the result is `{ completed: false, winner: null, loser: null, tie: false, results }`, with no `winnerToken`/`loserToken` keys at all.
+
+[`openHaseContestCard`](API_INTERACTIVE.md) returns the `executeContestedCheck` result.
 
 ```js
 const res = await api.executeContestedCheck(tokenA, 'HULL', tokenB, 'AGI', { title: 'Grapple', difficulty2: 1 });
-if (!res.tie && res.winnerToken === tokenA)
+if (res.winnerToken === tokenA)
     ui.notifications.info(`${tokenA.name} wins the grapple`);
 ```
 
@@ -378,7 +431,7 @@ const res = await api.executeForceCheck(skill, targets, options)
 | <kbd>title</kbd> | `string` | `""` | Card header |
 | <kbd>accuracy</kbd> / <kbd>difficulty</kbd> / <kbd>flatModifier</kbd> | `number\|(rollerToken) => number` | `0` | Pre-filled on the roller's HASE HUD. Per-roller when given a function |
 
-Sends each target its HASE check (owner rolls, or the GM if unowned), then posts a PASS/FAIL summary. Returned by `openForceCheckCard`.
+Sends each target its HASE check (owner rolls, or the GM if unowned), then posts a PASS/FAIL summary. `openForceCheckCard` returns the `executeForceCheck` result.
 
 ```js
 await api.executeForceCheck('ENG', [target], { saveVs: witchToken, title: 'Petrify' });
@@ -399,7 +452,24 @@ await api.executeItemActivation(item, options, extraData)
 
 Runs an item's activation flow. The item's own automation fires. `activateGeneralAction` is the equivalent for registry actions that belong to no item.
 
-The flow class is picked in this order: `flowName` if given, then `CoreActiveFlow` for a frame with `path: "system.core_system"`, then `TalentFlow` or `ActivationFlow` for a talent, then `BondPowerFlow` for a bond, then `ActivationFlow` if there is a `path` or the item has any actions (`system.actions.0` when no path is given), then `SystemFlow` for a mech system, weapon mod, or non-weapon NPC feature, then `WeaponAttackFlow` for a weapon. If none match it errors and returns `{ completed: false }`. This is close to `triggerData.startRelatedFlow` but not the same: that one tries weapons before actions, prefers a Reaction action over `actions.0`, has no `CoreActiveFlow` branch, and falls back to a simple activation card instead of erroring.
+The flow class is picked in this order:
+
+1. `flowName`, if given.
+2. `CoreActiveFlow`, for a frame with `path: "system.core_system"`.
+3. `TalentFlow` or `ActivationFlow`, for a talent.
+4. `BondPowerFlow`, for a bond.
+5. `ActivationFlow`, if there is a `path` or the item has any actions (`system.actions.0` when no path is given).
+6. `SystemFlow`, for a mech system, weapon mod, or non-weapon NPC feature.
+7. `WeaponAttackFlow`, for a weapon.
+
+If none match it errors and returns `{ completed: false }`.
+
+`triggerData.startRelatedFlow` is close to this dispatch but not the same:
+
+- It tries weapons before actions.
+- It prefers a Reaction action over `actions.0`.
+- It has no `CoreActiveFlow` branch.
+- It falls back to a simple activation card instead of erroring.
 
 | Param | Type | Default | Description |
 |:------|:-----|:--------|:------------|
@@ -468,7 +538,14 @@ await api.activateGeneralAction(reactorToken, 'Brace');
 await api.executeExtraActionCombat(actorOrToken, action, sourceItem?, options?)
 ```
 
-Fires an extra action's combat mode: `action.laCombat === 'attack'` rolls a to-hit (tech attack when `activation` is `Invade`/`Quick Tech`/`Full Tech`, else a basic attack with a full acc_diff from its weapon `tags` + `accuracy`/`difficulty`/`attack_bonus`/`attack_type`). `'damage'` rolls `action.damage` with no to-hit. See the `ExtraAction` shape in [HUD API](API_HUD.md).
+Fires an extra action's combat mode:
+
+- `action.laCombat === 'attack'` rolls a to-hit:
+    - a tech attack when `activation` is `Invade`/`Quick Tech`/`Full Tech`
+    - else a basic attack with a full acc_diff from its weapon `tags` + `accuracy`/`difficulty`/`attack_bonus`/`attack_type`
+- `'damage'` rolls `action.damage` with no to-hit.
+
+See the `ExtraAction` shape in [HUD API](API_HUD.md).
 
 | Param | Type | Default | Description |
 |:------|:-----|:--------|:------------|
@@ -523,7 +600,7 @@ await api.executeReactorMeltdown(tokenOrActor, turns)
 await api.executeReactorExplosion(token)
 ```
 
-`executeReactorMeltdown` starts the meltdown countdown, and `turns` skips the turn-picker dialog. `executeReactorExplosion` runs the explosion itself: a Burst 2 catch-confirm picker around the token, then the damage.
+`executeReactorMeltdown` starts the meltdown countdown, and `turns` skips the turn-picker dialog. `executeReactorExplosion` runs the explosion itself: a Burst 2 picker around the token to confirm which tokens are caught, then the damage.
 
 **Params:** <kbd>tokenOrActor</kbd> `Token|Actor` · <kbd>turns</kbd> `number` countdown length · <kbd>token</kbd> `Token` the exploding mech
 
@@ -550,6 +627,119 @@ The out-of-combat flows, same as their TAH entries: the Rest card, the downtime 
 
 ```js
 await api.executeRest(token);
+```
+
+</details>
+
+## Reinforcements, Leaving & Prepare
+
+Feature guide: [Gameplay Automation](feature/GAMEPLAY_AUTOMATION.md#reinforcement). These are not flow functions, each returns its own value.
+
+<details id="scheduleReinforcement">
+<summary><b><code>scheduleReinforcement</code></b> <sup>async</sup> → <code>string | null</code><br><b><code>toggleReinforcementBar</code></b> → <code>void</code></summary>
+
+<br>
+
+```js
+await api.scheduleReinforcement(options)
+api.toggleReinforcementBar()
+```
+
+`scheduleReinforcement` plans a unit for the encounter. Nothing is placed until it lands. GM only: anyone else gets a warning and `null`, and so does a call with no combat.
+
+| Param | Type | Default | Description |
+|:------|:-----|:--------|:------------|
+| **inside `options`** | | | |
+| <kbd>actor</kbd> | `Actor\|string` | `null` | Actor or actor uuid to land |
+| <kbd>token</kbd> | `Token\|TokenDocument` | `null` | Plan from a placed token instead. The token is copied, then deleted from the scene, and `x`, `y`, `elevation`, `tokenData`, `snap` and `scene` are ignored |
+| <kbd>x</kbd> / <kbd>y</kbd> | `number` | `0` | Landing point, the token's center |
+| <kbd>elevation</kbd> | `number` | `0` | Landing elevation |
+| <kbd>round</kbd> | `number` | next round | Round it is due |
+| <kbd>clock</kbd> | `string` | `null` | World clock `lid`. The unit is due when that clock fills, and `round` is ignored |
+| <kbd>visibility</kbd> | `'secret'\|'exact'\|'full'` | `'exact'` | What players see: nothing, the marker only, or the unit |
+| <kbd>teamHidden</kbd> | `boolean` | `false` | Hide its team or disposition from players |
+| <kbd>tokenData</kbd> | `Object` | `{}` | Token overrides for this unit only |
+| <kbd>snap</kbd> | `boolean` | `true` | Snap the point to the grid |
+| <kbd>combat</kbd> | `Combat` | `game.combat` | Encounter that holds the plan |
+| <kbd>scene</kbd> | `Scene` | `canvas.scene` | Scene it lands on |
+
+Returns the entry id. At round change, due units go on the GM's card, where each one lands or waits a round.
+
+`toggleReinforcementBar` opens or closes the DROP ON MAP bar for `game.combat`. Opening it needs a GM and a combat. While it is open, an actor dropped on the map is planned instead of placed.
+
+```js
+const id = await api.scheduleReinforcement({ actor: data.uuid, x: data.x, y: data.y, round: game.combat.round + 2, visibility: 'full' });
+```
+
+</details>
+
+<details id="getReinforcements">
+<summary><b><code>getReinforcements</code></b> → <code>object[]</code><br><b><code>updateReinforcement</code></b> <sup>async</sup> → <code>void</code><br><b><code>removeReinforcement</code></b> <sup>async</sup> → <code>void</code><br><b><code>landReinforcements</code></b> <sup>async</sup> → <code>TokenDocument[]</code></summary>
+
+<br>
+
+```js
+api.getReinforcements(combat?)
+await api.updateReinforcement(id, changes, combat?)
+await api.removeReinforcement(id, combat?)
+await api.landReinforcements(ids, combat?)
+```
+
+An entry: `{ id, actorUuid, tokenData, sceneId, round, clock, visibility, teamHidden }`. `combat` defaults to `game.combat`.
+
+| Param | Type | Description |
+|:------|:-----|:------------|
+| <kbd>id</kbd> | `string` | Entry id |
+| <kbd>changes</kbd> | `Object` | Deep-merged into the entry |
+| <kbd>ids</kbd> | `string[]` | Entries to land |
+
+- `getReinforcements` returns the whole plan, `secret` entries included, to any caller. `[]` with no combat. Change entries through `updateReinforcement`, not on the returned array.
+- `updateReinforcement`, `removeReinforcement` and `landReinforcements` are GM only.
+- An invalid `visibility` in `changes` skips the whole update. Changing `round` does not clear `clock`.
+- `removeReinforcement` drops the entry and touches no token.
+- `landReinforcements` lands the entries now, due or not. A compendium actor is imported into the world first. A taken spot moves the unit to the nearest free one. Landed tokens join the combat, leave the plan, and get a chat message, whispered to the GMs when every landed entry is `secret`.
+
+```js
+const due = api.getReinforcements().filter(entry => !entry.clock && entry.round <= game.combat.round);
+await api.landReinforcements(due.map(entry => entry.id));
+```
+
+</details>
+
+<details id="toggleLeaving">
+<summary><b><code>toggleLeaving</code></b> <sup>async</sup> → <code>void</code></summary>
+
+<br>
+
+```js
+await api.toggleLeaving(tokens)
+```
+
+**Params:** <kbd>tokens</kbd> `Array<Token|TokenDocument>`, always an array
+
+Toggles the Leaving status on the tokens you own in `game.combat`, and skips the others. If any of them is not leaving, all of them start leaving. If all are, all stop. At the next round change the GM's card lists them, and the confirmed ones leave by the nearest map edge, out of the scene and the encounter.
+
+```js
+await api.toggleLeaving([token]);
+```
+
+</details>
+
+<details id="usePrepared">
+<summary><b><code>usePrepared</code></b> <sup>async</sup> → <code>void</code></summary>
+
+<br>
+
+```js
+await api.usePrepared(token, target?)
+```
+
+**Params:** <kbd>token</kbd> `Token` the preparer · <kbd>target</kbd> `Token` optional, used by a prepared Skirmish
+
+Takes the token's prepared action now, as a Reaction. Does nothing when the token has no prepared action. It runs locally, so use `asOwner` to run it on the preparer's client.
+
+```js
+await api.asOwner(holder, { title, relatedToken: source }).usePrepared(holder, source);
 ```
 
 </details>

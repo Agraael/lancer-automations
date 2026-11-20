@@ -13,10 +13,12 @@ import { syncTargetShapes } from "../target-shapes.js";
 
 // Cancel fn of the running picker (null when idle). Lets the launching button toggle it.
 let _activeCancel = null;
+
 export function isSingleTargetPickerActive()
 {
     return !!_activeCancel;
 }
+
 export function cancelSingleTargetPicker()
 {
     if (_activeCancel)
@@ -31,6 +33,7 @@ export function pickSingleTargetToggle(casterToken = null, { includeSelf = false
     return new Promise((resolve) =>
     {
         syncTargetShapes(); // reconcile to current targets (keeps still-targeted shapes; no-op outside a session)
+
         const allTokens = canvas.tokens.placeables.filter(t =>
         {
             if (!includeSelf && t.id === casterToken?.id)
@@ -41,6 +44,7 @@ export function pickSingleTargetToggle(casterToken = null, { includeSelf = false
         });
 
         const { graphics: cursorPreview, dispose: disposeCursorPreview } = createCursorPreview();
+
         // No multi-target affordance in single mode (Shift can't add a second target here).
         const plus = single ? { move()
         {},
@@ -48,6 +52,7 @@ export function pickSingleTargetToggle(casterToken = null, { includeSelf = false
         {} } : createMultiPlusIndicator();
 
         let hitLabel = null;
+
         if (hitChanceFor)
         {
             hitLabel = makeText('', HIT_LABEL_STYLE);
@@ -57,16 +62,20 @@ export function pickSingleTargetToggle(casterToken = null, { includeSelf = false
             hitLabel.visible = false;
             canvas.stage.addChild(hitLabel);
         }
+
         const updateHitLabels = (hoveredToken) =>
         {
             if (!hitLabel)
                 return;
+
             const res = hoveredToken ? hitChanceFor(hoveredToken) : null;
+
             if (!res)
             {
                 hitLabel.visible = false;
                 return;
             }
+
             applyTargetInfoLabel(hitLabel, res);
             hitLabel.resolution = gridTextResolution();
             const anchor = hitLabelAnchor(hoveredToken);
@@ -77,6 +86,7 @@ export function pickSingleTargetToggle(casterToken = null, { includeSelf = false
         const restoreTokenInteraction = suppressTokenInteraction();
 
         let closeStack = null;
+
         const closeStackPopup = () =>
         {
             closeStack?.();
@@ -89,11 +99,13 @@ export function pickSingleTargetToggle(casterToken = null, { includeSelf = false
             clearToolPresence('singlePick');
             disposeCursorPreview();
             plus.dispose();
+
             if (hitLabel)
             {
                 hitLabel.destroy();
                 hitLabel = null;
             }
+
             session.unbind();
             restoreTokenInteraction();
             closeStackPopup();
@@ -114,6 +126,7 @@ export function pickSingleTargetToggle(casterToken = null, { includeSelf = false
         {
             const { hoveredToken } = paintSingleMarkCursor(cursorPreview, tx, ty, { caster: casterToken, range, tokens: allTokens });
             updateHitLabels(hoveredToken);
+
             if (hoveredToken)
                 broadcastToolPresence('singlePick', { tokens: [hoveredToken.id], relatedToken: casterToken });
             else
@@ -133,6 +146,7 @@ export function pickSingleTargetToggle(casterToken = null, { includeSelf = false
         };
 
         const isTokenTargeted = (token) => Array.from(game.user.targets ?? []).some(target => target.id === token.id);
+
         const showStackPicker = (tokens, screenX, screenY) =>
         {
             closeStackPopup();
@@ -146,20 +160,37 @@ export function pickSingleTargetToggle(casterToken = null, { includeSelf = false
         {
             const shift = isShiftDown(event);
             const { x: tx, y: ty } = pointerToWorld(event);
+
             const tokensHere = allTokens.filter(token =>
             {
                 const b = token.bounds;
                 return tx >= b.left && tx <= b.right && ty >= b.top && ty <= b.bottom;
             });
+
             if (tokensHere.length === 0)
                 return;
+
             if (tokensHere.length === 1)
             {
                 toggleTarget(tokensHere[0], shift);
                 return;
             }
+
             const originalEvent = event?.data?.originalEvent;
             showStackPicker(tokensHere, (originalEvent?.clientX ?? 0) + 10, (originalEvent?.clientY ?? 0) + 10);
+        };
+
+        const exitPicker = () =>
+        {
+            if (document.querySelector('.la-stack-picker'))
+            {
+                closeStackPopup();
+                return;
+            }
+
+            playUiSound('toggle');
+            doCleanup();
+            resolve(null);
         };
 
         const keyHandler = (event) =>
@@ -167,15 +198,13 @@ export function pickSingleTargetToggle(casterToken = null, { includeSelf = false
             if (event.key === 'Escape')
             {
                 suppressEvent(event);
-                if (document.querySelector('.la-stack-picker'))
-                {
-                    closeStackPopup();
-                    return;
-                }
-                playUiSound('toggle');
-                doCleanup();
-                resolve(null);
+                exitPicker();
             }
+        };
+
+        const rightClickHandler = () =>
+        {
+            exitPicker();
         };
 
         const session = createPickerSession('pickSingleTargetToggle', () =>
@@ -186,14 +215,17 @@ export function pickSingleTargetToggle(casterToken = null, { includeSelf = false
             }
             catch
             { /* */ }
+
             resolve(null);
         });
+
         _activeCancel = () =>
         {
             playUiSound('toggle');
             doCleanup();
             resolve(null);
         };
-        session.bind({ move: moveHandler, click: clickHandler, key: keyHandler });
+
+        session.bind({ move: moveHandler, click: clickHandler, key: keyHandler, rightClick: rightClickHandler });
     });
 }

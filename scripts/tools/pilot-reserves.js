@@ -7,12 +7,14 @@ const _PROJECT_REQS = ['Quality materials', 'Specific knowledge or techniques', 
 async function _fetchReservesByType()
 {
     const map = { Bonus: [], Resources: [], Tactical: [], Mech: [] };
+
     const RESOURCE_NAMES = new Set([
         'Access', 'Backing', 'Supplies', 'Disguise', 'Diversion', 'Blackmail',
         'Reputation', 'Safe Harbor', 'Tracking', 'Knowledge', 'Golden Ticket',
         'Stash Of Private Moonshine', "Governor's Farm Advanced Access",
         "Fielding's Workshop Access", 'Patience Hookup', 'Causality Fragment',
     ]);
+
     const normalize = (type, name) =>
     {
         if (!type)
@@ -21,21 +23,27 @@ async function _fetchReservesByType()
             return 'Resources';
         return type;
     };
+
     for (const pack of game.packs)
     {
         if (pack.documentName !== 'Item')
             continue;
+
         const index = await pack.getIndex({ fields: ['system.lid', 'system.type', 'system.description', 'type'] });
+
         for (const entry of index)
         {
             if (entry.type !== 'reserve')
                 continue;
+
             const rawType = entry.system?.type;
             const reserveType = normalize(rawType, entry.name);
+
             if (reserveType && map[reserveType])
                 map[reserveType].push({ name: entry.name, lid: entry.system?.lid ?? '', desc: entry.system?.description ?? '', uuid: entry.uuid });
         }
     }
+
     for (const reserveList of Object.values(map))
         reserveList.sort((a, b) => a.name.localeCompare(b.name));
     return map;
@@ -45,6 +53,7 @@ async function _fetchReservesByType()
 export async function openAddReserveDialog(tokenOrActor)
 {
     const pilot = resolvePilot(tokenOrActor);
+
     if (!pilot)
     {
         ui.notifications.warn(localize('LA.notify.selectAPilotOrMechToken')); return;
@@ -61,6 +70,7 @@ export async function openAddReserveDialog(tokenOrActor)
         { key: 'project',  label: localize('LA.reserves.tab.project') },
         { key: 'org',      label: localize('LA.reserves.tab.org') },
     ];
+
     const tabNav = TABS.map((tab, i) =>
         `<a class="la-rtab${i === 0 ? ' active' : ''}" data-tab="${tab.key}" style="padding:4px 6px;font-size:0.78em;white-space:nowrap;cursor:pointer;text-align:center;border:1px solid var(--la-edge);border-radius:3px;background:${i === 0 ? 'var(--primary-color)' : 'color-mix(in srgb, var(--la-plate), var(--la-ink) 8%)'};color:${i === 0 ? '#fff' : 'var(--la-ink)'};user-select:none;">${tab.label}</a>`
     ).join('');
@@ -153,8 +163,10 @@ export async function openAddReserveDialog(tokenOrActor)
                 ev.preventDefault(); ev.stopPropagation();
                 const uuid = $(ev.currentTarget).data('uuid');
                 const doc = await fromUuid(uuid);
+
                 if (!doc)
                     return;
+
                 const itemData = doc.toObject(); delete itemData._id;
                 await pilot.createEmbeddedDocuments('Item', [itemData]);
                 ui.notifications.info(localizeFormat('LA.notify.addedToPilot', { item: doc.name, pilot: pilot.name }));
@@ -162,10 +174,12 @@ export async function openAddReserveDialog(tokenOrActor)
             html.find('#cr-add').on('click', async () =>
             {
                 const name = String(html.find('#cr-name').val()).trim();
+
                 if (!name)
                 {
                     ui.notifications.warn(localize('LA.notify.enterAName')); return;
                 }
+
                 await pilot.createEmbeddedDocuments('Item', [{ name,
                     type: 'reserve',
                     img: 'systems/lancer/assets/icons/reserve_tac.svg',
@@ -175,17 +189,21 @@ export async function openAddReserveDialog(tokenOrActor)
             html.find('#pj-add').on('click', async () =>
             {
                 const name = String(html.find('#pj-name').val()).trim();
+
                 if (!name)
                 {
                     ui.notifications.warn(localize('LA.notify.enterAName')); return;
                 }
+
                 const finished = html.find('#pj-finished').is(':checked');
                 const reqs = []; html.find('.proj-req:checked').each(function ()
                 {
                     reqs.push($(this).val());
                 });
+
                 const customReq = String(html.find('#pj-custom-req').val()).trim(); if (customReq)
                     reqs.push(customReq);
+
                 let desc = String(html.find('#pj-desc').val());
                 if (html.find('#pj-complicated').is(':checked'))
                     desc += '\n<b>Complicated</b>';
@@ -200,10 +218,12 @@ export async function openAddReserveDialog(tokenOrActor)
             html.find('#org-add').on('click', async () =>
             {
                 const name = String(html.find('#org-name').val()).trim();
+
                 if (!name)
                 {
                     ui.notifications.warn(localize('LA.notify.enterAName')); return;
                 }
+
                 const startStat = html.find('.la-org-start.active').data('val') || 'efficiency';
                 await pilot.createEmbeddedDocuments('Item', [{ name,
                     type: 'organization',

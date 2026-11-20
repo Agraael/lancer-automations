@@ -39,6 +39,7 @@ function _gateBlocked(entry, actor)
         return false;
     if (entry.t != null)
         return entry.t === _turnStamp();
+
     if (entry.o)
     {
         const now = _ownTurnStamp(actor);
@@ -46,6 +47,7 @@ function _gateBlocked(entry, actor)
             return (game.combat?.round ?? 0) <= entry.o.r;
         return now.r === entry.o.r ? now.u <= entry.o.u : now.r === entry.o.r + 1 && now.u === 0;
     }
+
     return entry.r === null || (game.combat?.round ?? 0) <= entry.r;
 }
 
@@ -61,6 +63,7 @@ export function checkGate(owner, key, subject = null)
     const actor = _gateActor(owner);
     if (!actor || !key)
         return true;
+
     const api = game.modules.get(MODULE_ID)?.api;
     const gates = api?.getActorFlags(actor, GATE_FLAG) || {};
     return !_gateBlocked(gates[_gateKey(key)]?.[_gateSubject(subject)], actor);
@@ -82,22 +85,27 @@ export async function consumeGate(owner, key, options = {})
     const actor = _gateActor(owner);
     if (!actor || !key)
         return true;
+
     const api = game.modules.get(MODULE_ID)?.api;
     const gates = api.getActorFlags(actor, GATE_FLAG) || {};
     const gateKey = _gateKey(key);
     const subjectId = _gateSubject(options.subject);
+
     if (_gateBlocked(gates[gateKey]?.[subjectId], actor))
         return false;
 
     const combat = game.combat;
     if (!combat?.round)
         return true;
+
     const ownTurn = options.ownTurn ? _ownTurnStamp(actor) : null;
+
     const entry = options.turn
         ? { c: combat.id, t: _turnStamp() }
         : (ownTurn
             ? { c: combat.id, o: ownTurn }
             : { c: combat.id, r: options.rounds === null ? null : combat.round + Math.max(1, options.rounds ?? 1) - 1 });
+
     await api.addActorFlags(actor, { [GATE_FLAG]: { [gateKey]: { [subjectId]: entry } } });
     return true;
 }
@@ -114,6 +122,7 @@ export async function clearGate(owner, key, subject = null)
     const actor = _gateActor(owner);
     if (!actor || !key)
         return;
+
     const api = game.modules.get(MODULE_ID)?.api;
     // setFlag merges, so null the entries instead of deleting them
     const value = subject === null ? null : { [_gateSubject(subject)]: null };

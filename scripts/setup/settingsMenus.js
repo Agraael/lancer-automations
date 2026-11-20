@@ -2,7 +2,7 @@
 
 import { TAB_DEFS, NAV_GROUPS } from './settings-fields.js';
 import { _requiredKeys, _allKeyedFields, _fieldName, _fieldByKey, _parseRequirement, _isRequirementMet, _requirementHint, _syncRequirementLines, _fieldsWithRequirements } from './settings-requirements.js';
-import { _extNamespaceActive, _visibleTabs, _groupSections, _dropEmptySections, _tabItems, _newCount } from './settings-rows.js';
+import { _extFormKey, _extNamespaceActive, _visibleTabs, _groupSections, _dropEmptySections, _tabItems, _newCount } from './settings-rows.js';
 import { bindKeybindingEditor, bindConfigSearch } from './settings-listeners.js';
 import { getModuleSetting } from '../tools/settings-utils.js';
 import { localize, localizeFormat } from '../tools/string-utils.js';
@@ -23,8 +23,10 @@ function _coerceExtValue(setting, raw)
 {
     if (setting?.type === Boolean)
         return !!raw;
+
     const isNumeric = setting?.type === Number
         || setting?.type instanceof foundry.data.fields.NumberField;
+
     if (!isNumeric)
         return raw;
     if (raw === '' || raw === null || raw === undefined)
@@ -49,12 +51,14 @@ function _injectFCSLocks(html, fields, _app)
     const fcs = getFCSData();
     if (!fcs)
         return;
+
     const isGM = game.user?.isGM;
     const faIcons = _FCS_ICONS;
     const $html = /** @type {any} */ (html instanceof jQuery ? html : $(html));
     // compactStatusFx skipped: values live in world-scoped statusFXConfig, so FCS per-key forcing doesn't apply.
     /** @type {any[]} */
     const expanded = [];
+
     for (const field of fields)
     {
         if (field.type === 'compactBooleans')
@@ -67,32 +71,42 @@ function _injectFCSLocks(html, fields, _app)
         else
             expanded.push(field);
     }
+
     for (const field of expanded)
     {
         if (!field.key || field.type === 'section' || field.type === 'button' || field.type === 'table')
             continue;
+
         const isExternal = ['moduleSelect', 'moduleBoolean', 'moduleSlider', 'moduleColor'].includes(field.type);
         const key = isExternal ? `${field.module}.${field.key}` : `${MODULE_ID}.${field.key}`;
         const setting = game.settings.settings.get(key);
+
         if (!setting || setting.scope === 'world')
             continue;
+
         const $input = $html.find(`[name="${isExternal ? `__ext.${field.module}.${field.key}` : field.key}"]`);
         if ($input.length === 0)
             continue;
+
         const $label = field._inCompactGrid
             ? $input.closest('label')
             : $input.closest('.form-group').find('label').first();
+
         if ($label.length === 0)
             continue;
+
         let mode = fcs.forced.get(key)?.mode ?? 'open';
         if ((mode === 'soft' || isGM) && fcs.unlocked.has(key))
             mode = 'unlocked';
+
         const modeKey = mode + (isGM ? '-gm' : '-client');
         if (modeKey === 'open-client')
             continue;
+
         const icon = faIcons[modeKey];
         if (!icon)
             continue;
+
         const lockIcon = document.createElement('span');
         lockIcon.innerHTML = '&nbsp;';
         lockIcon.title = localize(`FORCECLIENTSETTINGS.ui.${modeKey}-hint`);
@@ -112,9 +126,12 @@ function _showEffectiveValue($html, fullKey, locked)
 {
     const moduleId = fullKey.slice(0, fullKey.indexOf('.'));
     const key = fullKey.slice(moduleId.length + 1);
-    const input = $html.find(`[name="${moduleId === MODULE_ID ? key : `__ext.${fullKey}`}"]`)[0];
+    const inputName = moduleId === MODULE_ID ? key : `__ext.${fullKey}`;
+    const input = $html.find(`[name="${inputName}"]`)[0];
+
     if (!input)
         return;
+
     const value = game.settings.get(/** @type {any} */ (moduleId), /** @type {any} */ (key));
     input.disabled = locked;
     if (input.type === 'checkbox')
@@ -130,6 +147,7 @@ function _renderFCCRowLock($row, modeKey)
 {
     $row.find('.la-fcc-lock').remove();
     const icon = _FCS_ICONS[modeKey];
+
     if (icon)
     {
         const lockIcon = document.createElement('span');
@@ -140,6 +158,7 @@ function _renderFCCRowLock($row, modeKey)
         lockIcon.style.marginRight = '4px';
         $row.find('> div').first().children().first().prepend(lockIcon);
     }
+
     $row.find('.la-kb-add, .la-kb-key, .la-kb-reset').prop('disabled', ['hard-client', 'soft-client'].includes(modeKey));
 }
 
@@ -150,14 +169,17 @@ function _injectControlLocks(html)
     const fcc = getFCCData();
     if (!fcc)
         return;
+
     const isGM = !!game.user?.isGM;
     const $html = /** @type {any} */ (html instanceof jQuery ? html : $(html));
     $html.find('.la-keybinding-row').each(function ()
     {
         const $row = $(this);
         const action = $row.attr('data-full-key');
+
         if (!action)
             return;
+
         const modeKey = getFCCModeKey(action, fcc, isGM);
         if (modeKey !== 'open-client')
             _renderFCCRowLock($row, modeKey);
@@ -169,8 +191,10 @@ async function _previewSettingSound(key)
 {
     if (!key)
         return;
+
     const sound = await import('../tah/sound.js');
     const fx = await import('../fx/actionFX.js');
+
     if (key.startsWith('tah.uiSound.'))
         sound.playUiSound(/** @type {any} */ (key.slice('tah.uiSound.'.length)), { force: true });
     else if (key.startsWith('tah.tokenSound.'))
@@ -191,12 +215,15 @@ function _readFormSettings(form)
     const map = new Map();
     if (!form)
         return map;
+
     const els = form.querySelectorAll('input[name], select[name], textarea[name]');
+
     for (const el of /** @type {any} */ (els))
     {
         const name = el.name;
         if (!name)
             continue;
+
         let value;
         if (el.type === 'checkbox')
             value = !!el.checked;
@@ -206,6 +233,7 @@ function _readFormSettings(form)
             value = el.value;
         map.set(name, value);
     }
+
     return map;
 }
 
@@ -213,12 +241,42 @@ function _sameAsSnapshot(snapshot, key, value)
 {
     if (!snapshot?.has(key))
         return false;
+
     const before = snapshot.get(key);
     if (typeof before === 'boolean')
         return before === !!value;
     if (typeof before === 'number' || before === null)
         return before === (value === '' || value == null ? null : Number(value));
     return String(before) === String(value ?? '');
+}
+
+async function _saveNestedExtFields(formData, snapshot)
+{
+    const pending = new Map();
+
+    for (const field of _allKeyedFields())
+    {
+        const formKey = field?.path ? _extFormKey(field) : null;
+        if (!formKey || !(formKey in formData) || _sameAsSnapshot(snapshot, formKey, formData[formKey]))
+            continue;
+
+        const fullKey = `${field.module}.${field.key}`;
+        const entry = pending.get(fullKey) ?? { field, value: foundry.utils.deepClone(game.settings.get(field.module, field.key)) };
+        foundry.utils.setProperty(entry.value, field.path, formData[formKey]);
+        pending.set(fullKey, entry);
+    }
+
+    for (const [fullKey, { field, value }] of pending)
+    {
+        try
+        {
+            await game.settings.set(field.module, field.key, value);
+        }
+        catch (e)
+        {
+            console.warn(`${MODULE_ID} | Could not save ${fullKey}`, e);
+        }
+    }
 }
 
 /**
@@ -229,6 +287,7 @@ function _sameAsSnapshot(snapshot, key, value)
 function _patchSettingsGet(formMap)
 {
     const original = game.settings.get.bind(game.settings);
+
     // defineProperty, not assignment: libWrapper's accessor setter would keep this as a permanent override.
     const patched = function(namespace, key, options)
     {
@@ -237,6 +296,7 @@ function _patchSettingsGet(formMap)
         {
             const cfg = /** @type {any} */ (game.settings.settings.get(`${namespace}.${key}`));
             const raw = formMap.get(key);
+
             try
             {
                 if (cfg?.type === Boolean)
@@ -248,11 +308,15 @@ function _patchSettingsGet(formMap)
             }
             catch
             { /* fall through */ }
+
             return raw;
         }
+
         return original(namespace, key, options);
     };
+
     Object.defineProperty(game.settings, 'get', { value: patched, configurable: true, writable: true, enumerable: false });
+
     return () =>
     {
         delete game.settings.get;
@@ -266,11 +330,13 @@ function _toggleSection($header, collapsed, animate = false)
     const $body = $box.children('.la-card-body, .la-sub-body').first();
     $box.toggleClass('collapsed', collapsed);
     $header.attr('aria-expanded', collapsed ? 'false' : 'true');
+
     if (!animate)
     {
         $body.toggle(!collapsed);
         return;
     }
+
     $body.stop(true, false);
     if (collapsed)
         $body.slideUp(150);
@@ -293,9 +359,11 @@ async function _seedSoftLocks()
         return;
     await repairFCSForcedValues(fcs);
     const seeded = new Set(getModuleSetting(SETTING_SOFT_SEEDED) ?? []);
+
     const fresh = [...new Set(_allKeyedFields().map(field => field?.key).filter(Boolean))]
         .map(key => `${MODULE_ID}.${key}`)
         .filter(fullKey => !seeded.has(fullKey) && game.settings.settings.get(/** @type {any} */ (fullKey))?.scope === 'client');
+
     if (!fresh.length)
         return;
     if (isFreshWorld() || seeded.size)
@@ -307,20 +375,25 @@ async function _noticeNewSettings()
 {
     const keys = [...new Set(_allKeyedFields().map(field => field?.key).filter(Boolean))];
     const seen = getModuleSetting(SETTING_SEEN_KEYS) ?? [];
+
     if (!seen.length)
     {
         await game.settings.set(MODULE_ID, SETTING_SEEN_KEYS, keys);
         return;
     }
+
     const seenKeys = new Set(seen);
     const unseen = keys.filter(key => !seenKeys.has(key));
+
     if (!unseen.length)
         return;
+
     const merged = new Set(_allKeyedFields().filter(field => field?.mergedFrom?.some(key => seenKeys.has(key))).map(field => field.key));
     await game.settings.set(MODULE_ID, SETTING_SEEN_KEYS, [...seen, ...unseen]);
     const fresh = unseen.filter(key => !merged.has(key));
     if (!fresh.length)
         return;
+
     const newKeys = new Set([...(getModuleSetting(SETTING_NEW_KEYS) ?? []), ...fresh]);
     await game.settings.set(MODULE_ID, SETTING_NEW_KEYS, [...newKeys]);
     const count = _visibleTabs().reduce((sum, tab) => sum + _newCount(_tabItems(tab, newKeys)), 0);
@@ -331,6 +404,7 @@ async function _noticeNewSettings()
     marker.className = 'la-new-settings-toast';
     marker.textContent = localizeFormat('LA.configUi.newSettingsToast', { count });
     ui.notifications.info(marker.outerHTML);
+
     const onClick = (/** @type {any} */ ev) =>
     {
         if (!ev.target?.closest?.('.notification')?.querySelector('.la-new-settings-toast'))
@@ -338,6 +412,7 @@ async function _noticeNewSettings()
         document.removeEventListener('click', onClick, true);
         _openNewSettings();
     };
+
     document.addEventListener('click', onClick, true);
 }
 
@@ -377,12 +452,15 @@ export class LancerAutomationsConfig extends FormApplication
     getData()
     {
         const newKeys = new Set(getModuleSetting(SETTING_NEW_KEYS) ?? []);
+
         const visible = _visibleTabs().map(tab =>
         {
             const items = _tabItems(tab, newKeys);
             return { ...tab, hasNew: _newCount(items) > 0, sections: _dropEmptySections(_groupSections(tab.id, items)) };
         }).filter(tab => tab.sections.length > 0);
+
         const firstEnabledIdx = visible.findIndex(tab => !tab._disabled);
+
         const tabs = visible.map((tab, idx) =>
         {
             const sections = tab.sections;
@@ -403,18 +481,23 @@ export class LancerAutomationsConfig extends FormApplication
                 hasNew: tab.hasNew,
             };
         });
+
         const tabController = this._tabs?.[0];
         if (tabController && !tabs.some(tab => tab.id === tabController.active))
             tabController.active = tabs.find(tab => tab.active)?.id ?? tabs[0]?.id;
+
         const grouped = new Set();
+
         const groups = NAV_GROUPS.map(group => ({
             label: localize(group.label),
             icon: group.icon,
             tabs: group.tabs.map(id => tabs.find(tab => tab.id === id)).filter(Boolean).map(tab => (grouped.add(tab.id), tab)),
         })).filter(group => group.tabs.length > 0);
+
         const leftover = tabs.filter(tab => !grouped.has(tab.id));
         if (leftover.length > 0)
             groups.push({ label: localize('LA.settingsMenus.navGroup.other.label'), icon: 'fas fa-ellipsis', tabs: leftover });
+
         const fcsLegend = game.user.isGM && getFCSData()
             ? localizeFormat('LA.configUi.fcsLegend', {
                 open: `<i class="fas ${_FCS_ICONS['open-gm']}"></i>`,
@@ -422,6 +505,7 @@ export class LancerAutomationsConfig extends FormApplication
                 hard: `<i class="fas ${_FCS_ICONS['hard-gm']}"></i>`,
             })
             : '';
+
         return { tabs, groups, fcsLegend, isGM: game.user.isGM };
     }
 
@@ -433,14 +517,17 @@ export class LancerAutomationsConfig extends FormApplication
 
         // Measured on hover rather than on render, so it stays right through resizes and tab switches
         const root = $html[0];
+
         if (root)
         {
             root.addEventListener('pointerover', event =>
             {
                 const label = event.target?.closest?.('.la-opt-label');
                 const text = label?.querySelector('.la-opt-label-text');
+
                 if (!text)
                     return;
+
                 const overflow = Math.round(text.scrollWidth - label.clientWidth);
                 if (overflow <= 1)
                     return;
@@ -457,6 +544,7 @@ export class LancerAutomationsConfig extends FormApplication
         }
 
         const scroller = $html.find('.la-config-content')[0];
+
         if (_laConfigState?.scroll != null && scroller)
         {
             requestAnimationFrame(() =>
@@ -464,6 +552,7 @@ export class LancerAutomationsConfig extends FormApplication
                 scroller.scrollTop = _laConfigState.scroll;
             });
         }
+
         $html.find('.la-config-rail .item.la-tab-disabled').on('click', (/** @type {any} */ ev) =>
         {
             ev.preventDefault();
@@ -478,8 +567,10 @@ export class LancerAutomationsConfig extends FormApplication
         {
             if (ev.key !== 'ArrowDown' && ev.key !== 'ArrowUp')
                 return;
+
             const items = $html.find('.la-config-rail .item:not(.la-tab-disabled)').toArray();
             const index = items.indexOf(document.activeElement);
+
             if (index < 0)
                 return;
             ev.preventDefault();
@@ -491,11 +582,13 @@ export class LancerAutomationsConfig extends FormApplication
 
         const gated = [];
         const allWatched = new Set();
+
         for (const field of _fieldsWithRequirements())
         {
             const $target = $html.find(`[name="${_fieldName(field)}"]`);
             if (!$target.length)
                 continue;
+
             const keys = _requiredKeys(field);
             const isMet = (key) => _isRequirementMet($html, key);
             const $row = $target.closest('.form-group, .la-compact-bool');
@@ -504,18 +597,23 @@ export class LancerAutomationsConfig extends FormApplication
             warningIcon.className = 'fas fa-triangle-exclamation la-req-icon';
             warningIcon.dataset.tooltip = _requirementHint(field);
             ($row.find('label').first().length ? $row.find('label').first() : $row).append(warningIcon);
+
             const syncRequirement = () =>
             {
                 const met = field.requiresAll ? keys.every(isMet) : keys.some(isMet);
+
                 if (field.softRequires)
                 {
                     $row.toggleClass('la-req-soft', !met);
                     return;
                 }
+
                 $target.prop('disabled', !met);
                 $row.toggleClass(field.hideUnmet ? 'la-req-hidden' : 'la-req-unmet', !met);
             };
+
             const watched = new Set();
+
             const watch = (key) =>
             {
                 const { name } = _parseRequirement(key);
@@ -526,18 +624,39 @@ export class LancerAutomationsConfig extends FormApplication
                 for (const sub of _requiredKeys(_fieldByKey(name)))
                     watch(sub);
             };
+
             keys.forEach(watch);
             $html.find([...watched].map(key => `[name="${key}"]`).join(', ')).on('change', syncRequirement);
             syncRequirement();
         }
+
         if (allWatched.size)
             $html.find([...allWatched].map(key => `[name="${key}"]`).join(', ')).on('change', () => _syncRequirementLines($html, gated));
         _syncRequirementLines($html, gated);
+
+        for (const field of _allKeyedFields().filter(candidate => typeof candidate.notice === 'function'))
+        {
+            const notice = field.notice();
+            const row = $html.find(`[name="${_fieldName(field)}"]`).closest('.form-group')[0];
+
+            if (!notice || !row)
+                continue;
+
+            const line = document.createElement('p');
+            line.className = 'notes la-section-hint la-notice-line';
+            const icon = document.createElement('i');
+            icon.className = 'fas fa-triangle-exclamation la-req-icon';
+            const text = document.createElement('span');
+            text.textContent = localize(notice);
+            line.append(icon, text);
+            row.after(line);
+        }
 
         const isDefault = (/** @type {any} */ row) =>
         {
             const input = row.querySelector('[name]');
             const fallback = row.dataset.default ?? '';
+
             if (!input)
                 return true;
             if (input.type === 'checkbox')
@@ -548,10 +667,12 @@ export class LancerAutomationsConfig extends FormApplication
                 return String(input.value).toLowerCase() === fallback.toLowerCase();
             return String(input.value ?? '') === fallback;
         };
+
         const refreshChanged = (/** @type {any[]} */ rows) =>
         {
             for (const row of rows)
                 row.classList.toggle('la-changed', !isDefault(row));
+
             const searching = this.element.find('form.la-config-form').hasClass('la-searching');
             $html.find('.la-config-rail .item').each((/** @type {number} */ _i, /** @type {any} */ item) =>
             {
@@ -569,6 +690,7 @@ export class LancerAutomationsConfig extends FormApplication
                 slot.textContent = count ? String(count) : '';
             });
         };
+
         refreshChanged($html.find('[data-default]').toArray());
         $html.off('change.laChanged input.laChanged').on('change.laChanged input.laChanged', '[data-default] [name]', (/** @type {any} */ ev) =>
         {
@@ -578,6 +700,7 @@ export class LancerAutomationsConfig extends FormApplication
         {
             const row = ev.currentTarget.closest('[data-default]');
             const input = row?.querySelector('[name]');
+
             if (!input || input.disabled)
                 return;
             if (input.type === 'checkbox')
@@ -594,22 +717,27 @@ export class LancerAutomationsConfig extends FormApplication
             ev.preventDefault();
             const row = ev.currentTarget.closest('.la-tour-row');
             const fullKey = row?.dataset.fullKey;
+
             if (!fullKey)
                 return;
+
             const tour = /** @type {any} */ (game.tours)?.get?.(fullKey);
             if (!tour)
                 return;
+
             // Close the config window before starting the tour (matches Foundry's native Tour Manager UX).
             try
             {
                 const appEl = ev.currentTarget.closest('.window-app');
                 const appId = appEl?.dataset.appid;
                 const app = appId ? ui.windows?.[appId] : null;
+
                 if (app)
                     await app.close();
             }
             catch
             { /* ignore */ }
+
             try
             {
                 await tour.start();
@@ -624,14 +752,17 @@ export class LancerAutomationsConfig extends FormApplication
         {
             ev.preventDefault();
             const key = ev.currentTarget.dataset.actionKey;
+
             for (const tab of TAB_DEFS)
             {
                 const matchedField = /** @type {any} */ (tab.fields.find((/** @type {any} */ field) => field.key === key));
+
                 if (matchedField?.onClick)
                 {
                     const formEl = ev.currentTarget.closest('form');
                     const formMap = _readFormSettings(formEl);
                     const restore = _patchSettingsGet(formMap);
+
                     try
                     {
                         await matchedField.onClick();
@@ -645,6 +776,7 @@ export class LancerAutomationsConfig extends FormApplication
                     {
                         restore();
                     }
+
                     if (typeof matchedField.state === 'function')
                         $(ev.currentTarget).find('.la-btn-state').text(matchedField.state());
                     return;
@@ -658,25 +790,32 @@ export class LancerAutomationsConfig extends FormApplication
             ev.stopPropagation();
             await _previewSettingSound(ev.currentTarget.dataset.previewKey);
         });
+
         const $headers = $html.find('.la-collapsible');
+
         const sectionKey = (/** @type {any} */ $h) =>
         {
             const $box = $h.closest('.la-card, .la-sub');
             return `${$box.closest('.la-card').attr('id') ?? ''}:${$box.attr('data-label') ?? ''}`;
         };
+
         const applySectionState = (/** @type {any} */ h) =>
         {
             const $h = $(h);
             const label = sectionKey($h);
+
             const collapsed = this._sectionStates.has(label)
                 ? this._sectionStates.get(label)
                 : $h.closest('.la-card, .la-sub').hasClass('collapsed');
+
             _toggleSection($h, collapsed);
         };
+
         const applyAllSectionStates = () =>
         {
             $headers.each((/** @type {number} */ _i, /** @type {any} */ h) => applySectionState(h));
         };
+
         applyAllSectionStates();
         $headers.on('click', (/** @type {any} */ ev) =>
         {
@@ -702,6 +841,7 @@ export class LancerAutomationsConfig extends FormApplication
             ev.stopPropagation();
             const checked = ev.currentTarget.dataset.bulk === 'all';
             const card = ev.currentTarget.closest('.la-card');
+
             for (const input of card.querySelectorAll(':scope > .la-card-body > .la-compact-bools input[type="checkbox"]:not(:disabled)'))
             {
                 if (input.checked === checked)
@@ -716,20 +856,25 @@ export class LancerAutomationsConfig extends FormApplication
             const target = $html.find(`#${ev.currentTarget.dataset.target}`);
             if (!target.length)
                 return;
+
             const $head = target.find('.la-collapsible').first();
+
             if (target.hasClass('collapsed') && $head.length)
             {
                 _toggleSection($head, false);
                 this._sectionStates.set(sectionKey($head), false);
             }
+
             if (!scroller)
             {
                 target[0].scrollIntoView({ block: 'start', behavior: 'smooth' });
                 return;
             }
+
             const top = scroller.scrollTop + target[0].getBoundingClientRect().top - scroller.getBoundingClientRect().top;
             scroller.scrollTo({ top, behavior: 'smooth' });
         });
+
         if (scroller && typeof IntersectionObserver === 'function')
         {
             this._stripObserver?.disconnect();
@@ -743,6 +888,7 @@ export class LancerAutomationsConfig extends FormApplication
                     else
                         visibleCards.delete(entry.target.id);
                 }
+
                 $html.find('.la-strip .la-chip').each((/** @type {number} */ _i, /** @type {any} */ chip) =>
                 {
                     chip.classList.toggle('active', visibleCards.has(chip.dataset.target));
@@ -750,6 +896,7 @@ export class LancerAutomationsConfig extends FormApplication
             }, { root: scroller, threshold: 0.01 });
             $html.find('.la-card').each((/** @type {number} */ _i, /** @type {any} */ card) => this._stripObserver.observe(card));
         }
+
         this._bindTruncatedLabels($html);
         for (const tab of TAB_DEFS)
             _injectFCSLocks(html, tab.fields, this);
@@ -770,16 +917,20 @@ export class LancerAutomationsConfig extends FormApplication
             const fcsData = getFCSData();
             if (!fcsData)
                 return;
+
             const isGM = !!game.user?.isGM;
             const $icon = $(ev.currentTarget);
             const lockKey = $icon.attr('data-settings-key');
+
             if (!lockKey)
                 return;
             await (isGM ? toggleFCSForce(lockKey, fcsData) : toggleFCSClientUnlock(lockKey));
             const lockData = isGM ? fcsData : (getFCSData() ?? fcsData);
             let resolved = lockData.forced.get(lockKey)?.mode ?? 'open';
+
             if ((resolved === 'soft' || isGM) && lockData.unlocked.has(lockKey))
                 resolved = 'unlocked';
+
             const newModeKey = resolved + (isGM ? '-gm' : '-client');
             const newIcon = _FCS_ICONS[newModeKey] ?? 'fa-lock-keyhole-open';
             $icon.attr('class', `fas ${newIcon} la-fcs-lock`);
@@ -803,9 +954,11 @@ export class LancerAutomationsConfig extends FormApplication
                 const row = el.closest('.la-compact-bool');
                 if (!row)
                     return;
+
                 const full = (el.textContent ?? '').trim();
                 if (row.dataset.laHint === undefined)
                     row.dataset.laHint = row.dataset.tooltip ?? '';
+
                 const hint = row.dataset.laHint;
                 const cut = el.scrollWidth > el.clientWidth + 1;
                 el.classList.toggle('is-truncated', cut);
@@ -816,6 +969,7 @@ export class LancerAutomationsConfig extends FormApplication
                     delete row.dataset.tooltip;
             });
         };
+
         measure();
         this._truncObserver?.disconnect();
         if (typeof ResizeObserver !== 'function')
@@ -848,6 +1002,7 @@ export class LancerAutomationsConfig extends FormApplication
         this._setSaveState('saving');
         // non-GM submits skip world-scoped writes so player saves don't clobber GM values
         const isGM = !!game.user?.isGM;
+
         const _canWrite = (moduleId, key) =>
         {
             const setting = game.settings.settings.get(`${moduleId}.${key}`);
@@ -862,18 +1017,23 @@ export class LancerAutomationsConfig extends FormApplication
         {
             if (!formKey.startsWith('__ext.'))
                 continue;
+
             const rest = formKey.slice('__ext.'.length);
             const dot = rest.indexOf('.');
+
             if (dot < 1)
                 continue;
+
             const moduleId = rest.slice(0, dot);
             const settingKey = rest.slice(dot + 1);
+
             if (!_extNamespaceActive(moduleId))
                 continue;
             if (!_canWrite(moduleId, settingKey))
                 continue;
             if (_sameAsSnapshot(this._formSnapshot, formKey, formData[formKey]))
                 continue;
+
             try
             {
                 const targetSetting = game.settings.settings.get(`${moduleId}.${settingKey}`);
@@ -886,13 +1046,17 @@ export class LancerAutomationsConfig extends FormApplication
             }
         }
 
+        await _saveNestedExtFields(formData, this._formSnapshot);
+
 
         const sfxSubs = new Set();
+
         for (const tab of TAB_DEFS)
         {
             for (const fRaw of tab.fields)
             {
                 const f = /** @type {any} */ (fRaw);
+
                 if (f.type === 'statusFx' && f.sub)
                     sfxSubs.add(f.sub);
                 else if (f.type === 'compactStatusFx')
@@ -905,6 +1069,7 @@ export class LancerAutomationsConfig extends FormApplication
                 }
             }
         }
+
         if (sfxSubs.size > 0 && _canWrite(MODULE_ID, 'statusFXConfig'))
         {
             try
@@ -913,18 +1078,22 @@ export class LancerAutomationsConfig extends FormApplication
                 /** @type {any} */
                 const next = { ...existing };
                 let changed = false;
+
                 for (const sub of sfxSubs)
                 {
                     const formKey = `_sfx.${sub}`;
                     if (!(formKey in formData))
                         continue;
+
                     const newVal = !!formData[formKey];
+
                     if (next[sub] !== newVal)
                     {
                         next[sub] = newVal;
                         changed = true;
                     }
                 }
+
                 if (changed)
                 {
                     await game.settings.set(MODULE_ID, 'statusFXConfig', next);
@@ -941,6 +1110,7 @@ export class LancerAutomationsConfig extends FormApplication
 
         /** @type {any[]} */
         const allFields = [];
+
         for (const tab of TAB_DEFS)
         {
             for (const fRaw of tab.fields)
@@ -965,6 +1135,7 @@ export class LancerAutomationsConfig extends FormApplication
                     allFields.push(f);
             }
         }
+
         for (const f of allFields)
         {
             if (!_canWrite(MODULE_ID, f.key))
@@ -973,15 +1144,18 @@ export class LancerAutomationsConfig extends FormApplication
                 continue;
             if (_sameAsSnapshot(this._formSnapshot, f.key, formData[f.key]))
                 continue;
+
             let newValue = formData[f.key];
             if (f.type === 'number' || f.type === 'slider')
                 newValue = Number(newValue);
             if (f.type === 'boolean')
                 newValue = !!newValue;
+
             try
             {
                 const setting = game.settings.settings.get(`${MODULE_ID}.${f.key}`);
                 const prev = getModuleSetting(f.key);
+
                 if (prev !== newValue && setting?.requiresReload)
                     this._needsReload = true;
                 await game.settings.set(MODULE_ID, f.key, newValue);
@@ -991,6 +1165,7 @@ export class LancerAutomationsConfig extends FormApplication
                 console.warn(`${MODULE_ID} | Could not save ${f.key}`, e);
             }
         }
+
         this._formSnapshot = _readFormSettings(this.form);
         this._setSaveState('saved');
         await this._promptReload();
@@ -1001,6 +1176,7 @@ export class LancerAutomationsConfig extends FormApplication
         if (!this._needsReload)
             return;
         this._needsReload = false;
+
         const reload = await Dialog.confirm({
             title: localize('LA.dialogTitle.reloadRequired'),
             content: localize('LA.settingsMenus.content.oneOrMoreChangesRequireA'),
@@ -1008,6 +1184,7 @@ export class LancerAutomationsConfig extends FormApplication
             no: () => false,
             defaultYes: true,
         });
+
         if (reload)
             foundry.utils.debouncedReload();
     }
@@ -1016,6 +1193,7 @@ export class LancerAutomationsConfig extends FormApplication
     {
         clearTimeout(this._saveStateTimer);
         this._truncObserver?.disconnect();
+
         try
         {
             const root = this.element?.[0];
@@ -1035,8 +1213,10 @@ export class LancerAutomationsConfig extends FormApplication
         }
         catch
         { /* ignore */ }
+
         if (getModuleSetting(SETTING_NEW_KEYS)?.length)
             await game.settings.set(MODULE_ID, SETTING_NEW_KEYS, []);
+
         const closeResult = await super.close(options);
         await this._promptReload();
         return closeResult;

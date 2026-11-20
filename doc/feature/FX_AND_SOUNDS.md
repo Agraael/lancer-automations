@@ -24,18 +24,19 @@ The **Statuses & FX** tab for the visuals, and the **Sounds** tab for audio.
 Each status gets a Token Magic FX overlay (Token Magic FX must be installed), applied and cleared with the status itself:
 
 - a danger-zone glow
-- a burn shimmer
+- flames for burn
+- code leaking off the outline for infection
 - an overshield outline
 - chains for immobilized
 - film grain for stunned
 
-Every one has its own toggle under **Visual effects**, all under a single master switch.
+Every one has its own toggle under **Visual effects**, all under a single master switch. **Old Burn and Infection Effects** (off by default, needs a reload) brings back the old outline glow for those two.
 
 <br clear="right"/>
 
 <img align="right" src="../img/fs-lowquality.png" width="45%"/>
 
-**Low-Quality Status FX** swaps the heaviest effects, Danger Zone, Core Power, and Jammed, for cheap outline versions. The glow and bloom filters they normally use are GPU-hungry.
+**Low-Quality Status FX** swaps the heaviest effects (Danger Zone, Core Power, and Jammed) for cheap outline versions. The glow and bloom filters they normally use are GPU-hungry.
 
 **Remove Statuses on Death** clears a token's statuses when its structure hits 0.
 
@@ -65,11 +66,18 @@ Corner marks are drawn on the footprint of tokens with **Guardian** or **Bulwark
 
 Two cues make height readable from straight above: one drawn on the tokens, one on the terrain.
 
-**Ground shadow strength** (**`tokenGroundShadowOpacity`**, default 0 = off) casts each token's own silhouette on the ground, thrown further and blurred softer the higher it stands. A token resting on whatever is beneath it casts nothing, so a shadow always means "this is above the ground it sits on". Solid terrain counts as ground, so a mech standing on a plateau casts none until it leaves it. **Ground shadow distance** (**`tokenGroundShadowThrow`**, 9) is the pixels of offset per grid cell of elevation on a grid of 100.
+**Ground shadow strength** (**`tokenGroundShadowOpacity`**, default 0 = off) casts each token's own silhouette on the ground, thrown further and blurred softer the higher it stands. A token resting on whatever is beneath it casts nothing, so a shadow always means "this is above the ground it sits on". Solid terrain counts as ground, so a mech standing on a plateau casts none until it leaves the plateau.
 
-On the terrain side, [my Terrain Height Tools fork](https://github.com/Agraael/FoundryVTT-Terrain-Height-Tools) adds **Tanaka contours** (**`terrainTanaka`**), which draw every drop as a highlight where it faces the light and a shadow where it faces away, and **drop shading** (**`terrainDropBand`**), which shades the ground beside a drop, reaching further the further it falls. Both are off by default and both are marked experimental there.
+**Ground shadow distance** (**`tokenGroundShadowThrow`**, default 9) is the pixels of offset per grid cell of elevation on a grid of 100.
 
-The token shadow takes its direction from the fork's sun angle (**`terrainExtrusionSunAngle`**), falling back to 225 degrees when the module is absent, so the tokens and the terrain are lit from the same side.
+On the terrain side, [my Terrain Height Tools fork](https://github.com/Agraael/FoundryVTT-Terrain-Height-Tools) adds:
+
+- **Tanaka contours** (**`terrainTanaka`**), which draw every drop as a highlight where it faces the light and a shadow where it faces away.
+- **drop shading** (**`terrainDropBand`**), which shades the ground beside a drop, reaching further the further it falls.
+
+Both are off by default and both are marked experimental there.
+
+The token shadow takes its direction from the fork's sun angle (**`terrainExtrusionSunAngle`**), so the tokens and the terrain are lit from the same side. Without the fork, the shadow uses 225 degrees.
 
 ---
 
@@ -90,6 +98,25 @@ Toggle the lot with **Enable Action FX**. They need both Sequencer and Lancer We
 
 ---
 
+## Default weapon effects
+
+**Additional Default Weapon Effects** (`weaponFxDefaults`, Visual effects section, on by default) plays LA's own effects for basic attacks and for weapons Lancer Weapon FX has no effect for.
+
+- Needs Lancer Weapon FX active.
+- Only for attacks that used LA targeting.
+- Works with the free JB2A pack.
+- **Weapon FX Volume** (Weapon FX audio section, per client) sets the volume of their sounds.
+
+---
+
+## Dice So Nice
+
+**Dice So Nice: Dice First** (`diceFirst`, **Combat & Movement → Attacks**, off by default) plays the 3D dice at the roll, before automations and the chat card. It covers attacks, tech attacks, checks, damage, structure, overheat, burn checks and rerolls.
+
+**Dice First: Continue Early (ms)** (`diceFirstLead`, 1000 by default) lets automations and the card go on this long before the dice animation ends. 0 waits for the full animation.
+
+---
+
 ## Damage feedback
 
 <p align="center">
@@ -104,7 +131,7 @@ Armor-absorbed damage plays a clank instead, and overshield hits have their own 
 
 ## JB2A free-pack fallback
 
-Many of the action animations use JB2A. If you only have the free pack, the module substitutes free-pack equivalents (tinting them to match) so the effects still play instead of erroring on a missing asset.
+Many of the action animations use JB2A. If you only have the free pack, the module substitutes free-pack equivalents (tinting them to match) so the effects still play instead of failing on a missing asset.
 
 **`debugForceJb2aFree`** forces that path even when the Patreon pack is installed.
 
@@ -116,7 +143,7 @@ Many of the action animations use JB2A. If you only have the free pack, the modu
 
 Most things at the table make a sound: HUD clicks, token hover / select / target, damage by type, stat changes, action FX, and wreck explosions.
 
-Each family has a master volume, and every event inside it can be muted on its own, click a toggle to preview it.
+Each family has a master volume, and every event inside it can be muted on its own. Click the speaker icon next to an event to preview it.
 
 <br clear="right"/>
 

@@ -1,4 +1,5 @@
 import { MODULE_ID } from './constants.js';
+import { updateRouted } from './routed-update.js';
 
 /**
  * Read one of this module's flags off a Document.
@@ -23,7 +24,16 @@ export function getLAFlag(doc, key, fallback)
  */
 export function setLAFlag(doc, key, value)
 {
-    return doc?.setFlag?.(MODULE_ID, key, value);
+    if (!doc?.setFlag)
+        return undefined;
+    if (!needsGMWrite(doc))
+        return doc.setFlag(MODULE_ID, key, value);
+    return updateRouted(doc, { flags: { [MODULE_ID]: { [key]: value } } });
+}
+
+function needsGMWrite(doc)
+{
+    return !game.user.isGM && !doc.isOwner && !!game.users.activeGM;
 }
 
 /**
@@ -34,7 +44,14 @@ export function setLAFlag(doc, key, value)
  */
 export function unsetLAFlag(doc, key)
 {
-    return doc?.unsetFlag?.(MODULE_ID, key);
+    if (!doc?.unsetFlag)
+        return undefined;
+    if (!needsGMWrite(doc))
+        return doc.unsetFlag(MODULE_ID, key);
+
+    const head = key.split('.');
+    const tail = `-=${head.pop()}`;
+    return updateRouted(doc, { [['flags', MODULE_ID, ...head, tail].join('.')]: null });
 }
 
 /**
@@ -46,6 +63,25 @@ export function unsetLAFlag(doc, key)
 export function getLAFlags(source)
 {
     return source?.flags?.[MODULE_ID];
+}
+
+export const MOVE_TRACKING_FLAG_KEYS = ['moveHistory', 'movementCap'];
+
+const _moveTrackingKeys = new Set(MOVE_TRACKING_FLAG_KEYS.flatMap(key => [key, `-=${key}`]));
+
+export function touchesFlagsBesidesMoveTracking(change, ownOnly = false)
+{
+    const flags = change?.flags;
+    if (!flags)
+        return false;
+    return Object.keys(flags).some(namespace =>
+    {
+        if (namespace !== MODULE_ID)
+            return !ownOnly;
+
+        const own = flags[namespace];
+        return !own || typeof own !== 'object' || Object.keys(own).some(key => !_moveTrackingKeys.has(key));
+    });
 }
 
 export const FlagsAPI = { getLAFlag, setLAFlag, unsetLAFlag, getLAFlags };

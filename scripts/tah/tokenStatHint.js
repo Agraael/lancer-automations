@@ -43,6 +43,7 @@ const LABEL_ACTOR = 'actor';   // always show the token name
 const LABEL_SCAN = 'scan';     // tied to scan: name if scanned, "UNKNOWN" otherwise
 
 const SYS = 'systems/lancer/assets/icons/white';
+
 const ICON = {
     armor:    `${SYS}/shield_outline.svg`,
     evasion:  `${SYS}/evasion.svg`,
@@ -58,6 +59,11 @@ const ICON = {
 const ANCHOR_GAP = 12;
 const SLIDE_OFFSET = 28;
 const DOCK_MARGIN = 8;
+const DOCK_BOTTOM_GAP = 12;
+const TERRAIN_GAP = 6;
+const DOCK_TRANSITION_MS = 220;
+const PLAYERS_FOLD_CLASS = 'la-stat-dock-fold';
+const PLAYERS_FOLD_LISTS = '#players #players-active > .players-list';
 const PLATE_NAME_MIN_PX = 11;
 const PLATE_PAN_DELAY_MS = 700;
 const PLATE_PAN_HOLD_MS = 1000;
@@ -85,15 +91,18 @@ function isEnabled()
 {
     return getModuleSetting(SETTING_ENABLED);
 }
+
 function getDelayMs()
 {
     const raw = Number(getModuleSetting(SETTING_DELAY_MS));
     return Number.isFinite(raw) && raw >= 0 ? raw : 500;
 }
+
 function isDocked()
 {
     return getModuleSetting(SETTING_PLACEMENT, 'docked') === 'docked';
 }
+
 function syncDockedClass()
 {
     const docked = isEnabled() === true && isDocked();
@@ -101,24 +110,30 @@ function syncDockedClass()
     if (docked)
         ensureStyleSheet();
 }
+
 function getHintScale()
 {
     const raw = Number(getModuleSetting(SETTING_SCALE));
     const userScale = Number.isFinite(raw) && raw > 0 ? raw : 1;
+
     if (getModuleSetting(SETTING_PLACEMENT, 'docked') !== 'zoom')
         return userScale;
+
     const zoom = canvas?.stage?.scale?.x || 1;
     const gridPx = canvas?.dimensions?.size ?? REF_GRID_SIZE;
     return userScale * zoom * gridPx / REF_GRID_SIZE;
 }
+
 function showForControlled()
 {
     return getModuleSetting(SETTING_SHOW_CONTROLLED) !== false;
 }
+
 function isCombatOnly()
 {
     return getModuleSetting(SETTING_COMBAT_ONLY) === true;
 }
+
 function getLabelMode()
 {
     const raw = getModuleSetting(SETTING_LABEL_MODE);
@@ -126,6 +141,7 @@ function getLabelMode()
         return raw;
     return LABEL_SCAN;
 }
+
 // Per-token tri-state override ('on'/'off'), null = use the global setting.
 function _hintFlagTriState(tokenDoc, key)
 {
@@ -136,16 +152,19 @@ function _hintFlagTriState(tokenDoc, key)
         return false;
     return null;
 }
+
 export function getUnknownLabel(tokenDoc)
 {
     const perToken = getLAFlag(tokenDoc,'statHintUnknownLabel');
     if (typeof perToken === 'string' && perToken.trim().length > 0)
         return perToken;
+
     const raw = getModuleSetting(SETTING_UNKNOWN_LABEL);
     if (typeof raw === 'string' && raw.trim().length > 0)
         return raw;
     return 'UNKNOWN';
 }
+
 function hideClassWhenUnknown(tokenDoc)
 {
     const override = _hintFlagTriState(tokenDoc, 'statHintHideClass');
@@ -153,10 +172,12 @@ function hideClassWhenUnknown(tokenDoc)
         return override;
     return getModuleSetting(SETTING_HIDE_CLASS_UNKNOWN) === true;
 }
+
 function isBurnEnabled()
 {
     return getModuleSetting('enableBurnIntegration') !== false;
 }
+
 function isInfectionEnabled()
 {
     return getModuleSetting('enableInfectionDamageIntegration') === true;
@@ -168,12 +189,16 @@ function isScannedByUser(actor, user)
         return false;
     if (isScannedByAll(actor))
         return true;
+
     const key = `${actor.uuid}|${user.id}`;
     const memo = SCANNED_MEMO.get(key);
     const now = Date.now();
+
     if (memo && now - memo.at < SCAN_MEMO_MS)
         return memo.value;
+
     let result = false;
+
     try
     {
         result = isActorScannedForUser(actor, user);
@@ -182,13 +207,16 @@ function isScannedByUser(actor, user)
     {
         result = false;
     }
+
     SCANNED_MEMO.set(key, { at: now, value: result });
     return result;
 }
+
 function resolveViewMode(actor)
 {
     if (game.user.isGM)
         return 'gm';
+
     try
     {
         if (actor?.testUserPermission?.(game.user, 'OBSERVER'))
@@ -196,6 +224,7 @@ function resolveViewMode(actor)
     }
     catch
     { /* ignore */ }
+
     if (isScannedByUser(actor, game.user))
         return 'scanned';
     return 'unknown';
@@ -224,6 +253,7 @@ function masksCurrentStats(actor, mode, tokenDoc)
         return false;
     if (mode === 'scanned' && !getModuleSetting(SETTING_HIDE_CURRENT_FROM_ALLIES) && isActorAllyOfUser(actor, game.user))
         return false;
+
     const override = _hintFlagTriState(tokenDoc, 'statHintHideCurrent');
     if (override !== null)
         return override;
@@ -250,11 +280,13 @@ function effectiveHpMax(actor)
     const sys = actor?.system;
     if (!sys)
         return 0;
+
     const max = sys.hp?.max ?? 0;
     const val = Math.max(0, sys.hp?.value ?? 0);
     const overshieldVal = Math.max(0, sys.overshield?.value ?? 0);
     return Math.max(max, val, overshieldVal);
 }
+
 export function getStatsForActor(actor)
 {
     const sys = actor?.system ?? {};
@@ -303,28 +335,34 @@ function ocColorCss(value, max)
         return '#cccccc';
     return cssHex(overchargeColor(value, max));
 }
+
 import { escapeHtml as esc, signedNumber as signed } from "../tools/string-utils.js";
 
 function svgIcon(url, color = '#fff')
 {
     return `<img class="la-stat-hint-icon" src="${url}" style="filter: brightness(0) saturate(100%) invert(1);" data-color="${esc(color)}">`;
 }
+
 function cciIcon(name, color)
 {
     return `<i class="cci ${name}" style="color:${esc(color)};font-size:18px;line-height:1;"></i>`;
 }
+
 function glyph(ch, color, size = 16)
 {
     return `<span class="la-stat-hint-glyph" style="color:${esc(color)};font-size:${size}px;line-height:1;">${esc(ch)}</span>`;
 }
+
 function mdi(name, color)
 {
     return `<i class="mdi ${name}" style="color:${esc(color)};font-size:18px;line-height:1;"></i>`;
 }
+
 function cell(iconHtml, value, color = '#ddd')
 {
     return `<span class="la-stat-hint-cell">${iconHtml}<span class="la-stat-hint-val" style="color:${esc(color)};">${esc(value)}</span></span>`;
 }
+
 function haseChipCell(letter, value, chipClass = '')
 {
     return cell(`<i class="la-hase-chip${chipClass}">${letter}</i>`, signed(value), haseValueColor(value));
@@ -334,6 +372,7 @@ function getActorSubtitleText(actor)
 {
     if (!actor)
         return '';
+
     if (actor.type === 'npc')
     {
         try
@@ -341,6 +380,7 @@ function getActorSubtitleText(actor)
             const cls = actor.items?.find?.(item => item.is_npc_class?.());
             const templates = actor.items?.filter?.(item => item.is_npc_template?.()) ?? [];
             const parts = [];
+
             if (cls?.name)
                 parts.push(cls.name);
             if (templates.length > 0)
@@ -349,8 +389,10 @@ function getActorSubtitleText(actor)
         }
         catch
         { /* ignore */ }
+
         return '';
     }
+
     if (actor.type === 'mech')
         return actor.system?.loadout?.frame?.value?.name ?? '';
     return '';
@@ -395,6 +437,7 @@ function buildHeaderHtml(token, mode, titleSuffixHtml = '')
         let unknownSub = '';
         let unknownInline = '';
         const subText = getActorSubtitleText(actor);
+
         if (subText && !hideClassWhenUnknown(tokenDoc))
         {
             if (actor?.type === 'mech')
@@ -402,23 +445,28 @@ function buildHeaderHtml(token, mode, titleSuffixHtml = '')
             else
                 unknownSub = `<div class="la-stat-hint-subtitle">${esc(subText)}</div>`;
         }
+
         return `<div class="la-stat-hint-header la-unknown"><div class="la-stat-hint-title">${unknownTier}<s class="horus--subtle" style="opacity:0.85;color:#e50000;text-decoration:none;">${esc(String(label).toUpperCase())}</s>${unknownInline}</div>${unknownSub}</div>`;
     }
 
     let subtitle = '';
+
     if (isNpc)
     {
         const subText = getActorSubtitleText(actor);
         if (subText)
             subtitle = `<div class="la-stat-hint-subtitle">${esc(subText)}</div>`;
     }
+
     let titleExtra = '';
+
     if (actor?.type === 'mech')
     {
         const frameName = getActorSubtitleText(actor);
         if (frameName)
             titleExtra = `<span class="la-stat-hint-frame">${esc(frameName)}</span>`;
     }
+
     return `<div class="la-stat-hint-header"><div class="la-stat-hint-title">${tierBadge}<span class="la-stat-hint-name">${esc(String(label).toUpperCase())}</span>${titleExtra}${titleSuffixHtml}</div>${subtitle}</div>`;
 }
 
@@ -433,36 +481,44 @@ export function buildRevealRowsHtml(actor, stats, { maskCurrent = false, omitCom
 
     {
         const parts = [];
+
         if (stats.structMax > 0)
         {
             parts.push(cell(cciIcon('cci-structure', '#e8d060'),
                 `${stats.structVal}/${stats.structMax}`, '#e8d060'));
         }
+
         const hpFull = stats.hpNominalMax || stats.hpMax;
         const hpColor = maskCurrent ? hpColorCss(hpFull, hpFull) : hpColorCss(stats.hpVal, hpFull);
         parts.push(cell(glyph('♥', hpColor, 16), maskCurrent ? `?/${stats.hpNominalMax}` : `${stats.hpVal}/${stats.hpNominalMax}`, hpColor));
+
         if (burnOn && !omitCombatState)
         {
             const burnCol = stats.burn > 0 ? '#d74242' : dimColor;
             parts.push(cell(cciIcon('cci-burn', burnCol), String(stats.burn), burnCol));
         }
+
         if (isMechOrNpc)
             parts.push(cell(svgIcon(ICON.armor), String(stats.armor)));
+
         if (!omitCombatState)
         {
             const overshieldColor = stats.overshield > 0 ? '#60a5fa' : dimColor;
             parts.push(cell(mdi('mdi-hexagon-multiple-outline', overshieldColor), String(stats.overshield), overshieldColor));
         }
+
         rows.push(parts.join(''));
     }
 
     {
         const parts = [];
+
         if (stats.stressMax > 0 && stats.heatMax > 0)
         {
             parts.push(cell(cciIcon('cci-reactor', '#e07830'),
                 `${stats.stressVal}/${stats.stressMax}`, '#e07830'));
         }
+
         if (stats.heatMax > 0)
         {
             const heatColor = maskCurrent ? heatColorCss(0, stats.heatMax) : heatColorCss(stats.heatVal, stats.heatMax);
@@ -473,17 +529,20 @@ export function buildRevealRowsHtml(actor, stats, { maskCurrent = false, omitCom
             parts.push(cell(mdi('mdi-brain', '#d9b800'),
                 `${stats.pilotStressVal}/${stats.pilotStressMax}`, '#d9b800'));
         }
+
         if (stats.type === 'pilot' && stats.hasBond && stats.pilotXpMax > 0)
         {
             const xpColor = (maskCurrent || stats.pilotXpVal > 0) ? _bondXpColor(actor) : dimColor;
             parts.push(cell(mdi('mdi-head-cog-outline', xpColor),
                 maskCurrent ? `?/${stats.pilotXpMax}` : `${stats.pilotXpVal}/${stats.pilotXpMax}`, xpColor));
         }
+
         if (infOn && !omitCombatState)
         {
             const infectionColor = stats.infection > 0 ? '#1a8a3a' : dimColor;
             parts.push(cell(glyph('☣', infectionColor, 16), String(stats.infection), infectionColor));
         }
+
         if (stats.type !== 'deployable' && !omitCombatState)
         {
             const reactionColor = maskCurrent ? '#a855f7' : (stats.reaction ? '#a855f7' : dimColor);
@@ -491,6 +550,7 @@ export function buildRevealRowsHtml(actor, stats, { maskCurrent = false, omitCom
             parts.push(cell(`<img class="la-stat-hint-icon" src="${ICON.reaction}" style="filter:brightness(0) saturate(100%) invert(1);opacity:${reactionOpacity};">`,
                 maskCurrent ? '?' : stats.reactionText, reactionColor));
         }
+
         if (parts.length)
             rows.push(parts.join(''));
     }
@@ -504,6 +564,7 @@ export function buildRevealRowsHtml(actor, stats, { maskCurrent = false, omitCom
             cell(svgIcon(ICON.edef),    String(stats.edef)),
             cell(svgIcon(ICON.sensors), String(stats.sensors)),
         ];
+
         if (stats.type === 'npc')
             parts.push(cell(svgIcon(ICON.save), signed(stats.save)));
         rows.push(parts.join(''));
@@ -512,28 +573,35 @@ export function buildRevealRowsHtml(actor, stats, { maskCurrent = false, omitCom
     if (stats.type === 'mech')
     {
         const parts = [cell(svgIcon(ICON.save), signed(stats.save))];
+
         const ocSeq = typeof stats.ocSequence === 'string'
             ? stats.ocSequence.split(',').map(step => step.trim())
             : [];
+
         if (ocSeq.length > 0)
         {
             const ocLabel = maskCurrent ? '?' : shortOverchargeTerm(ocSeq[Math.min(stats.overcharge, ocSeq.length - 1)] ?? '—');
             const ocCol = maskCurrent ? ocColorCss(0, Math.max(1, ocSeq.length - 1)) : ocColorCss(stats.overcharge, Math.max(1, ocSeq.length - 1));
             parts.push(cell(cciIcon('cci-overcharge', ocCol), String(ocLabel), ocCol));
         }
+
         if (stats.hasRepairs)
         {
             const repairsColor = maskCurrent ? REPAIR_COLOR_CSS : (stats.repairs > 0 ? REPAIR_COLOR_CSS : '#555');
+
             const repairsLabel = maskCurrent
                 ? (stats.repairsMax > 0 ? `?/${stats.repairsMax}` : '?')
                 : (stats.repairsMax > 0 ? `${stats.repairs}/${stats.repairsMax}` : String(stats.repairs));
+
             parts.push(cell(svgIcon(ICON.repair), repairsLabel, repairsColor));
         }
+
         if (stats.core.hasCore)
         {
             const coreShown = corePowerDisplay(maskCurrent ? { charged: true, active: false } : stats.core);
             parts.push(cell(svgIcon(ICON.corePwr), maskCurrent ? '?' : coreShown.label, coreShown.color));
         }
+
         rows.push(parts.join(''));
     }
 
@@ -562,16 +630,19 @@ export function buildTwoZoneStatsHtml(actor, stats, { maskCurrent = false, omitC
     const vitals = [];
     if (stats.structMax > 0)
         vitals.push(cell(cciIcon('cci-structure', '#e8d060'), `${stats.structVal}/${stats.structMax}`, '#e8d060'));
+
     const hpFull = stats.hpNominalMax || stats.hpMax;
     const hpColor = maskCurrent ? hpColorCss(hpFull, hpFull) : hpColorCss(stats.hpVal, hpFull);
     vitals.push(cell(glyph('♥', hpColor, 16), maskCurrent ? `?/${stats.hpNominalMax}` : `${stats.hpVal}/${stats.hpNominalMax}`, hpColor));
     if (stats.stressMax > 0 && stats.heatMax > 0)
         vitals.push(cell(cciIcon('cci-reactor', '#e07830'), `${stats.stressVal}/${stats.stressMax}`, '#e07830'));
+
     if (stats.heatMax > 0)
     {
         const heatColor = maskCurrent ? heatColorCss(0, stats.heatMax) : heatColorCss(stats.heatVal, stats.heatMax);
         vitals.push(cell(glyph('🌡', heatColor, 16), maskCurrent ? `?/${stats.heatMax}` : `${stats.heatVal}/${stats.heatMax}`, heatColor));
     }
+
     if (!omitCombatState)
     {
         if (isBurnEnabled())
@@ -579,13 +650,16 @@ export function buildTwoZoneStatsHtml(actor, stats, { maskCurrent = false, omitC
             const burnCol = stats.burn > 0 ? '#d74242' : dimColor;
             vitals.push(cell(cciIcon('cci-burn', burnCol), String(stats.burn), burnCol));
         }
+
         const overshieldColor = stats.overshield > 0 ? '#60a5fa' : dimColor;
         vitals.push(cell(mdi('mdi-hexagon-multiple-outline', overshieldColor), String(stats.overshield), overshieldColor));
+
         if (isInfectionEnabled())
         {
             const infectionColor = stats.infection > 0 ? '#1a8a3a' : dimColor;
             vitals.push(cell(glyph('☣', infectionColor, 16), String(stats.infection), infectionColor));
         }
+
         const reactionColor = maskCurrent ? '#a855f7' : (stats.reaction ? '#a855f7' : dimColor);
         const reactionOpacity = maskCurrent ? 1 : (stats.reaction ? 1 : 0.4);
         vitals.push(cell(`<img class="la-stat-hint-icon" src="${ICON.reaction}" style="filter:brightness(0) saturate(100%) invert(1);opacity:${reactionOpacity};">`,
@@ -600,28 +674,34 @@ export function buildTwoZoneStatsHtml(actor, stats, { maskCurrent = false, omitC
         cell(svgIcon(ICON.sensors), String(stats.sensors)),
         cell(svgIcon(ICON.save), signed(stats.save)),
     ];
+
     if (stats.type === 'mech')
     {
         const ocSeq = typeof stats.ocSequence === 'string'
             ? stats.ocSequence.split(',').map(step => step.trim())
             : [];
+
         if (ocSeq.length > 0)
         {
             const ocLabel = maskCurrent ? '?' : shortOverchargeTerm(ocSeq[Math.min(stats.overcharge, ocSeq.length - 1)] ?? '—');
             const ocCol = maskCurrent ? ocColorCss(0, Math.max(1, ocSeq.length - 1)) : ocColorCss(stats.overcharge, Math.max(1, ocSeq.length - 1));
             sheet.push(cell(cciIcon('cci-overcharge', ocCol), String(ocLabel), ocCol));
         }
+
         if (stats.hasRepairs)
         {
             const repairsColor = maskCurrent ? REPAIR_COLOR_CSS : (stats.repairs > 0 ? REPAIR_COLOR_CSS : '#555');
+
             const repairsLabel = maskCurrent
                 ? (stats.repairsMax > 0 ? `?/${stats.repairsMax}` : '?')
                 : (stats.repairsMax > 0 ? `${stats.repairs}/${stats.repairsMax}` : String(stats.repairs));
+
             sheet.push(cell(svgIcon(ICON.repair), repairsLabel, repairsColor));
         }
     }
 
     let haseHtml = '';
+
     if (showHase)
     {
         const parts = [
@@ -630,6 +710,7 @@ export function buildTwoZoneStatsHtml(actor, stats, { maskCurrent = false, omitC
             haseChipCell('S', sys.sys ?? 0),
             haseChipCell('E', sys.eng ?? 0),
         ];
+
         // The battle log has no fourth line, so grit rides inline there.
         if (stats.type === 'mech' && omitCombatState)
             parts.push(haseChipCell('G', sys.grit ?? 0, ' la-grit'));
@@ -637,16 +718,19 @@ export function buildTwoZoneStatsHtml(actor, stats, { maskCurrent = false, omitC
     }
 
     let extraLineHtml = '';
+
     if (stats.type === 'mech' && !omitCombatState)
     {
         const parts = [];
         if (showHase)
             parts.push(haseChipCell('G', sys.grit ?? 0, ' la-grit'));
+
         if (stats.core.hasCore)
         {
             const coreShown = corePowerDisplay(maskCurrent ? { charged: true, active: false } : stats.core);
             parts.push(cell(svgIcon(ICON.corePwr), maskCurrent ? '?' : coreShown.label, coreShown.color));
         }
+
         if (parts.length)
             extraLineHtml = `<div class="la-stat-hint-extraline">${parts.join('')}</div>`;
     }
@@ -668,45 +752,55 @@ function buildDamagedRowsHtml(actor, stats, { maskCurrent = false } = {})
 
     {
         const parts = [];
+
         if (stats.structMax > 0)
         {
             parts.push(cell(cciIcon('cci-structure', '#e8d060'),
                 `${stats.structVal}/${stats.structMax}`, '#e8d060'));
         }
+
         if (!maskCurrent && stats.hpNominalMax > 0 && stats.hpVal < stats.hpNominalMax)
         {
             parts.push(cell(glyph('♥', '#d74242', 16),
                 `-${stats.hpNominalMax - stats.hpVal}`, '#d74242'));
         }
+
         if (burnOn)
         {
             const burnCol = stats.burn > 0 ? '#d74242' : dimColor;
             parts.push(cell(cciIcon('cci-burn', burnCol), String(stats.burn), burnCol));
         }
+
         const osCol = stats.overshield > 0 ? '#60a5fa' : dimColor;
         parts.push(cell(mdi('mdi-hexagon-multiple-outline', osCol), String(stats.overshield), osCol));
         rows.push(parts.join(''));
     }
+
     {
         const parts = [];
+
         if (stats.stressMax > 0 && stats.heatMax > 0)
         {
             parts.push(cell(cciIcon('cci-reactor', '#e07830'),
                 `${stats.stressVal}/${stats.stressMax}`, '#e07830'));
         }
+
         if (!maskCurrent && stats.heatMax > 0 && stats.heatVal > 0)
         {
             parts.push(cell(glyph('🌡', '#ff8a00', 16),
                 `+${stats.heatVal}`, '#ff8a00'));
         }
+
         if (infOn)
         {
             const infCol = stats.infection > 0 ? '#1a8a3a' : dimColor;
             parts.push(cell(glyph('☣', infCol, 16), String(stats.infection), infCol));
         }
+
         if (parts.length)
             rows.push(parts.join(''));
     }
+
     return rows.map(rowHtml => `<div class="la-stat-hint-row">${rowHtml}</div>`).join('');
 }
 
@@ -715,6 +809,7 @@ export function ensureStyleSheet()
     if (_styleInjected)
         return;
     _styleInjected = true;
+
     const css = `
 .la-stat-hint-popup {
     position: fixed;
@@ -1088,7 +1183,18 @@ body.la-stat-docked #tht_terrainStackViewer > .window-content {
 body.la-stat-dock-open #tht_terrainStackViewer {
     transform: translateY(calc(-1 * var(--la-stat-dock-lift, 0px)));
 }
+body.la-stat-docked #players #players-active > .players-list {
+    transition: max-height 220ms cubic-bezier(0.22, 1, 0.36, 1), margin 220ms cubic-bezier(0.22, 1, 0.36, 1), padding 220ms cubic-bezier(0.22, 1, 0.36, 1), opacity 160ms ease-out;
+}
+body.la-stat-dock-fold #players #players-active > .players-list {
+    max-height: 0 !important;
+    margin-block: 0 !important;
+    padding-block: 0 !important;
+    overflow: hidden !important;
+    opacity: 0;
+}
 `;
+
     const el = document.createElement('style');
     el.id = 'la-stat-hint-styles';
     el.textContent = css;
@@ -1101,12 +1207,15 @@ function buildExtrasHintHtml(token, actor, maskCurrent = false, compact = false)
     const tokenDoc = token?.document;
     if (!tokenDoc || !actor)
         return '';
+
     const extras = getLAFlag(tokenDoc,FLAG_EXTRAS) ?? [];
     if (!extras.length)
         return '';
+
     const visible = extras.filter(extra => !extra.hideInHint && _resolveExtraBarValues(actor, extra).ownerOk);
     if (!visible.length)
         return '';
+
     const rows = visible.map(extra =>
     {
         const { value, max } = _resolveExtraBarValues(actor, extra);
@@ -1115,12 +1224,15 @@ function buildExtrasHintHtml(token, actor, maskCurrent = false, compact = false)
         const masked = maskCurrent && entryVisibility === 'scanned';
         const color = extra.color?.stops?.[0] ?? '#cccccc';
         const iconSrc = extra.icon || 'modules/lancer-automations/icons/perspective-dice-two.svg';
+
         const iconHtml = /\.(svg|png|webp|jpe?g|gif)$/i.test(iconSrc)
             ? `<img class="la-stat-hint-extra-icon" src="${esc(iconSrc)}" alt="">`
             : `<i class="la-stat-hint-extra-icon ${esc(iconSrc)}"></i>`;
+
         const labelHtml = extra.showLabelInHint && extra.label
             ? `<span class="la-stat-hint-extra-label">${esc(extra.label)}</span>`
             : '';
+
         const valueHtml = `<span class="la-stat-hint-extra-val" style="color:${esc(color)};">${masked ? `?/${max}` : `${value}/${max}`}</span>`;
         if (compact)
             return `<span class="la-stat-plate-extra">${iconHtml}${valueHtml}${labelHtml}</span>`;
@@ -1130,6 +1242,7 @@ function buildExtrasHintHtml(token, actor, maskCurrent = false, compact = false)
             ${labelHtml}
         </div>`;
     }).join('');
+
     if (compact)
         return `<div class="la-stat-plate-fx"><div class="la-stat-plate-extras">${rows}</div></div>`;
     return `<div class="la-stat-hint-extras"><div class="la-stat-hint-sep"></div>${rows}</div>`;
@@ -1140,6 +1253,7 @@ function plateEffectsHtml(actor)
     const entries = effectTileEntries(actor);
     if (!entries.length)
         return '';
+
     const names = getModuleSetting(SETTING_EFFECTS_MODE) === 'names';
     return `<div class="la-stat-plate-fx">${effectTilesHtml(entries, { names })}</div>`;
 }
@@ -1167,7 +1281,7 @@ function plateBandHtml(token, unknown)
     const chip = rank ? `<span class="la-hud-token-rank"><span class="la-hud-rank-kind">${rank.kind}</span><span class="la-hud-rank-num">${rank.value}</span></span>` : '';
     const ownSide = actor?.type === 'pilot' || actor?.type === 'mech';
     const label = unknown ? unknownName(tokenDoc, actor) : displayName(tokenDoc, actor);
-    const nameClass = unknown && !ownSide && getLabelMode() === LABEL_SCAN ? ' class="la-stat-plate-nm la-stat-plate-unknown"' : ' class="la-stat-plate-nm"';
+    const nameClass = unknown && !ownSide && getLabelMode() === LABEL_SCAN ? ' class="la-stat-plate-nm la-stat-plate-unknown horus--subtle"' : ' class="la-stat-plate-nm"';
     const subText = hideClass ? '' : getActorSubtitleText(actor);
     const sub = subText ? `<span class="la-stat-plate-sub">${esc(subText)}</span>` : '';
     const nameText = esc(String(label).toUpperCase());
@@ -1180,6 +1294,7 @@ function plateStatsHtml(actor, stats, unknown, mask)
     const EMPTY = '<span></span>';
     const showStress = stats.stressMax > 0 && stats.heatMax > 0;
     const cols = [];
+
     if (stats.structMax > 0 || showStress)
     {
         cols.push({
@@ -1187,8 +1302,10 @@ function plateStatsHtml(actor, stats, unknown, mask)
             bottom: showStress ? statPipsHtml('cci-reactor', stats.stressVal, stats.stressMax, '#e07830') : '',
         });
     }
+
     const overshield = stats.overshield > 0 ? plateCell('#60a5fa', 'mdi mdi-hexagon-multiple-outline', stats.overshield) : '';
     const withShield = (hpHtml) => [hpHtml, overshield].filter(Boolean).join(SEP);
+
     if (unknown)
     {
         const hpLost = !mask && stats.hpNominalMax > 0 && stats.hpVal < stats.hpNominalMax;
@@ -1207,6 +1324,7 @@ function plateStatsHtml(actor, stats, unknown, mask)
         const hpCritical = !mask && hpFull > 0 && stats.hpVal * 10 <= hpFull;
         const hp = plateCell(hpColor, 'mdi mdi-heart', mask ? `?/${stats.hpNominalMax}` : `${stats.hpVal}/${stats.hpNominalMax}`, hpCritical ? 'la-stats-critical' : '');
         let bottom = '';
+
         if (stats.heatMax > 0)
         {
             const danger = !mask && isDangerZoneHeat(stats.heatVal, stats.heatMax);
@@ -1218,6 +1336,7 @@ function plateStatsHtml(actor, stats, unknown, mask)
         else if (stats.type === 'pilot' && stats.pilotStressMax > 0)
             bottom = plateCell(pilotStressColorCss(stats.pilotStressVal, stats.pilotStressMax), 'mdi mdi-brain', `${stats.pilotStressVal}/${stats.pilotStressMax}`);
         cols.push({ top: `<span class="la-stats-group">${withShield(hp)}</span>`, bottom, anchor: !!bottom });
+
         if (stats.type === 'mech' && typeof stats.ocSequence === 'string')
         {
             const ocSeq = stats.ocSequence.split(',').map(step => step.trim());
@@ -1232,23 +1351,30 @@ function plateStatsHtml(actor, stats, unknown, mask)
                 anchor: true,
             });
         }
+
         if (stats.type === 'pilot' && stats.hasBond && stats.pilotXpMax > 0)
         {
             const xpColor = mask || stats.pilotXpVal > 0 ? _bondXpColor(actor) : '#888';
             cols.push({ top: '', bottom: plateCell(xpColor, 'mdi mdi-head-cog-outline', mask ? `?/${stats.pilotXpMax}` : `${stats.pilotXpVal}/${stats.pilotXpMax}`), anchor: true });
         }
+
         const speed = stats.type !== 'deployable' ? plateCell('#aaa', 'mdi mdi-arrow-right-bold-hexagon-outline', stats.speed, 'la-stats-move') : '';
         const reaction = hasReaction(actor) ? plateCell(mask || stats.reaction ? '#a855f7' : '#aaa', 'cci cci-reaction', mask ? '?' : stats.reactionText, 'la-stats-reaction') : '';
+
         if (speed || reaction)
             cols.push({ top: speed, bottom: reaction });
     }
+
     const burn = isBurnEnabled() && stats.burn > 0 ? plateCell('#d74242', 'cci cci-burn', stats.burn) : '';
     const infection = isInfectionEnabled() && stats.infection > 0 ? plateCell('#1a8a3a', 'mdi mdi-biohazard', stats.infection) : '';
+
     if (burn || infection)
         cols.push({ top: burn, bottom: infection });
+
     const live = cols.filter(col => col.top || col.bottom);
     if (!live.length)
         return '';
+
     const folded = !live.some(col => col.anchor);
     const topRow = [];
     const bottomRow = [];
@@ -1258,18 +1384,22 @@ function plateStatsHtml(actor, stats, unknown, mask)
         {
             if (index > 0)
                 topRow.push(SEP);
+
             const parts = [col.top, col.bottom].filter(Boolean);
             topRow.push(parts.length > 1 ? `<span class="la-stats-group la-stat-plate-pair">${parts.join('')}</span>` : parts[0]);
             return;
         }
+
         if (index > 0)
         {
             topRow.push(col.top ? SEP : EMPTY);
             bottomRow.push(col.bottom ? SEP : EMPTY);
         }
+
         topRow.push(col.top || EMPTY);
         bottomRow.push(col.bottom || EMPTY);
     });
+
     const cells = folded ? topRow : [...topRow, ...bottomRow];
     return `<div class="la-stat-plate-stats"><div class="la-stats-grid" style="grid-template-columns:repeat(${topRow.length},auto);">${cells.join('')}</div></div>`;
 }
@@ -1279,17 +1409,20 @@ function plateDefenseHtml(stats, mask)
     const type = stats.type;
     const stat = (url, value) => `<span><img src="${url}" alt="">${esc(String(value))}</span>`;
     const parts = [stat(ICON.armor, stats.armor), stat(ICON.evasion, stats.evasion), stat(ICON.edef, stats.edef)];
+
     if (type === 'mech')
         parts.push(stat(ICON.techAtk, signed(stats.techAtk)));
     if (type !== 'pilot')
         parts.push(stat(ICON.save, stats.save));
     if (type === 'mech' || type === 'npc')
         parts.push(stat(ICON.sensors, stats.sensors));
+
     if (type === 'mech' && stats.core.hasCore)
     {
         const shown = corePowerDisplay(mask ? { charged: true, active: false } : stats.core);
         parts.push(`<span style="color:${shown.color};"><img src="${ICON.corePwr}" alt="">${mask ? '?' : shown.label}</span>`);
     }
+
     return `<div class="la-stat-plate-def">${parts.join('')}</div>`;
 }
 
@@ -1297,8 +1430,10 @@ function plateHaseHtml(actor, stats)
 {
     if (getModuleSetting(SETTING_SHOW_HASE) !== true || (stats.type !== 'mech' && stats.type !== 'npc'))
         return '';
+
     const sys = actor?.system ?? {};
     const parts = [haseChipCell('H', sys.hull ?? 0), haseChipCell('A', sys.agi ?? 0), haseChipCell('S', sys.sys ?? 0), haseChipCell('E', sys.eng ?? 0)];
+
     if (stats.type === 'mech')
         parts.push(haseChipCell('G', sys.grit ?? 0, ' la-grit'));
     return `<div class="la-stat-plate-def la-stat-plate-hase">${parts.join('')}</div>`;
@@ -1309,14 +1444,25 @@ function buildPopupDom(token)
     const actor = token.actor;
     if (!actor)
         return null;
+
     const mode = resolveViewMode(actor);
     const stats = getStatsForActor(actor);
     const maskCurrent = masksCurrentStats(actor, mode, token?.document ?? token);
 
-    let viewMode = mode;
+    const viewMode = mode === 'gm' || mode === 'scanned' ? mode : 'unknown';
+    const unknown = viewMode === 'unknown';
+    const docked = isDocked();
     let headerHtml;
     let rowsHtml = '';
-    if (mode === 'gm' || mode === 'scanned')
+    let bodyClass = 'la-stat-hint-body';
+
+    if (docked)
+    {
+        headerHtml = plateBandHtml(token, unknown);
+        rowsHtml = plateStatsHtml(actor, stats, unknown, maskCurrent) + (unknown ? '' : plateDefenseHtml(stats, maskCurrent) + plateHaseHtml(actor, stats)) + plateEffectsHtml(actor);
+        bodyClass += ' la-stat-plate';
+    }
+    else if (!unknown)
     {
         const isMechOrNpc = stats.type === 'mech' || stats.type === 'npc';
         headerHtml = buildHeaderHtml(token, 'reveal');
@@ -1327,28 +1473,22 @@ function buildPopupDom(token)
     }
     else
     {
-        viewMode = 'unknown';
         headerHtml = buildHeaderHtml(token, 'unknown-damaged');
         rowsHtml = `<div class="la-stat-hint-rows">${buildDamagedRowsHtml(actor, stats, { maskCurrent })}</div>`;
     }
-    let bodyClass = 'la-stat-hint-body';
-    if (isDocked())
-    {
-        const unknown = viewMode === 'unknown';
-        headerHtml = plateBandHtml(token, unknown);
-        rowsHtml = plateStatsHtml(actor, stats, unknown, maskCurrent) + (unknown ? '' : plateDefenseHtml(stats, maskCurrent) + plateHaseHtml(actor, stats)) + plateEffectsHtml(actor);
-        bodyClass += ' la-stat-plate';
-    }
-    const extrasHtml = buildExtrasHintHtml(token, actor, maskCurrent, isDocked());
+
+    const extrasHtml = buildExtrasHintHtml(token, actor, maskCurrent, docked);
 
     const popup = document.createElement('div');
     popup.className = 'la-stat-hint-popup';
     const anim = document.createElement('div');
     anim.className = 'la-stat-hint-anim';
     const disp = getTokenDispositionInfo(token);
+
     const stripeHtml = disp
         ? `<div class="la-stat-hint-stripe" style="background:${esc(disp.color)};" title="${esc(disp.label)}"></div>`
         : '';
+
     anim.innerHTML = `<div class="la-stat-hint-inner">${stripeHtml}<div class="${bodyClass}">${headerHtml}${rowsHtml}${extrasHtml}</div></div>`;
     popup.appendChild(anim);
     popup.dataset.viewMode = viewMode;
@@ -1361,11 +1501,13 @@ function usableScreenBounds()
     const viewW = window.innerWidth;
     let leftEdge = 0;
     let rightEdge = viewW;
+
     try
     {
         const controls = document.getElementById('controls')
             || document.querySelector('#ui-left')
             || document.querySelector('#scene-controls');
+
         if (controls)
         {
             const controlsRect = controls.getBoundingClientRect();
@@ -1375,11 +1517,13 @@ function usableScreenBounds()
     }
     catch
     { /* ignore */ }
+
     try
     {
         const sidebar = document.getElementById('sidebar')
             || ui?.sidebar?.element
             || document.getElementById('ui-right');
+
         if (sidebar)
         {
             const sidebarRect = sidebar.getBoundingClientRect();
@@ -1389,6 +1533,7 @@ function usableScreenBounds()
     }
     catch
     { /* ignore */ }
+
     return { left: leftEdge, right: rightEdge, width: Math.max(0, rightEdge - leftEdge) };
 }
 
@@ -1396,6 +1541,7 @@ function tokenScreenRect(token)
 {
     if (!canvas?.stage || !canvas.app?.view || !token)
         return { left: 0, top: 0, right: 0, bottom: 0, w: 0, h: 0, cy: 0 };
+
     // toGlobal handles pivot/skew that plain stage.position+scale would miss.
     const tokenLocalX = token.x ?? 0;
     const tokenLocalY = token.y ?? 0;
@@ -1427,6 +1573,7 @@ function computePlaceRight(token, popupScreenW)
 {
     if (!canvas?.stage || !token)
         return true;
+
     const rect = tokenScreenRect(token);
     const bounds = usableScreenBounds();
     const gap = ANCHOR_GAP * getHintScale();
@@ -1434,6 +1581,7 @@ function computePlaceRight(token, popupScreenW)
     const leftSpace = rect.left - bounds.left;
     const rightAcceptable = rightSpace >= (popupScreenW / 2 + gap);
     const leftFits = leftSpace >= (popupScreenW + gap);
+
     if (rightAcceptable)
         return true;
     if (leftFits)
@@ -1441,43 +1589,118 @@ function computePlaceRight(token, popupScreenW)
     return true;
 }
 
-function liftTerrainViewer()
+function clearTerrainLift()
+{
+    const classes = document.body.classList;
+    if (classes.contains('la-stat-dock-open'))
+        classes.remove('la-stat-dock-open');
+}
+
+function setPlayersFold(fold)
+{
+    const lists = [...document.querySelectorAll(PLAYERS_FOLD_LISTS)];
+    let drop = 0;
+
+    if (fold)
+    {
+        for (const list of lists)
+        {
+            const style = getComputedStyle(list);
+            drop += list.getBoundingClientRect().height + (Number.parseFloat(style.marginTop) || 0) + (Number.parseFloat(style.marginBottom) || 0);
+        }
+    }
+
+    const classes = document.body.classList;
+    if (classes.contains(PLAYERS_FOLD_CLASS) === fold)
+        return drop;
+
+    for (const list of lists)
+    {
+        list.style.maxHeight = `${list.scrollHeight}px`;
+        list.style.overflow = 'hidden';
+    }
+
+    document.body.getBoundingClientRect();
+    classes.toggle(PLAYERS_FOLD_CLASS, fold);
+
+    if (!fold)
+    {
+        setTimeout(() =>
+        {
+            if (classes.contains(PLAYERS_FOLD_CLASS))
+                return;
+
+            for (const list of lists)
+            {
+                list.style.maxHeight = '';
+                list.style.overflow = '';
+            }
+        }, DOCK_TRANSITION_MS + 40);
+    }
+
+    return drop;
+}
+
+function clearDockOpen()
+{
+    clearTerrainLift();
+    setPlayersFold(false);
+}
+
+function terrainViewerBottom()
+{
+    const viewer = document.getElementById('tht_terrainStackViewer');
+    const viewerRect = viewer?.getBoundingClientRect();
+
+    if (!viewer || !viewerRect?.height)
+        return null;
+
+    const transform = getComputedStyle(viewer).transform;
+    const shift = transform && transform !== 'none' ? new DOMMatrixReadOnly(transform).m42 : 0;
+    return viewerRect.bottom - shift;
+}
+
+function liftTerrainViewer(pendingDrop = 0)
 {
     const body = document.body;
     const viewer = document.getElementById('tht_terrainStackViewer');
+
     if (!_popupEl || !viewer || !isDocked())
     {
-        body.classList.remove('la-stat-dock-open');
+        clearTerrainLift();
         return;
     }
-    const viewerRect = viewer.getBoundingClientRect();
-    const transform = getComputedStyle(viewer).transform;
-    const shift = transform && transform !== 'none' ? new DOMMatrixReadOnly(transform).m42 : 0;
-    const naturalBottom = viewerRect.height > 0 ? viewerRect.bottom - shift : (document.getElementById('players')?.getBoundingClientRect().top ?? 0);
-    const lift = Math.max(0, Math.ceil(naturalBottom - _popupEl.getBoundingClientRect().top + 6));
+
+    const naturalBottom = (terrainViewerBottom() ?? (document.getElementById('players')?.getBoundingClientRect().top ?? 0)) + pendingDrop;
+    const lift = Math.max(0, Math.ceil(naturalBottom - _popupEl.getBoundingClientRect().top + TERRAIN_GAP));
     body.style.setProperty('--la-stat-dock-lift', `${lift}px`);
     body.classList.toggle('la-stat-dock-open', lift > 0);
 }
 
 function placeDocked()
 {
+    const drop = setPlayersFold(true);
     const playersRect = document.getElementById('players')?.getBoundingClientRect();
     const left = playersRect?.width ? playersRect.left : DOCK_MARGIN;
-    let bottom = playersRect?.height ? playersRect.bottom : window.innerHeight - DOCK_MARGIN;
+    let bottom = playersRect?.height ? playersRect.top + drop - TERRAIN_GAP : window.innerHeight - DOCK_BOTTOM_GAP;
+    const height = _popupEl.offsetHeight || 0;
     const measureBar = document.getElementById('la-measure-toolbar');
+
     if (measureBar?.classList.contains('la-show'))
     {
         const barRect = measureBar.getBoundingClientRect();
         const dockRight = left + (_popupEl.offsetWidth || 0);
+
         if (left < barRect.right && dockRight > barRect.left)
             bottom = Math.min(bottom, barRect.top - DOCK_MARGIN);
     }
+
     const pixelRatio = window.devicePixelRatio || 1;
     const snap = (value) => Math.round(value * pixelRatio) / pixelRatio;
     _popupEl.style.left = `${snap(left)}px`;
-    _popupEl.style.top = `${snap(bottom - (_popupEl.offsetHeight || 0))}px`;
+    _popupEl.style.top = `${snap(bottom - height)}px`;
     _popupEl.style.setProperty('--la-hint-slide-from', `${-SLIDE_OFFSET}px`);
-    liftTerrainViewer();
+    liftTerrainViewer(drop);
 }
 
 function scaledPopupWidth(fallback)
@@ -1490,18 +1713,22 @@ function applyPosition(token)
 {
     if (!_popupEl || !token || token.destroyed)
         return;
+
     const hintScale = getHintScale();
     _popupEl.style.setProperty('--la-hint-scale', String(hintScale));
+
     if (isDocked())
     {
         placeDocked();
         return;
     }
+
     const rect = tokenScreenRect(token);
     const anchorX = _placeRight ? rect.right : rect.left;
     const anchorY = rect.cy;
     const popupW = _popupEl.offsetWidth || 0;
     const popupH = _popupEl.offsetHeight || 0;
+
     if (_placeRight)
     {
         _popupEl.style.left = `${anchorX + ANCHOR_GAP * hintScale}px`;
@@ -1523,6 +1750,7 @@ function clearDelay()
         clearTimeout(_delayTimer); _delayTimer = null;
     }
 }
+
 function clearOutTimer()
 {
     if (_outTimer)
@@ -1530,6 +1758,7 @@ function clearOutTimer()
         clearTimeout(_outTimer); _outTimer = null;
     }
 }
+
 function shouldShowHintFor(token)
 {
     if (!isEnabled())
@@ -1551,7 +1780,7 @@ function destroyPopup()
 {
     clearOutTimer();
     _stopTahWatch();
-    document.body.classList.remove('la-stat-dock-open');
+    clearDockOpen();
     if (_popupEl && _popupEl.parentNode)
         _popupEl.parentNode.removeChild(_popupEl);
     _popupEl = null;
@@ -1577,11 +1806,13 @@ function _startTahWatch()
 {
     if (_tahWatch)
         return;
+
     _tahWatch = (ev) =>
     {
         if (ev.target?.closest?.('#la-hud'))
             _hideOnTahEnter();
     };
+
     document.addEventListener('mouseover', _tahWatch, true);
 }
 
@@ -1597,6 +1828,7 @@ function _hideOnTahEnter()
 {
     if (_state === 'idle' || _state === 'out')
         return;
+
     if (_state === 'delay')
     {
         clearDelay();
@@ -1605,6 +1837,7 @@ function _hideOnTahEnter()
         _stopTahWatch();
         return;
     }
+
     _state = 'out';
     animateOut(() =>
     {
@@ -1614,6 +1847,7 @@ function _hideOnTahEnter()
             _currentTokenId = null;
             _currentToken = null;
         }
+
         _stopTahWatch();
     });
 }
@@ -1655,6 +1889,7 @@ function startHover(token)
     if (!shouldShowHintFor(token))
         return;
     clearDelay();
+
     if (_state === 'visible' && _currentTokenId && _currentTokenId !== token.id)
     {
         animateOut(() =>
@@ -1665,6 +1900,7 @@ function startHover(token)
         });
         return;
     }
+
     if ((_state === 'in' || _state === 'visible') && _currentTokenId === token.id)
         return;
     _currentTokenId = token.id;
@@ -1681,12 +1917,14 @@ function scheduleShow(token)
         _delayTimer = null;
         if (_currentTokenId !== token.id)
             return;
+
         if (!shouldShowHintFor(token))
         {
             _state = 'idle';
             _currentTokenId = null;
             return;
         }
+
         showFor(token);
     }, delay);
 }
@@ -1694,12 +1932,14 @@ function scheduleShow(token)
 function animateOut(done)
 {
     clearOutTimer();
+
     if (!_animEl || !_popupEl)
     {
         done?.(); return;
     }
+
     _animEl.classList.remove('la-show');
-    document.body.classList.remove('la-stat-dock-open');
+    clearDockOpen();
     _outTimer = setTimeout(() =>
     {
         _outTimer = null;
@@ -1713,18 +1953,21 @@ function endHover(token)
     if (_currentTokenId !== token?.id)
         return;
     clearDelay();
+
     if (_state === 'delay')
     {
         _state = 'idle';
         _currentTokenId = null;
         return;
     }
+
     if (!_popupEl)
     {
         _state = 'idle';
         _currentTokenId = null;
         return;
     }
+
     _state = 'out';
     playUiSound('details');
     animateOut(() =>
@@ -1743,7 +1986,9 @@ function fitPlateName()
     const name = _popupEl?.querySelector('.la-stat-plate-nm');
     if (!(name instanceof HTMLElement))
         return;
+
     let size = parseFloat(getComputedStyle(name).fontSize);
+
     while (name.scrollWidth > name.clientWidth && size > PLATE_NAME_MIN_PX)
     {
         size = Math.max(PLATE_NAME_MIN_PX, size - 0.5);
@@ -1755,23 +2000,28 @@ function panPlateName()
 {
     const name = _popupEl?.querySelector('.la-stat-plate-nm');
     const text = name?.firstElementChild;
+
     if (!(name instanceof HTMLElement) || !(text instanceof HTMLElement) || name.scrollWidth <= name.clientWidth)
         return;
     name.classList.add('la-panning');
     const overflow = text.offsetWidth - name.clientWidth;
+
     if (overflow <= 0)
     {
         name.classList.remove('la-panning');
         return;
     }
+
     const travel = Math.min(2000, Math.max(500, overflow * 20));
     const total = PLATE_PAN_DELAY_MS + travel + PLATE_PAN_HOLD_MS;
+
     const pan = text.animate([
         { transform: 'translateX(0)', offset: 0 },
         { transform: 'translateX(0)', offset: PLATE_PAN_DELAY_MS / total },
         { transform: `translateX(${-overflow}px)`, offset: (PLATE_PAN_DELAY_MS + travel) / total },
         { transform: `translateX(${-overflow}px)`, offset: 1 },
     ], { duration: total, iterations: 1, easing: 'linear' });
+
     pan.finished
         .catch(() => null)
         .then(() => name.classList.remove('la-panning'));
@@ -1781,23 +2031,28 @@ function rebuildIfVisible(actor)
 {
     if (!actor || _state !== 'visible' || !_popupEl || !_currentTokenId)
         return;
+
     const token = canvas?.tokens?.get(_currentTokenId);
     if (!token || token.actor?.id !== actor.id)
         return;
+
     const built = buildPopupDom(token);
     if (!built)
         return;
+
     // Preserve la-show so the swap doesn't replay the slide-in animation.
     const wasShown = _animEl.classList.contains('la-show');
     _popupEl.innerHTML = '';
     _popupEl.appendChild(built.anim);
     _animEl = built.anim;
     fitPlateName();
+
     if (wasShown)
     {
         void _animEl.offsetWidth;
         _animEl.classList.add('la-show');
     }
+
     _placeRight = computePlaceRight(token, scaledPopupWidth(200));
     applyPosition(token);
 }
@@ -1952,6 +2207,7 @@ export function initTokenStatHint()
     {
         if (_currentTokenId !== tokenDoc?.id)
             return;
+
         const token = canvas?.tokens?.get(tokenDoc.id);
         if (!token)
             return;
@@ -1994,6 +2250,7 @@ export function initTokenStatHint()
                 return;
             rebuildIfVisible(actor);
         });
+
         for (const hook of /** @type {const} */ (['createActiveEffect', 'updateActiveEffect', 'deleteActiveEffect']))
         {
             Hooks.on(hook, (effect) =>
@@ -2002,8 +2259,10 @@ export function initTokenStatHint()
                     rebuildIfVisible(effect?.parent);
             });
         }
+
         for (const hook of /** @type {const} */ (['createJournalEntry', 'updateJournalEntry', 'deleteJournalEntry']))
             Hooks.on(hook, () => SCANNED_MEMO.clear());
+
         for (const hook of /** @type {const} */ (['createSetting', 'updateSetting', 'deleteSetting']))
         {
             Hooks.on(hook, setting =>

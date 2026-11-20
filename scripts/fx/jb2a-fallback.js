@@ -47,7 +47,44 @@ const JB2A_FALLBACKS = {
     'jb2a.ui.success.green' : {src: ''},
     'jb2a.ui.failure.red' : {src: ''},
     'jb2a.ui.hit.blue': {src: ''},
-    'jb2a.template_circle.radar.loop.800px.001.pulse.purplered': {src: 'jb2a.template_circle.radar.loop.800px.001.pulse.greenpurple', tint: 0xff3030}
+    'jb2a.template_circle.radar.loop.800px.001.pulse.purplered': {src: 'jb2a.template_circle.radar.loop.800px.001.pulse.greenpurple', tint: 0xff3030},
+
+    'jb2a.template_cone_5e.lightning.01.complete.bluepurple.30ft': { src: 'jb2a.template_cone_5e.lightning.01.loop.bluepurple.30ft', duration: 1300, fadeOut: 300 },
+    'jb2a.template_cone_5e.001.001.orangeyellow.30ft': { src: 'jb2a.template_cone_5e.001.001.purplered.30ft', hue: 45 },
+    'jb2a.muzzle_flash.burst.01.yellow.0': { src: 'jb2a.muzzle_flash.single.01.yellow.1' },
+    'jb2a.bullet.Snipe.orange.15ft': { src: 'jb2a.bullet.Snipe.blue.15ft', hue: 185 },
+    'jb2a.bullet.Snipe.orange.30ft': { src: 'jb2a.bullet.Snipe.blue.30ft', hue: 185 },
+    'jb2a.bullet.Snipe.orange.60ft': { src: 'jb2a.bullet.Snipe.blue.60ft', hue: 185 },
+    'jb2a.bullet.Snipe.orange.90ft': { src: 'jb2a.bullet.Snipe.blue.90ft', hue: 185 },
+    'jb2a.ranged.beam.002.01.blue.05ft': { src: 'jb2a.ranged.beam.002.01.orange.05ft', hue: 185 },
+    'jb2a.ranged.beam.002.01.blue.15ft': { src: 'jb2a.ranged.beam.002.01.orange.15ft', hue: 185 },
+    'jb2a.ranged.beam.002.01.blue.30ft': { src: 'jb2a.ranged.beam.002.01.orange.30ft', hue: 185 },
+    'jb2a.ranged.beam.002.01.blue.60ft': { src: 'jb2a.ranged.beam.002.01.orange.60ft', hue: 185 },
+    'jb2a.ranged.beam.002.01.blue.90ft': { src: 'jb2a.ranged.beam.002.01.orange.90ft', hue: 185 },
+    'jb2a.explosion.04.orange': { src: 'jb2a.explosion.04.blue', hue: 185 },
+    'jb2a.explosion.shrapnel.bomb.01.grey': { src: 'jb2a.explosion.shrapnel.bomb.01.black' },
+    'jb2a.melee_generic.whirlwind.01.bluepurple.0': { src: 'jb2a.melee_generic.whirlwind.01.orange.0', hue: 205 },
+    'jb2a.melee_generic.slash.01.bluepurple.0': { src: 'jb2a.melee_generic.slash.01.orange.0', hue: 205 },
+    'jb2a.magic_missile.blue.05ft.0': { src: 'jb2a.magic_missile.purple.05ft.0', hue: -60 },
+    'jb2a.magic_missile.blue.15ft.0': { src: 'jb2a.magic_missile.purple.15ft.0', hue: -60 },
+    'jb2a.magic_missile.blue.30ft.0': { src: 'jb2a.magic_missile.purple.30ft.0', hue: -60 },
+    'jb2a.magic_missile.blue.60ft.0': { src: 'jb2a.magic_missile.purple.60ft.0', hue: -60 },
+    'jb2a.magic_missile.blue.05ft.1': { src: 'jb2a.magic_missile.purple.05ft.1', hue: -60 },
+    'jb2a.magic_missile.blue.15ft.1': { src: 'jb2a.magic_missile.purple.15ft.1', hue: -60 },
+    'jb2a.magic_missile.blue.30ft.1': { src: 'jb2a.magic_missile.purple.30ft.1', hue: -60 },
+    'jb2a.magic_missile.blue.60ft.1': { src: 'jb2a.magic_missile.purple.60ft.1', hue: -60 },
+    'jb2a.eldritch_blast.lightblue.05ft': { src: 'jb2a.eldritch_blast.purple.05ft', hue: -75 },
+    'jb2a.eldritch_blast.lightblue.15ft': { src: 'jb2a.eldritch_blast.purple.15ft', hue: -75 },
+    'jb2a.eldritch_blast.lightblue.30ft': { src: 'jb2a.eldritch_blast.purple.30ft', hue: -75 },
+    'jb2a.eldritch_blast.lightblue.60ft': { src: 'jb2a.eldritch_blast.purple.60ft', hue: -75 },
+    'jb2a.fire_bolt.blue.05ft': { src: 'jb2a.fire_bolt.orange.05ft', hue: 185 },
+    'jb2a.fire_bolt.blue.15ft': { src: 'jb2a.fire_bolt.orange.15ft', hue: 185 },
+    'jb2a.fire_bolt.blue.30ft': { src: 'jb2a.fire_bolt.orange.30ft', hue: 185 },
+    'jb2a.fire_bolt.blue.60ft': { src: 'jb2a.fire_bolt.orange.60ft', hue: 185 },
+    'jb2a.ranged_slash.instant.001.orangeyellow.15ft.0': { src: 'jb2a.ranged_slash.instant.001.blue.15ft.0', hue: 185 },
+    'jb2a.ranged_slash.instant.001.orangeyellow.30ft.0': { src: 'jb2a.ranged_slash.instant.001.blue.30ft.0', hue: 185 },
+    'jb2a.ranged_slash.instant.001.bluepurple.15ft.0': { src: 'jb2a.ranged_slash.instant.001.blue.15ft.0', hue: 20 },
+    'jb2a.ranged_slash.instant.001.bluepurple.30ft.0': { src: 'jb2a.ranged_slash.instant.001.blue.30ft.0', hue: 20 },
 };
 
 const PLACEHOLDER = 'modules/lancer-automations/FX/Debugempty.png';
@@ -71,6 +108,7 @@ function _existsInDatabase(id)
             return false;
         if (db.entryExists?.(id) === true)
             return true;
+
         const entry = db.getEntry?.(id);
         if (entry === false || entry == null || entry === "")
             return false;
@@ -94,7 +132,7 @@ export function resolveJb2a(id)
 
     const entry = JB2A_FALLBACKS[id] ?? _runtimeRegistry.get(id);
     if (entry)
-        return { src: entry.src ?? id, tint: entry.tint };
+        return { ...entry, src: entry.src ?? id };
 
     if (_existsInDatabase(id))
         return { src: id };
@@ -104,6 +142,7 @@ export function resolveJb2a(id)
         _warnedIds.add(id);
         console.warn(`lancer-automations | JB2A asset "${id}" missing from user's library, using placeholder. Register a fallback in scripts/fx/jb2a-fallback.js`);
     }
+
     _runtimeRegistry.set(id, { src: PLACEHOLDER });
     return { src: PLACEHOLDER };
 }
@@ -129,9 +168,11 @@ export function installJb2aHooks()
     try
     {
         const preloader = /** @type {any} */ (Sequencer.Preloader);
+
         if (preloader?.preloadForClients)
         {
             const orig = preloader.preloadForClients.bind(preloader);
+
             preloader.preloadForClients = function (entries, ...rest)
             {
                 return orig(jb2aPreloadList(entries), ...rest);
@@ -149,30 +190,42 @@ export function installJb2aHooks()
         const probe = new Sequence();
         const protos = [];
         const effectSection = probe.effect();
+
         if (effectSection)
             protos.push(Object.getPrototypeOf(effectSection));
+
         if (typeof probe.sound === 'function')
         {
             const soundSection = probe.sound();
             if (soundSection)
                 protos.push(Object.getPrototypeOf(soundSection));
         }
+
         for (const proto of protos)
         {
             if (!proto || typeof proto.file !== 'function' || proto._laJb2aHooked)
                 continue;
             proto._laJb2aHooked = true;
             const origFile = proto.file;
+
             proto.file = function (input, ...rest)
             {
                 if (typeof input === 'string' && input.startsWith('jb2a.'))
                 {
                     const resolved = resolveJb2a(input);
                     const section = origFile.call(this, resolved.src, ...rest);
+
                     if (resolved.tint !== undefined && typeof this.tint === 'function')
                         this.tint(resolved.tint);
+                    if (resolved.hue !== undefined && typeof this.filter === 'function')
+                        this.filter('ColorMatrix', { hue: resolved.hue });
+                    if (resolved.duration !== undefined && typeof this.duration === 'function')
+                        this.duration(resolved.duration);
+                    if (resolved.fadeOut !== undefined && typeof this.fadeOut === 'function')
+                        this.fadeOut(resolved.fadeOut);
                     return section;
                 }
+
                 return origFile.call(this, input, ...rest);
             };
         }

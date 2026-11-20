@@ -24,21 +24,18 @@ export const PORTRAIT_MODES = {
     OFF: 'off',
 };
 
-const SCOPE_MECH_PILOT = 'mechPilot';
+export const PORTRAIT_TYPES = ['mech', 'pilot', 'npc', 'deployable'];
 
 /**
- * Actor types the HUD portrait is allowed to draw for, per scope setting.
+ * Portrait mode the settings give this actor type.
  * @param {any} actor Actor backing the HUD.
- * @returns {boolean} Whether this actor type is covered.
+ * @returns {string} One of PORTRAIT_MODES, OFF for types without a setting.
  */
-function inScope(actor)
+function typeMode(actor)
 {
-    const type = actor?.type;
-    if (!type)
-        return false;
-    if (type === 'mech' || type === 'pilot')
-        return true;
-    return (getModuleSetting('tah.portrait.scope') ?? SCOPE_MECH_PILOT) !== SCOPE_MECH_PILOT;
+    if (!PORTRAIT_TYPES.includes(actor?.type))
+        return PORTRAIT_MODES.OFF;
+    return getModuleSetting(`tah.portrait.${actor.type}`) ?? PORTRAIT_MODES.OFF;
 }
 
 /**
@@ -79,25 +76,25 @@ export function resolvePortraitSrc(token, actor)
 {
     const tokenDoc = token?.document ?? token;
     const override = getLAFlag(tokenDoc, FLAG_PORTRAIT_MODE) ?? PORTRAIT_MODES.DEFAULT;
+
     if (override === PORTRAIT_MODES.OFF)
         return null;
     if (override === PORTRAIT_MODES.CUSTOM)
         return getLAFlag(tokenDoc, FLAG_PORTRAIT_IMG) || null;
 
-    const worldMode = getModuleSetting('tah.portrait.mode') ?? PORTRAIT_MODES.OFF;
-    const mode = override || worldMode;
-    if (mode === PORTRAIT_MODES.OFF)
+    const mode = override || typeMode(actor);
+    if (mode === PORTRAIT_MODES.OFF || !actor?.type)
         return null;
 
-    if (!inScope(actor))
-        return null;
     const subject = withPilotSubstitution(actor, tokenDoc);
+
     // Placed token art only applies when the HUD is showing that token's own actor.
     if (mode === PORTRAIT_MODES.TOKEN)
     {
         const art = subject === actor ? tokenDoc?.texture?.src : null;
         return art || subject?.prototypeToken?.texture?.src || subject?.img || null;
     }
+
     return subject?.img || null;
 }
 
@@ -127,12 +124,15 @@ function measureTrim(node)
 {
     const naturalWidth = node.naturalWidth;
     const naturalHeight = node.naturalHeight;
+
     if (!naturalWidth || !naturalHeight)
         return null;
+
     // A downscaled copy is ~60x cheaper to scan and still lands the box within a pixel of the real one.
     const scanWidth = Math.min(naturalWidth, TRIM_SCAN_WIDTH);
     const scanHeight = Math.max(1, Math.round(scanWidth * (naturalHeight / naturalWidth)));
     let data;
+
     try
     {
         const canvasEl = document.createElement('canvas');
@@ -149,10 +149,12 @@ function measureTrim(node)
         // Cross-origin art taints the canvas; show it untrimmed rather than not at all.
         return null;
     }
+
     let minCol = scanWidth;
     let minRow = scanHeight;
     let maxCol = -1;
     let maxRow = -1;
+
     for (let row = 0; row < scanHeight; row++)
     {
         for (let col = 0; col < scanWidth; col++)
@@ -165,14 +167,17 @@ function measureTrim(node)
             if (row > maxRow) maxRow = row;
         }
     }
+
     if (maxCol < 0)
         return null;
+
     const box = {
         x: minCol / scanWidth,
         y: minRow / scanHeight,
         w: (maxCol - minCol + 1) / scanWidth,
         h: (maxRow - minRow + 1) / scanHeight,
     };
+
     if (box.w > 0.98 && box.h > 0.98)
         return null;
     return box;
@@ -216,6 +221,7 @@ export function buildPortrait(token, actor, onMeasured, drawHeight)
     const src = resolvePortraitSrc(token, actor);
     if (!src)
         return null;
+
     const height = drawHeight || portraitHeight();
     const trimOn = !!getModuleSetting('tah.portrait.trim');
     const knownRatio = _ratioCache.get(src) ?? DEFAULT_RATIO;
@@ -225,10 +231,12 @@ export function buildPortrait(token, actor, onMeasured, drawHeight)
     el.css({ width: `${width}px`, height: `${height}px` });
     const isVideo = foundry.helpers.media.VideoHelper.hasVideoExtension(src);
     const media = document.createElement(isVideo ? 'video' : 'img');
+
     if (isVideo)
         Object.assign(media, { autoplay: true, muted: true, loop: true, playsInline: true });
     else
         media.setAttribute('alt', '');
+
     const img = $(media);
     img.attr('src', src);
     if (knownTrim)
@@ -242,16 +250,19 @@ export function buildPortrait(token, actor, onMeasured, drawHeight)
         _ratioCache.set(src, natural);
         if (!el[0].isConnected)
             return;
+
         if (trimOn && !isVideo)
         {
             const box = _trimCache.has(src) ? _trimCache.get(src) : measureTrim(node);
             _trimCache.set(src, box);
+
             if (box)
             {
                 applyTrim(el, img, box, natural, height);
                 return;
             }
         }
+
         const real = Math.round(height / natural);
         if (real !== width)
             el.css('width', `${real}px`);
@@ -278,18 +289,23 @@ export function buildPortraitRail({ pilots, activeUuid, onMeasured, onPick })
     const fullHeight = portraitHeight();
     const smallHeight = Math.round(fullHeight * RAIL_SMALL_RATIO);
     const rail = $(htmlToElement('<div class="la-hud-portrait-rail"></div>'));
+
     const ordered = [...pilots].sort((first, second) =>
         Number(second.uuid === activeUuid) - Number(first.uuid === activeUuid));
 
     let tallest = 0;
+
     for (const pilot of ordered)
     {
         const isActive = pilot.uuid === activeUuid;
         const built = buildPortrait(null, pilot, isActive ? onMeasured : null, isActive ? fullHeight : smallHeight);
+
         if (!built)
             continue;
+
         const slot = $(htmlToElement('<div class="la-hud-rail-slot"></div>'));
         slot.append(built.el);
+
         if (isActive)
         {
             slot.addClass('is-active');
@@ -304,6 +320,7 @@ export function buildPortraitRail({ pilots, activeUuid, onMeasured, onPick })
             nameEl.textContent = pilot.name;
             slot.append(nameEl);
         }
+
         slot.on('click', (event) =>
         {
             event.preventDefault();
@@ -311,11 +328,13 @@ export function buildPortraitRail({ pilots, activeUuid, onMeasured, onPick })
             if (rail.hasClass('is-swapping'))
                 return;
             rail.addClass('is-swapping');
+
             if (!isActive)
             {
                 slot.addClass('is-picked');
                 _railArriving = true;
             }
+
             const commit = () => onPick?.(isActive ? '' : pilot.uuid);
             if (window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches)
                 commit();
@@ -325,6 +344,7 @@ export function buildPortraitRail({ pilots, activeUuid, onMeasured, onPick })
         tallest = Math.max(tallest, built.height);
         rail.append(slot);
     }
+
     _railArriving = false;
     if (!tallest)
         return null;

@@ -1,18 +1,18 @@
-/* global canvas, PIXI, game, document, globalThis, performance */
+/* global canvas, PIXI, game, document, globalThis, performance, foundry */
 // Shared cursor/geometry/elevation handlers for shape placement; callers inject targeting behavior. style:ignore
 
 import {
     isHexGrid, getHexCenter, pixelToOffset,
-    drawHexAt, getOccupiedOffsets,
+    drawHexAt, getOccupiedOffsets, neighborKeys,
 } from "../combat/grid-helpers.js";
 import { getHexGroundElevation } from "../combat/terrain-utils.js";
 import {
     pointerToWorld, suppressTokenLayerClick, createPickerSession, createCursorPreview,
     addGraphicsBelowTokens, addGraphicsAboveTokens, destroyGraphics, _paintCells, createMultiPlusIndicator,
     gridLineWidth, makeText, TG, paintWithHalo,
-    suppressEvent, isShiftDown,
+    suppressEvent, isShiftDown, dragResistancePx,
 } from "./canvas-helpers.js";
-import { computeArea, rotationStepsFor } from "./area-geometry.js";
+import { computeArea, facingToward, facingsToward, angleGap } from "./area-geometry.js";
 import { playUiSound, playTargetingMove } from "../tah/sound.js";
 import { eventMatchesKeybind, isTypingTarget } from "./keybindings.js";
 import { isTokenVisible } from "../utils/lancer-token.js";
@@ -43,6 +43,7 @@ function isTiltedLine(result)
 {
     if (!result.elevByCell)
         return false;
+
     const values = [...result.elevByCell.values()];
     return values.some(elevation => elevation !== values[0]);
 }
@@ -60,25 +61,46 @@ export function buildAreaLabels(result)
 {
     if (!result || !result.elevAware)
         return [];
+
     if (isTiltedLine(result))
     {
         const labels = [];
+
         for (const [key, elevation] of result.elevByCell)
         {
             const [col, row] = key.split(',').map(Number);
             const center = getHexCenter(col, row);
             labels.push({ x: center.x, y: center.y, text: elevText(elevation) });
         }
+
         return labels;
     }
+
     if (result.labelPt)
         return [{ x: result.labelPt.x, y: result.labelPt.y, text: flatLabelText(result) }];
     return [];
 }
 
+const PAN_ACTIONS = ['panUp', 'panDown', 'panLeft', 'panRight', 'panUpLeft', 'panUpRight', 'panDownLeft', 'panDownRight'];
+
+function coreBindings(action)
+{
+    try
+    {
+        return game.keybindings.get('core', action) ?? [];
+    }
+    catch
+    {
+        return [];
+    }
+}
+
+const cellKey = (offset) => `${offset.col},${offset.row}`;
+
 function makeCellLabel(col, row, elevation)
 {
     const center = getHexCenter(col, row);
+
     const label = makeText(elevText(elevation), {
         fontFamily: 'Arial',
         fontSize: Math.max(11, canvas.grid.size * 0.18),
@@ -87,6 +109,7 @@ function makeCellLabel(col, row, elevation)
         strokeThickness: gridLineWidth(3),
         fontWeight: 'bold',
     });
+
     label.anchor.set(0.5);
     label.x = center.x;
     label.y = center.y;
@@ -111,6 +134,7 @@ export function createPlacedShapeStore()
         addGraphicsBelowTokens(container);
         labelContainer = new PIXI.Container();
         addGraphicsAboveTokens(labelContainer);
+
         pulseTick = () =>
         {
             if (!container || container.destroyed)
@@ -120,11 +144,13 @@ export function createPlacedShapeStore()
                 container = null;
                 return;
             }
+
             const alpha = 0.65 + 0.35 * Math.sin(performance.now() / 280);
             container.alpha = alpha;
             if (labelContainer && !labelContainer.destroyed)
                 labelContainer.alpha = alpha;
         };
+
         canvas.app.ticker.add(pulseTick);
     };
 
@@ -132,6 +158,7 @@ export function createPlacedShapeStore()
     {
         cells.length = 0;
         labels.length = 0;
+
         for (const shape of shapes)
         {
             cells.push(...shape.cells);
@@ -146,6 +173,7 @@ export function createPlacedShapeStore()
         paintWithHalo(gfx, target => _paintCells(target, result.affected), { color: TG.placed, lineWidth: 2, lineAlpha: 0.7, fillAlpha: 0.22 });
         container.addChild(gfx);
         nodes.push(gfx);
+
         if (result.elevAware && isTiltedLine(result))
         {
             for (const [key, elevation] of result.elevByCell)
@@ -167,12 +195,14 @@ export function createPlacedShapeStore()
                 fontWeight: 'bold',
                 align: 'center',
             });
+
             node.anchor.set(0.5);
             node.x = result.labelPt.x;
             node.y = result.labelPt.y;
             labelContainer.addChild(node);
             nodes.push(node);
         }
+
         return nodes;
     };
 
@@ -208,16 +238,20 @@ export function createPlacedShapeStore()
             {
                 if (!shapes[index].cells.includes(cellKey) && shapes[index].origin !== cellKey)
                     continue;
+
                 const [removed] = shapes.splice(index, 1);
+
                 for (const node of removed.nodes)
                 {
                     if (node.parent)
                         node.parent.removeChild(node);
                     node.destroy();
                 }
+
                 rebuildMirrors();
                 return true;
             }
+
             return false;
         },
         destroy()
@@ -227,6 +261,7 @@ export function createPlacedShapeStore()
                 canvas.app.ticker.remove(pulseTick);
                 pulseTick = null;
             }
+
             if (container)
             {
                 if (container.parent)
@@ -234,6 +269,7 @@ export function createPlacedShapeStore()
                 container.destroy({ children: true });
                 container = null;
             }
+
             if (labelContainer)
             {
                 if (labelContainer.parent)
@@ -241,6 +277,7 @@ export function createPlacedShapeStore()
                 labelContainer.destroy({ children: true });
                 labelContainer = null;
             }
+
             shapes.length = 0;
             cells.length = 0;
             labels.length = 0;
@@ -258,8 +295,10 @@ export function createShapePlacement(options = {})
         getToggles = () => ({ elevationAware: true, autoElevation: true, propagation: true }),
         multiStack = true,
         highlightCaught = true,
+        caughtFilter = null,
         sound = true,
         resolveOnClick = true,
+        cancelOnRightClick = false,
         placedStore = null,
         colorFor = () => TG.inRange,
         onHover = () =>
@@ -282,18 +321,21 @@ export function createShapePlacement(options = {})
     let size = options.size ?? 1;
     let isBurst = pattern === 'burst';
     let isAimed = pattern === 'cone' || pattern === 'line';
-    let rotMod = rotationStepsFor(pattern, areaRange);
     let pendingRotation = 0;
     // World-angle source-of-truth (radians). Line ring modulus scales with length; storing an
     // angle instead of an integer step index keeps grow/shrink round-trips exact.
-    let pendingAngleRad = 0;
+    let pendingAngleRad = null;
     let pendingElevOffset = 0;
     let pendingTilt = 0;
     let lastCursor = null;
     let lastResult = null;
+    let press = null;
+    let lastAimKey = null;
+    const panCodes = new Set(PAN_ACTIONS.flatMap(action => coreBindings(action).map(binding => binding.key)));
     let disposed = false;
     let prevInteractive = true;
     let restoreLayerClick = null;
+
     const session = createPickerSession('shapePlacement', () =>
     {
         try
@@ -302,6 +344,7 @@ export function createShapePlacement(options = {})
         }
         catch
         { /* */ }
+
         onCancel();
     });
 
@@ -309,14 +352,17 @@ export function createShapePlacement(options = {})
     const plus = multiStack && resolveOnClick ? createMultiPlusIndicator() : null;
     const selectHighlight = new PIXI.Graphics();
     canvas.stage.addChild(selectHighlight).eventMode = 'none';
+
     const elevLabel = makeText('', {
         fontFamily: 'Arial', fontSize: 16, fill: 0xffffff, stroke: 0x000000, strokeThickness: gridLineWidth(4), fontWeight: 'bold', align: 'center',
     });
+
     elevLabel.anchor.set(0.5);
     elevLabel.visible = false;
     canvas.stage.addChild(elevLabel).eventMode = 'none';
     const cellLabelLayer = new PIXI.Container();
     canvas.stage.addChild(cellLabelLayer).eventMode = 'none';
+
     const clearCellLabels = () =>
     {
         for (const child of cellLabelLayer.removeChildren())
@@ -324,6 +370,7 @@ export function createShapePlacement(options = {})
     };
 
     const soundOn = () => (typeof sound === 'function' ? !!sound() : !!sound);
+
     const playSound = (name) =>
     {
         if (soundOn())
@@ -342,12 +389,15 @@ export function createShapePlacement(options = {})
             casterToken,
         };
     };
+
     const autoElevation = () => !!(getToggles() || {}).autoElevation;
+
     const groundAt = (point) =>
     {
         const terrainApi = globalThis.terrainHeightTools;
         if (!terrainApi)
             return 0;
+
         const offset = pixelToOffset(point.x, point.y);
         return Number(getHexGroundElevation(offset.col, offset.row, terrainApi)) || 0;
     };
@@ -360,27 +410,106 @@ export function createShapePlacement(options = {})
             return false;
         if (!includeSelf && casterToken && placeable.id === casterToken.id)
             return false;
+
         const bounds = placeable.bounds;
         return tx >= bounds.left && tx <= bounds.right && ty >= bounds.top && ty <= bounds.bottom;
     }) || null;
 
+    const computeShape = (centerPt, rotation) =>
+    {
+        const areaCtx = ctx();
+        const elevation = areaCtx.elevationAware ? (autoElevation() ? groundAt(centerPt) : 0) + pendingElevOffset : 0;
+        const result = computeArea({ pattern, centerPt, areaRange, size, rotation, areaElev: elevation, tilt: pendingTilt }, areaCtx);
+        return { ...result, labelPt: centerPt, elev: elevation, elevAware: areaCtx.elevationAware };
+    };
+
     // null when a burst has no token under the cursor.
     const computeAt = (tx, ty) =>
     {
-        const areaCtx = ctx();
         if (isBurst)
         {
+            const areaCtx = ctx();
             const host = tokenUnderCursor(tx, ty);
             if (!host)
                 return null;
+
             const result = computeArea({ pattern: 'burst', hostToken: host, areaRange }, areaCtx);
-            return { ...result, labelPt: host.center, elev: result.hostElev ?? 0, elevAware: areaCtx.elevationAware };
+            return { ...result, labelPt: host.center, hostToken: host, elev: result.hostElev ?? 0, elevAware: areaCtx.elevationAware };
         }
+
         const offset = pixelToOffset(tx, ty);
-        const centerPt = getHexCenter(offset.col, offset.row);
-        const elevation = areaCtx.elevationAware ? (autoElevation() ? groundAt(centerPt) : 0) + pendingElevOffset : 0;
-        const result = computeArea({ pattern, centerPt, areaRange, size, rotation: pendingRotation, areaElev: elevation, tilt: pendingTilt }, areaCtx);
-        return { ...result, labelPt: centerPt, elev: elevation, elevAware: areaCtx.elevationAware };
+        return computeShape(getHexCenter(offset.col, offset.row), pendingRotation);
+    };
+
+    const canAim = () => isAimed && (pattern !== 'line' || Math.round(areaRange) > 1);
+
+    const tokenOnCell = (point) =>
+    {
+        const key = cellKey(pixelToOffset(point.x, point.y));
+
+        return canvas.tokens.placeables.find(placeable =>
+        {
+            if (placeable.document.hidden && !(includeHidden && game.user.isGM))
+                return false;
+            if (visibleOnly && !isTokenVisible(placeable))
+                return false;
+            return getOccupiedOffsets(placeable).some(offset => cellKey(offset) === key);
+        }) ?? null;
+    };
+
+    const besideToken = (token, target) =>
+    {
+        const footprint = new Set(getOccupiedOffsets(token).map(cellKey));
+        const starts = new Set(pattern === 'cone' && !isHexGrid() ? footprint : []);
+
+        if (!starts.size)
+        {
+            for (const key of footprint)
+            {
+                for (const neighbor of neighborKeys(key))
+                {
+                    if (!footprint.has(neighbor))
+                        starts.add(neighbor);
+                }
+            }
+        }
+
+        const aim = Math.atan2(target.y - token.center.y, target.x - token.center.x);
+        let originPt = null;
+        let bestGap = Infinity;
+
+        for (const key of starts)
+        {
+            const [col, row] = key.split(',').map(Number);
+            const center = getHexCenter(col, row);
+            const gap = angleGap(Math.atan2(center.y - token.center.y, center.x - token.center.x), aim);
+
+            if (gap < bestGap)
+            {
+                bestGap = gap;
+                originPt = center;
+            }
+        }
+
+        const tooClose = footprint.has(cellKey(pixelToOffset(target.x, target.y)))
+            || Math.hypot(target.x - originPt.x, target.y - originPt.y) < canvas.grid.size * 0.45;
+
+        const aimAt = tooClose
+            ? { x: originPt.x + Math.cos(aim) * canvas.grid.size * 10, y: originPt.y + Math.sin(aim) * canvas.grid.size * 10 }
+            : target;
+
+        const facings = facingsToward(pattern, areaRange, originPt, aimAt);
+        const clear = facings.find(facing => ![...computeArea({ pattern, centerPt: originPt, areaRange, size, rotation: facing }).affected].some(key => footprint.has(key)));
+        return { originPt, rotation: clear ?? facings[0], from: token.center };
+    };
+
+    const aimedPlacement = (pressed, target) =>
+    {
+        if (pressed.token)
+            return besideToken(pressed.token, target);
+
+        const near = Math.hypot(target.x - pressed.originPt.x, target.y - pressed.originPt.y) < canvas.grid.size * 0.45;
+        return { originPt: pressed.originPt, rotation: near ? pendingRotation : facingToward(pattern, areaRange, pressed.originPt, target), from: pressed.originPt };
     };
 
     const drawCaught = (graphic, caught) =>
@@ -400,13 +529,25 @@ export function createShapePlacement(options = {})
         }, { color: TG.target, lineWidth: 4, lineAlpha: 0.8, fillAlpha: 0.2 });
     };
 
+    const drawAimLine = (aimed, cursor) =>
+    {
+        paintWithHalo(cursorPreview, target =>
+        {
+            target.drawCircle(aimed.originPt.x, aimed.originPt.y, Math.max(4, canvas.grid.size * 0.14));
+            target.moveTo(aimed.from.x, aimed.from.y);
+            target.lineTo(cursor.x, cursor.y);
+        }, { color: TG.traceLine, lineWidth: 1.5, lineAlpha: 0.8 });
+    };
+
     const drawAt = (tx, ty) =>
     {
         cursorPreview.clear();
         selectHighlight.clear();
         clearCellLabels();
-        const result = computeAt(tx, ty);
+        const aimed = press?.aiming ? aimedPlacement(press, { x: tx, y: ty }) : null;
+        const result = aimed ? computeShape(aimed.originPt, aimed.rotation) : computeAt(tx, ty);
         lastResult = result;
+
         if (!result)
         {
             paintWithHalo(cursorPreview, target => target.drawCircle(tx, ty, Math.max(6, canvas.grid.size * 0.12)),
@@ -415,15 +556,30 @@ export function createShapePlacement(options = {})
             onHover(null);
             return;
         }
+
         const shapeColor = colorFor(result);
         paintWithHalo(cursorPreview, target => _paintCells(target, result.affected),
             { color: shapeColor, lineWidth: 2, lineAlpha: 0.6, fillAlpha: 0.12 });
+
+        if (aimed)
+        {
+            drawAimLine(aimed, { x: tx, y: ty });
+            const aimKey = `${cellKey(pixelToOffset(aimed.originPt.x, aimed.originPt.y))}:${aimed.rotation}`;
+
+            if (aimKey !== lastAimKey)
+            {
+                lastAimKey = aimKey;
+                playSound('targeting');
+            }
+        }
+
         if (highlightCaught)
-            drawCaught(selectHighlight, result.caught);
+            drawCaught(selectHighlight, caughtFilter ? result.caught.filter(token => caughtFilter(token)) : result.caught);
         onHover(result);
         if (result.elevAware && isTiltedLine(result))
         {
             elevLabel.visible = false;
+
             for (const [key, elevation] of result.elevByCell)
             {
                 const [col, row] = key.split(',').map(Number);
@@ -470,11 +626,13 @@ export function createShapePlacement(options = {})
     {
         onPlace(result, keepOpen);
         placedStore?.addShape(result);
+
         if (keepOpen)
         {
             refresh();
             return;
         }
+
         dispose();
         onResolve(result);
     };
@@ -483,39 +641,81 @@ export function createShapePlacement(options = {})
     {
         const { x: tx, y: ty } = pointerToWorld(event);
         lastCursor = { x: tx, y: ty };
+        if (press && !press.aiming && canAim() && Math.hypot(event.clientX - press.clientX, event.clientY - press.clientY) >= dragResistancePx())
+            press.aiming = true;
         drawAt(tx, ty);
         plus?.move(isShiftDown(event), tx, ty);
-        if (soundOn())
+
+        if (soundOn() && !press?.aiming)
         {
             const offset = pixelToOffset(tx, ty);
             playTargetingMove(offset.col, offset.row);
         }
     };
 
-    const clickHandler = (event) =>
+    const pressHandler = (event) =>
     {
-        if (onClickCapture(event))
+        if (event.button !== 0 || event.target?.id !== 'board')
             return;
-        const shift = isShiftDown(event);
-        const { x: tx, y: ty } = pointerToWorld(event);
-        const result = computeAt(tx, ty);
-        if (!result)
-            return;
-        playSound('targetingConfirm');
-        place(result, (multiStack && shift) || !resolveOnClick);
+        suppressEvent(event);
+        const world = canvas.canvasCoordinatesFromClient({ x: event.clientX, y: event.clientY });
+        const offset = pixelToOffset(world.x, world.y);
+
+        press = {
+            clientX: event.clientX,
+            clientY: event.clientY,
+            world,
+            originPt: getHexCenter(offset.col, offset.row),
+            token: canAim() ? tokenOnCell(world) : null,
+            aiming: false,
+            rotation: pendingRotation,
+            angle: pendingAngleRad,
+        };
     };
 
-    const bumpRotation = (step) =>
+    const dropAim = () =>
     {
-        if (rotMod <= 0)
-            return; // e.g. line size 1 = point, no ring to rotate around
-        const stepRad = (2 * Math.PI) / rotMod;
-        pendingAngleRad = ((pendingAngleRad + step * stepRad) % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI);
-        pendingRotation = Math.round(pendingAngleRad / stepRad) % rotMod;
-        pendingRotation = (pendingRotation + rotMod) % rotMod;
+        pendingRotation = press.rotation;
+        pendingAngleRad = press.angle;
+        press = null;
+        lastAimKey = null;
         refresh();
-        playSound('targeting');
     };
+
+    const releaseHandler = (event) =>
+    {
+        if (event.button !== 0 || !press)
+            return;
+        suppressEvent(event);
+        const pressed = press;
+        press = null;
+        lastAimKey = null;
+        if (onClickCapture(event))
+            return;
+
+        let result;
+
+        if (pressed.aiming)
+        {
+            const cursor = canvas.canvasCoordinatesFromClient({ x: event.clientX, y: event.clientY });
+            const aimed = aimedPlacement(pressed, cursor);
+            pendingRotation = aimed.rotation;
+            pendingAngleRad = Math.atan2(cursor.y - aimed.originPt.y, cursor.x - aimed.originPt.x);
+            result = { ...computeShape(aimed.originPt, aimed.rotation), aimed: true };
+        }
+        else
+            result = computeAt(pressed.world.x, pressed.world.y);
+
+        if (!result)
+        {
+            refresh();
+            return;
+        }
+
+        playSound('targetingConfirm');
+        place(result, (multiStack && isShiftDown(event)) || !resolveOnClick);
+    };
+
     const bumpElevation = (step) =>
     {
         if (!ctx().elevationAware)
@@ -525,15 +725,11 @@ export function createShapePlacement(options = {})
         playSound('targeting');
     };
 
-    // momentum: consecutive same-dir ticks accelerate; a pause or reversal resets.
-    const ROT_RESET_MS = 220;
-    let rotStreak = 0;
-    let lastRotDir = 0;
-    let lastRotTime = 0;
     const wheelHandler = (event) =>
     {
         if (event.target?.id !== 'board')
             return;
+
         if (onResize && event.shiftKey)
         {
             event.preventDefault();
@@ -542,68 +738,88 @@ export function createShapePlacement(options = {})
             playSound('targeting');
             return;
         }
-        if (!(game.keyboard?.isModifierActive?.('CONTROL') ?? event.ctrlKey))
+
+        if (!event.shiftKey && !(game.keyboard?.isModifierActive?.('CONTROL') ?? event.ctrlKey))
             return;
         event.preventDefault();
         event.stopPropagation();
-        if (!isAimed)
-            return;
-        const direction = event.deltaY > 0 ? 1 : -1;
-        const now = event.timeStamp || 0;
-        if (direction === lastRotDir && (now - lastRotTime) < ROT_RESET_MS)
-            rotStreak += 1;
-        else
-            rotStreak = 0;
-        lastRotDir = direction;
-        lastRotTime = now;
-        const rotMaxStep = Math.max(3, Math.round(rotMod / 6));
-        const step = Math.min(1 + Math.floor(rotStreak / 2), rotMaxStep);
-        bumpRotation(direction * step);
     };
 
     const keyHandler = (event) =>
     {
         if (shouldIgnoreKey(event) || isTypingTarget(event.target))
             return;
+
         if (event.key === 'Escape')
         {
             suppressEvent(event);
+
+            if (press)
+            {
+                dropAim();
+                return;
+            }
+
             dispose();
             onCancel();
             return;
         }
+
         if (eventMatchesKeybind(event, 'resetShape'))
         {
             suppressEvent(event);
             pendingElevOffset = 0;
             pendingRotation = 0;
-            pendingAngleRad = 0;
+            pendingAngleRad = null;
             pendingTilt = 0;
             refresh();
             playSound('targeting');
             return;
         }
+
         const tiltUp = eventMatchesKeybind(event, 'lineTiltUp');
+
         if (pattern === 'line' && (tiltUp || eventMatchesKeybind(event, 'lineTiltDown')))
         {
             suppressEvent(event);
+
             if (ctx().elevationAware)
             {
                 pendingTilt += tiltUp ? 1 : -1;
                 refresh();
                 playSound('targeting');
             }
+
             return;
         }
+
         let step = 0;
         if (eventMatchesKeybind(event, 'elevationUp'))
             step = 1;
         else if (eventMatchesKeybind(event, 'elevationDown'))
             step = -1;
+
         if (step === 0)
+        {
+            if (!event.ctrlKey && panCodes.has(event.code))
+                suppressEvent(event);
             return;
+        }
+
         suppressEvent(event);
         bumpElevation(step);
+    };
+
+    const rightClickHandler = () =>
+    {
+        if (press)
+        {
+            dropAim();
+            return;
+        }
+
+        dispose();
+        onCancel();
     };
 
     const start = () =>
@@ -611,7 +827,10 @@ export function createShapePlacement(options = {})
         prevInteractive = canvas.tokens.interactiveChildren;
         canvas.tokens.interactiveChildren = false;
         restoreLayerClick = suppressTokenLayerClick();
-        session.bind({ move: moveHandler, click: clickHandler, key: keyHandler, wheel: wheelHandler });
+        session.bind({
+            move: moveHandler, key: keyHandler, wheel: wheelHandler, rightClick: cancelOnRightClick ? rightClickHandler : null,
+            press: pressHandler, release: releaseHandler,
+        });
     };
 
     const setPattern = (nextPattern) =>
@@ -619,26 +838,27 @@ export function createShapePlacement(options = {})
         pattern = nextPattern;
         isBurst = pattern === 'burst';
         isAimed = pattern === 'cone' || pattern === 'line';
-        rotMod = rotationStepsFor(pattern, areaRange);
         pendingRotation = 0;
-        pendingAngleRad = 0;
+        pendingAngleRad = null;
         pendingTilt = 0;
         refresh();
     };
+
     const setAreaRange = (nextRange) =>
     {
         areaRange = nextRange;
-        rotMod = rotationStepsFor(pattern, areaRange);
+
         // Line ring modulus scales with length; recompute pendingRotation from the world-angle
         // source-of-truth so grow/shrink round-trips are exact. Cone/blast/burst have a fixed modulus.
-        if (pattern === 'line' && rotMod > 0)
+        if (pattern === 'line' && pendingAngleRad !== null)
         {
-            const stepRad = (2 * Math.PI) / rotMod;
-            pendingRotation = Math.round(pendingAngleRad / stepRad) % rotMod;
-            pendingRotation = (pendingRotation + rotMod) % rotMod;
+            const reference = getHexCenter(0, 0);
+            pendingRotation = facingToward('line', areaRange, reference, { x: reference.x + Math.cos(pendingAngleRad), y: reference.y + Math.sin(pendingAngleRad) });
         }
+
         refresh();
     };
+
     const setSize = (nextSize) =>
     {
         size = nextSize;

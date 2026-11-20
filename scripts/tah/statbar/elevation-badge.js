@@ -8,6 +8,7 @@ export function _elevationBadgeGrowth()
     const minZoom = getWorldSetting(SETTING_MIN_ZOOM_SCALE, 0);
     if (minZoom <= 0)
         return 1;
+
     const zoom = canvas.stage?.scale?.x || 1;
     const gridPx = canvas.dimensions?.size ?? REF_GRID_SIZE;
     return Math.max(1, (REF_GRID_SIZE * minZoom) / (gridPx * zoom));
@@ -22,6 +23,7 @@ export function _placeElevationBadge(token, badge, iso)
     const cellH = badge._laCellH * badgeScale;
     const refSize = badge._laRefSize * gridScale;
     badge._laGrowth = growth;
+
     if (iso && token.mesh)
     {
         const isoScale = 0.76;
@@ -37,8 +39,15 @@ export function _placeElevationBadge(token, badge, iso)
         badge.position.set(worldX - token.position.x, worldY - token.position.y);
         return;
     }
+
     badge.scale.set(badgeScale);
     badge.position.set(token.w - refSize, refSize - cellH - (badge._laPositive ? badge._laArrowH * badgeScale : 0));
+}
+
+export function badgeElevation(raw)
+{
+    const elevation = Number.isFinite(raw) ? Math.round(raw * 2) / 2 : raw;
+    return Number.isFinite(elevation) && elevation !== 0 ? elevation : null;
 }
 
 export function drawElevationBadge(token)
@@ -49,16 +58,19 @@ export function drawElevationBadge(token)
     const srcRaw = token.document?._source?.elevation;
     const derRaw = token.document?.elevation;
     let raw = Number.isFinite(srcRaw) && srcRaw !== derRaw ? srcRaw : derRaw;
+
     if (token?.isPreview && Number.isFinite(derRaw))
         raw = derRaw;
-    const elevation = Number.isFinite(raw) ? Math.round(raw * 2) / 2 : raw;
-    const noBadge = !Number.isFinite(elevation) || elevation === 0;
+
+    const elevation = badgeElevation(raw);
+    const noBadge = elevation === null;
 
     const iso = _getIsoState(token);
     const isoActive = !!(iso && token.mesh);
     const cachedElev = token._laBadgeElev;
     const cachedIsoState = token._laBadgeIso;
     let prev = token._laBadge;
+
     if (prev && (prev.destroyed || prev.parent !== token))
         prev = token._laBadge = null;
 
@@ -72,6 +84,7 @@ export function drawElevationBadge(token)
             token._laBadgeElev = undefined;
             token._laBadgeIso = undefined;
         }
+
         return;
     }
 
@@ -88,6 +101,17 @@ export function drawElevationBadge(token)
         token._laBadge = null;
     }
 
+    const badge = buildElevationBadge(elevation, isoActive ? iso : null);
+    _placeElevationBadge(token, badge, isoActive ? iso : null);
+    token.addChild(badge);
+
+    token._laBadge = badge;
+    token._laBadgeElev = elevation;
+    token._laBadgeIso = isoActive;
+}
+
+export function buildElevationBadge(elevation, iso = null)
+{
     const isPositive = elevation > 0;
     const label = Math.abs(elevation).toString();
 
@@ -98,8 +122,10 @@ export function drawElevationBadge(token)
     const cellH = iconSize;
     const cellW = iconSize;
     let arrowH = Math.max(3, Math.round(cellH * 0.5));
+
     if (arrowH % 2 !== 0)
         arrowH += 1;
+
     const halfW = Math.round(cellW / 2);
 
     const badge = new PIXI.Container();
@@ -148,6 +174,7 @@ export function drawElevationBadge(token)
     }
 
     const fontSize = Math.max(7, Math.round(cellH * 0.85));
+
     const style = PreciseText.getTextStyle({
         fontFamily: CONFIG.canvasTextStyle?.fontFamily ?? 'Signika',
         fontSize,
@@ -155,26 +182,25 @@ export function drawElevationBadge(token)
         fill: '#dddddd',
         align: 'center',
     });
+
     const txt = new PreciseText(label, style);
     txt.anchor.set(0.5, 0.5);
+
     const bodyCenterY = isPositive
         ? arrowH + Math.round(cellH / 2)
         : Math.round(cellH / 2);
+
     txt.position.set(halfW, bodyCenterY);
     badge.addChild(txt);
 
     Object.assign(badge, { _laCellW: cellW, _laCellH: cellH, _laArrowH: arrowH, _laPositive: isPositive, _laRefSize: refSize });
 
-    if (isoActive)
+    if (iso)
     {
         badge.pivot.set(cellW / 2, cellH / 2);
         badge.rotation = iso.reverseRotation;
         badge.skew.set(iso.reverseSkewX, iso.reverseSkewY);
     }
-    _placeElevationBadge(token, badge, isoActive ? iso : null);
-    token.addChild(badge);
 
-    token._laBadge = badge;
-    token._laBadgeElev = elevation;
-    token._laBadgeIso = isoActive;
+    return badge;
 }

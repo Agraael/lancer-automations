@@ -17,6 +17,11 @@ import { moveTokenTo, awaitMovementSettled } from "../../movement/move-api.js";
 import { _transformFoundPath } from "../../movement/terrain-trigger-waypoints.js";
 import { makeWallBlocker } from "../../movement/wall-block.js";
 import { freeTwinOf, parseAction } from "../../movement/movement-actions.js";
+import { isForceFreeMovement, isForceDebugMovement, getCurrentMovementType, elevationModeFor, pathfindDragEnabled, setMovementPicker } from "../../movement/keybindings.js";
+import { dragDestinationElevation, setDragElevationOffset } from "../../movement/elevation.js";
+import { eventMatchesKeybind } from "../keybindings.js";
+import { badgeElevation, buildElevationBadge, _placeElevationBadge } from "../../tah/statbar/elevation-badge.js";
+import { _getIsoState } from "../../tah/statbar/rules.js";
 
 import { localize, localizeFormat } from '../../tools/string-utils.js';
 // Above this budget the cost-aware Dijkstra sweep gets too big; fall back to plain grid range.
@@ -42,27 +47,37 @@ const REACHABLE_BUDGET_CAP = 15;
  * @param {boolean} [options.urgent=false] Jump the card queue
  * @param {boolean} [options.planOnly=false] Resolve the planned paths without moving: Array<{token, path}>
  * @param {Token|TokenDocument|{x: number, y: number}} [options.awayFrom] Lights only the cells away from this token or point, soft warning only
+ * @param {Record<string, {x: number, y: number}>} [options.presets] Destination already picked per token id (top-left), Confirm accepts it
+ * @param {Token} [options.stayAdjacentTo] Destinations must stay adjacent to this token
  * @returns {Promise<TokenDocument|TokenDocument[]|Array<{token: Token, path: object[]}>|null>} Moved doc(s) matching the input shape (plans with planOnly), null on cancel
  */
 export async function moveTokenRuler(tokenOrTokens, options = {})
 {
     const isMulti = Array.isArray(tokenOrTokens);
     const tokenList = (isMulti ? tokenOrTokens : [tokenOrTokens]).filter(candidate => candidate?.document);
+
     if (!tokenList.length)
         return null;
+
     const range = options.range ?? -1;
     const awayFrom = options.awayFrom?.object ?? options.awayFrom ?? null;
+    const stayAdjacentTo = options.stayAdjacentTo ?? null;
+    const presets = options.presets ?? {};
     const free = !!options.free;
     const cost = Number.isFinite(options.cost) ? options.cost : null;
     const action = options.action ?? null;
     const actions = CONFIG.Token?.movement?.actions ?? {};
+
     if (action && !actions[action])
         console.warn(`lancer-automations | moveTokenRuler: unknown movement action "${action}", core falls back to displace.`);
+
     const unconstrained = !!(action && (actions[action]?.teleport || action === 'displace' || action === 'forced'));
+
     const freeAction = (base) =>
     {
         if (!free)
             return base;
+
         const twin = freeTwinOf(base);
         return twin in actions ? twin : base;
     };
@@ -77,6 +92,7 @@ export async function moveTokenRuler(tokenOrTokens, options = {})
         } = /** @type {any} */ (options);
 
         const states = new Map();
+
         for (const moveTok of tokenList)
         {
             const doc = moveTok.document;
@@ -100,12 +116,14 @@ export async function moveTokenRuler(tokenOrTokens, options = {})
                 pathfinderStarted: false
             });
         }
+
         let activeIndex = 0;
         const active = () => tokenList[activeIndex];
         const stateOf = (moveTok) => states.get(moveTok.id);
         let search = null;
         let searchId = 0;
         let lastSnapped = null;
+        let lastPlanKey = null;
         let reachableSet = null;
         const plusIndicator = createMultiPlusIndicator({ modifier: 'Control' });
         const GridCoordinates3d = CONFIG.GeometryLib?.lib?.threeD?.GridCoordinates3d ?? null;
@@ -116,6 +134,7 @@ export async function moveTokenRuler(tokenOrTokens, options = {})
             const pathfinder = moveTok.elevationruler?.pathfinding;
             if (!pathfinder || !GridCoordinates3d || stateOf(moveTok).pathfinderStarted)
                 return;
+
             try
             {
                 const start = GridCoordinates3d.fromObject(moveTok.getCenterPoint());
@@ -128,10 +147,12 @@ export async function moveTokenRuler(tokenOrTokens, options = {})
                 console.warn('lancer-automations | moveTokenRuler: pathfinder start failed:', err);
             }
         };
+
         const endPathfinder = (moveTok) =>
         {
             if (!stateOf(moveTok).pathfinderStarted)
                 return;
+
             try
             {
                 moveTok.elevationruler?.pathfinding?.endPathfinding();
@@ -139,6 +160,7 @@ export async function moveTokenRuler(tokenOrTokens, options = {})
             catch
             {
             }
+
             stateOf(moveTok).pathfinderStarted = false;
         };
 
@@ -159,6 +181,7 @@ export async function moveTokenRuler(tokenOrTokens, options = {})
             const measurement = moveTok.measureMovementPath(combined, { preview: true });
             for (let waypointIdx = doc.movementHistory.length; waypointIdx < combined.length; waypointIdx++)
                 combined[waypointIdx].cost = measurement.waypoints[waypointIdx].backward?.cost ?? 0;
+
             const current = doc.movementHistory.at(-1);
             const first = foundPath[0];
             first.action = (current !== undefined) && !TokenDocument.arePositionsEqual(current, first)
@@ -176,24 +199,95 @@ export async function moveTokenRuler(tokenOrTokens, options = {})
                 searching: false
             };
             moveTok.renderFlags.set({ refreshRuler: true, refreshState: true });
+            queueBroadcast();
         };
+
+        const actionFor = (moveTok) => freeAction(action ?? moveTok._getDragMovementAction());
 
         const destWaypoint = (moveTok, snapped) =>
         {
             const doc = moveTok.document;
-            const state = stateOf(moveTok);
+            const position = { x: snapped.x, y: snapped.y, width: doc.width, height: doc.height };
             return {
-                x: snapped.x,
-                y: snapped.y,
-                elevation: doc.elevation + state.pendingElevationOffset,
-                width: doc.width,
-                height: doc.height,
+                ...position,
+                elevation: dragDestinationElevation(doc, position),
                 shape: doc.shape,
-                action: freeAction(action ?? moveTok._getDragMovementAction()),
+                action: actionFor(moveTok),
                 snapped: true,
                 explicit: true,
                 checkpoint: true
             };
+        };
+
+        const ghosts = new Map();
+
+        const placeGhost = (moveTok, waypoint) =>
+        {
+            const mesh = moveTok.mesh;
+            if (!mesh?.texture)
+                return;
+
+            let ghost = ghosts.get(moveTok.id);
+
+            if (!ghost)
+            {
+                const container = new PIXI.Container();
+                container.eventMode = 'none';
+                const sprite = new PIXI.Sprite(mesh.texture);
+                sprite.anchor.set(mesh.anchor.x, mesh.anchor.y);
+                sprite.scale.set(mesh.scale.x, mesh.scale.y);
+                sprite.rotation = mesh.rotation;
+                sprite.alpha = 0.5;
+                sprite.position.set(mesh.position.x - moveTok.position.x, mesh.position.y - moveTok.position.y);
+                container.addChild(sprite);
+                canvas.stage.addChild(container);
+                ghost = { container, badge: null, elevation: null };
+                ghosts.set(moveTok.id, ghost);
+            }
+
+            ghost.container.position.set(waypoint.x, waypoint.y);
+
+            const elevation = badgeElevation(waypoint.elevation);
+            const iso = _getIsoState(moveTok);
+            const isoActive = iso && moveTok.mesh ? iso : null;
+
+            if (elevation !== ghost.elevation)
+            {
+                ghost.badge?.destroy({ children: true });
+                ghost.badge = elevation === null ? null : buildElevationBadge(elevation, isoActive);
+                ghost.elevation = elevation;
+
+                if (ghost.badge)
+                    ghost.container.addChild(ghost.badge);
+            }
+
+            if (ghost.badge)
+                _placeElevationBadge(moveTok, ghost.badge, isoActive);
+        };
+
+        const ghostAnchor = () =>
+        {
+            const moveTok = active();
+            const topLeft = ghosts.get(moveTok.id)?.container.position ?? moveTok.position;
+            return { x: topLeft.x + moveTok.w / 2, y: topLeft.y - 12 };
+        };
+
+        let broadcastTimer = null;
+        let broadcastClosed = false;
+
+        const sendPlans = () =>
+        {
+            broadcastTimer = null;
+            const showRuler = !broadcastClosed && game.user.hasPermission('SHOW_RULER');
+            const plannedMovements = Object.fromEntries(tokenList.map(moveTok =>
+                [moveTok.document.id, showRuler ? (moveTok._plannedMovement[game.user.id] ?? null) : null]));
+            game.user.broadcastActivity(/** @type {any} */ ({ plannedMovements }));
+        };
+
+        const queueBroadcast = () =>
+        {
+            if (!broadcastTimer)
+                broadcastTimer = setTimeout(sendPlans, 100);
         };
 
         const recalcPath = (moveTok, snapped) =>
@@ -203,13 +297,16 @@ export async function moveTokenRuler(tokenOrTokens, options = {})
             searchId += 1;
             const thisSearch = searchId;
             const explicitWaypoints = [state.origin, ...state.waypoints, destWaypoint(moveTok, snapped)];
+            placeGhost(moveTok, explicitWaypoints.at(-1));
             search = moveTok.findMovementPath(explicitWaypoints, moveTok._getDragPathfindingOptions());
             search.promise.then((path) =>
             {
                 if (!path || thisSearch !== searchId || moveTok.destroyed)
                     return;
+
                 // same route injection LA applies to real drags (A* around bodies/terrain + trigger splits)
                 let routed = path;
+
                 try
                 {
                     routed = _transformFoundPath(moveTok, path) ?? path;
@@ -218,6 +315,7 @@ export async function moveTokenRuler(tokenOrTokens, options = {})
                 {
                     routed = path;
                 }
+
                 state.commitPath = routed;
                 showRulerPath(moveTok, routed);
             }).catch(() =>
@@ -242,9 +340,11 @@ export async function moveTokenRuler(tokenOrTokens, options = {})
         {
             try
             {
-                const stepCost = moveTok.measureMovementPath(
+                const stepMeasure = moveTok.measureMovementPath(
                     [cellWaypoint(moveTok, centerA, elevation), cellWaypoint(moveTok, centerB, elevation)],
-                    { preview: true }).cost;
+                    { preview: true });
+                const stepCost = stepMeasure.cost - (stepMeasure.lancerStraightBurn ?? 0);
+
                 return Number.isFinite(stepCost) ? Math.max(1, stepCost) : Infinity;
             }
             catch
@@ -258,35 +358,44 @@ export async function moveTokenRuler(tokenOrTokens, options = {})
             const reachable = new Set();
             if (budget <= 0)
                 return reachable;
+
             const fromCenter = { x: fromWaypoint.x + moveTok.w / 2, y: fromWaypoint.y + moveTok.h / 2 };
             if (unconstrained || budget > REACHABLE_BUDGET_CAP)
                 return getInRangeOffsets(fromCenter, budget, { includeSelf: true });
+
             const wallBlocked = makeWallBlocker(action ?? moveTok.document.movementAction);
             const dist = new Map();
+
             for (const startCell of getOccupiedOffsets(moveTok, { x: fromWaypoint.x, y: fromWaypoint.y }))
             {
                 const key = `${startCell.col},${startCell.row}`;
                 dist.set(key, 0);
                 reachable.add(key);
             }
+
             const frontier = [...reachable];
+
             while (frontier.length)
             {
                 let bestIdx = 0;
+
                 for (let idx = 1; idx < frontier.length; idx++)
                 {
                     if ((dist.get(frontier[idx]) ?? Infinity) < (dist.get(frontier[bestIdx]) ?? Infinity))
                         bestIdx = idx;
                 }
+
                 const currentKey = frontier.splice(bestIdx, 1)[0];
                 const currentCost = dist.get(currentKey);
                 const [col, row] = currentKey.split(',').map(Number);
                 const currentCenter = getHexCenter(col, row);
+
                 for (const neighborKey of neighborKeys(currentKey))
                 {
                     const [neighborCol, neighborRow] = neighborKey.split(',').map(Number);
                     const neighborCenter = getHexCenter(neighborCol, neighborRow);
                     const nextCost = currentCost + stepCostBetween(moveTok, currentCenter, neighborCenter, fromWaypoint.elevation);
+
                     if (nextCost > budget)
                         continue;
                     if (nextCost >= (dist.get(neighborKey) ?? Infinity))
@@ -298,6 +407,7 @@ export async function moveTokenRuler(tokenOrTokens, options = {})
                     frontier.push(neighborKey);
                 }
             }
+
             return reachable;
         };
 
@@ -306,11 +416,14 @@ export async function moveTokenRuler(tokenOrTokens, options = {})
             const state = stateOf(moveTok);
             if (!state.waypoints.length)
                 return 0;
+
             try
             {
                 const billed = [state.origin, ...state.waypoints]
                     .map(waypoint => ({ ...waypoint, action: parseAction(waypoint.action).base }));
-                const usedCost = moveTok.measureMovementPath(billed, { preview: true }).cost;
+
+                const usedMeasure = moveTok.measureMovementPath(billed, { preview: true });
+                const usedCost = usedMeasure.cost - (free ? (usedMeasure.lancerStraightBurn ?? 0) : 0);
                 return Number.isFinite(usedCost) ? usedCost : 0;
             }
             catch
@@ -323,6 +436,7 @@ export async function moveTokenRuler(tokenOrTokens, options = {})
         {
             if (awayFrom.document)
                 return getMinGridDistance(moveTok, awayFrom, pos, false);
+
             const gridDistance = canvas.scene?.grid?.distance || 1;
             return Math.min(...getOccupiedOffsets(moveTok, pos).map(offset => Math.round(measureGridDistance(getHexCenter(offset.col, offset.row), awayFrom) / gridDistance)));
         };
@@ -331,6 +445,7 @@ export async function moveTokenRuler(tokenOrTokens, options = {})
         {
             if (!awayFrom || awayFrom.id === moveTok.id)
                 return true;
+
             const start = stateOf(moveTok).origin;
             const doc = moveTok.document;
             const moved = Math.round(measureGridDistance(doc.getCenterPoint(start), doc.getCenterPoint(pos)) / (canvas.scene?.grid?.distance || 1));
@@ -341,13 +456,16 @@ export async function moveTokenRuler(tokenOrTokens, options = {})
         {
             if (!awayFrom || awayFrom.id === moveTok.id || !cells?.size)
                 return cells;
+
             const lit = new Set();
             const seen = new Set();
+
             for (const cellKey of cells)
             {
                 const [col, row] = cellKey.split(',').map(Number);
                 const pos = snapTokenCenter(moveTok, getHexCenter(col, row));
                 const posKey = `${pos.x},${pos.y}`;
+
                 if (seen.has(posKey))
                     continue;
                 seen.add(posKey);
@@ -356,6 +474,7 @@ export async function moveTokenRuler(tokenOrTokens, options = {})
                 for (const offset of getOccupiedOffsets(moveTok, pos))
                     lit.add(`${offset.col},${offset.row}`);
             }
+
             return new Set([...lit].filter(cellKey => cells.has(cellKey)));
         };
 
@@ -363,6 +482,7 @@ export async function moveTokenRuler(tokenOrTokens, options = {})
         {
             if (range < 0)
                 return;
+
             const moveTok = active();
             const state = stateOf(moveTok);
             const fromWaypoint = state.waypoints.at(-1) ?? state.origin;
@@ -427,8 +547,10 @@ export async function moveTokenRuler(tokenOrTokens, options = {})
                 return;
             endPathfinder(active());
             activeIndex = idx;
+            setDragElevationOffset(stateOf(active()).pendingElevationOffset);
             startPathfinder(active());
             lastSnapped = null;
+            lastPlanKey = null;
             rebuildPulse();
             updateCard();
         };
@@ -438,25 +560,39 @@ export async function moveTokenRuler(tokenOrTokens, options = {})
             for (let step = 1; step <= tokenList.length; step++)
             {
                 const idx = (activeIndex + step) % tokenList.length;
+
                 if (!stateOf(tokenList[idx]).selectedPos)
                 {
                     selectToken(idx);
                     return;
                 }
             }
+
             updateCard();
         };
 
         const restoreLayerClick = suppressTokenLayerClick();
+
         const doCleanup = () =>
         {
             search?.cancel();
             searchId += 1;
+
             for (const moveTok of tokenList)
             {
                 clearRulerPreview(moveTok);
                 endPathfinder(moveTok);
             }
+
+            for (const ghost of ghosts.values())
+                ghost.container.destroy({ children: true });
+
+            ghosts.clear();
+            broadcastClosed = true;
+            clearTimeout(broadcastTimer);
+            sendPlans();
+            setMovementPicker(null);
+            setDragElevationOffset(0);
             plusIndicator.dispose();
             rangePulse.clear('interactive:moveTokenRuler');
             session.unbind();
@@ -476,11 +612,13 @@ export async function moveTokenRuler(tokenOrTokens, options = {})
                 const plans = tokenList
                     .filter(moveTok => stateOf(moveTok).selectedPos && stateOf(moveTok).commitPath)
                     .map(moveTok => ({ token: moveTok, path: stateOf(moveTok).commitPath }));
+
                 if (!plans.length)
                 {
                     ui.notifications.warn(localize('LA.notify.pickADestinationFirst'));
                     return;
                 }
+
                 doCleanup();
                 resolve(plans);
             },
@@ -496,10 +634,21 @@ export async function moveTokenRuler(tokenOrTokens, options = {})
             const { x, y } = pointerToWorld(event);
             plusIndicator.move(isCtrlDown(event), x, y);
             const moveTok = active();
-            if (stateOf(moveTok).selectedPos)
+            const state = stateOf(moveTok);
+
+            if (state.selectedPos)
                 return;
+
             const snapped = snapTokenCenter(moveTok, { x, y });
             lastSnapped = snapped;
+            const destAction = destWaypoint(moveTok, snapped).action;
+
+            const planKey = [moveTok.id, snapped.x, snapped.y, state.pendingElevationOffset, state.waypoints.length, destAction,
+                isForceFreeMovement(), isForceDebugMovement(), getCurrentMovementType(), elevationModeFor(destAction), pathfindDragEnabled()].join('|');
+
+            if (planKey === lastPlanKey)
+                return;
+            lastPlanKey = planKey;
             const snappedOffset = pixelToOffset(snapped.x, snapped.y);
             playTargetingMove(snappedOffset.col, snappedOffset.row);
             recalcPath(moveTok, snapped);
@@ -516,6 +665,12 @@ export async function moveTokenRuler(tokenOrTokens, options = {})
                 ui.notifications.warn(localize('LA.notify.destinationIsOutOfRange'));
             else if (!isAwayFrom(moveTok, snapped))
                 ui.notifications.warn(awayFrom.document ? localizeFormat('LA.notify.knockbackNotAway', { name: awayFrom.name }) : localize('LA.notify.knockbackNotAwayFromPoint'));
+            if (stayAdjacentTo && !isCtrlDown(event) && !state.selectedPos && getMinGridDistance(moveTok, stayAdjacentTo, snapped) > 1)
+            {
+                ui.notifications.warn(localizeFormat('LA.notify.mustStayAdjacent', { name: stayAdjacentTo.name }));
+                return;
+            }
+
             if (isCtrlDown(event))
             {
                 state.selectedPos = null;
@@ -526,6 +681,7 @@ export async function moveTokenRuler(tokenOrTokens, options = {})
                 updateCard();
                 return;
             }
+
             if (state.selectedPos)
             {
                 state.selectedPos = null;
@@ -533,7 +689,8 @@ export async function moveTokenRuler(tokenOrTokens, options = {})
                 updateCard();
                 return;
             }
-            state.selectedPos = { x: snapped.x, y: snapped.y, elevation: moveTok.document.elevation + state.pendingElevationOffset };
+
+            state.selectedPos = { x: snapped.x, y: snapped.y, elevation: destWaypoint(moveTok, snapped).elevation };
             playUiSound('targetingConfirm');
             recalcPath(moveTok, snapped);
             if (tokenList.length > 1)
@@ -542,13 +699,13 @@ export async function moveTokenRuler(tokenOrTokens, options = {})
                 updateCard();
         };
 
-        const rightHandler = (event) =>
+        const rightHandler = () =>
         {
             const moveTok = active();
             const state = stateOf(moveTok);
+
             if (!state.selectedPos && !state.waypoints.length)
                 return;
-            suppressEvent(event);
             if (state.selectedPos)
                 state.selectedPos = null;
             else
@@ -560,6 +717,21 @@ export async function moveTokenRuler(tokenOrTokens, options = {})
             updateCard();
         };
 
+        const refreshPlan = () =>
+        {
+            const moveTok = active();
+            const state = stateOf(moveTok);
+            const target = state.selectedPos ?? lastSnapped;
+            lastPlanKey = null;
+
+            if (!target)
+                return;
+
+            if (state.selectedPos)
+                state.selectedPos = { ...state.selectedPos, elevation: destWaypoint(moveTok, state.selectedPos).elevation };
+            recalcPath(moveTok, target);
+        };
+
         const keyHandler = (event) =>
         {
             if (event.key === 'Escape')
@@ -569,16 +741,21 @@ export async function moveTokenRuler(tokenOrTokens, options = {})
                 resolve(null);
                 return;
             }
+
             let step = 0;
-            if (event.code === 'KeyE')
+            if (eventMatchesKeybind(event, 'elevationUp'))
                 step = 1;
-            else if (event.code === 'KeyQ')
+            else if (eventMatchesKeybind(event, 'elevationDown'))
                 step = -1;
             if (step === 0)
                 return;
             suppressEvent(event);
-            stateOf(active()).pendingElevationOffset += step;
+
+            const state = stateOf(active());
+            state.pendingElevationOffset += step;
+            setDragElevationOffset(state.pendingElevationOffset);
             playUiSound('targeting');
+            refreshPlan();
         };
 
         const session = createPickerSession('moveTokenRuler', () =>
@@ -590,11 +767,43 @@ export async function moveTokenRuler(tokenOrTokens, options = {})
             catch
             {
             }
+
             resolve(null);
         });
+
+        const movementTypeFor = (moveTok) =>
+        {
+            const base = parseAction(actionFor(moveTok)).base;
+            return (base === 'forced' || base === 'displace') ? moveTok.document.movementAction : base;
+        };
+
+        setDragElevationOffset(0);
+        setMovementPicker({ action: () => movementTypeFor(active()), refresh: refreshPlan, anchor: ghostAnchor });
         session.bind({ move: moveHandler, click: clickHandler, key: keyHandler, rightClick: rightHandler, clickFirst: true });
         startPathfinder(active());
         rebuildPulse();
+
+        for (const moveTok of tokenList)
+        {
+            const preset = presets[moveTok.id];
+            if (!preset)
+                continue;
+
+            const state = stateOf(moveTok);
+            const dest = destWaypoint(moveTok, preset);
+            state.selectedPos = { x: preset.x, y: preset.y, elevation: dest.elevation };
+            state.commitPath = [state.origin, dest];
+            placeGhost(moveTok, dest);
+
+            try
+            {
+                showRulerPath(moveTok, state.commitPath);
+            }
+            catch
+            {
+            }
+        }
+
         updateCard();
     }), options.title ?? "MOVE", { urgent: !!options.urgent });
 
@@ -602,7 +811,9 @@ export async function moveTokenRuler(tokenOrTokens, options = {})
         return null;
     if (options.planOnly)
         return picked;
+
     const movedDocs = [];
+
     for (const plan of picked)
     {
         await moveTokenTo(plan.token, plan.path.slice(1), {
@@ -614,6 +825,7 @@ export async function moveTokenRuler(tokenOrTokens, options = {})
         await awaitMovementSettled(plan.token.document);
         movedDocs.push(plan.token.document);
     }
+
     return isMulti ? movedDocs : (movedDocs[0] ?? null);
 }
 
@@ -633,6 +845,8 @@ export async function moveTokenRuler(tokenOrTokens, options = {})
  * @param {string} [options.title="KNOCKBACK"]
  * @param {string} [options.description="Select destination for each token."]
  * @param {Token|TokenDocument|{x: number, y: number}} [options.awayFrom] Lights only the cells away from this token or point, soft warning only
+ * @param {Record<string, {x: number, y: number}>} [options.presets] Destination already picked per token id (top-left), Confirm accepts it
+ * @param {Token} [options.stayAdjacentTo] Destinations must stay adjacent to this token
  * @returns {Promise<Array<{tokenId: string, updateData: object}>>} The planned moves, [] on cancel
  */
 export async function knockBackToken(tokens, distance, options = {})
@@ -642,19 +856,25 @@ export async function knockBackToken(tokens, distance, options = {})
         action: 'forced',
         planOnly: true,
         awayFrom: options.awayFrom ?? null,
+        presets: options.presets ?? {},
+        stayAdjacentTo: options.stayAdjacentTo ?? null,
         urgent: options.urgent !== false,
         title: options.title || 'KNOCKBACK',
         description: options.description || 'Select destination for each token.',
         icon: /** @type {any} */ (options).icon ?? 'fas fa-arrow-right',
         headerClass: /** @type {any} */ (options).headerClass ?? ''
     });
+
     if (!Array.isArray(plans) || !plans.length)
         return [];
+
     const moveList = plans.map(plan =>
     {
         const dest = plan.path.at(-1);
+
         const intermediate = plan.path.slice(1, -1)
             .map(waypoint => ({ x: waypoint.x, y: waypoint.y, elevation: waypoint.elevation, action: waypoint.action }));
+
         return {
             tokenId: plan.token.id,
             updateData: {
@@ -665,6 +885,7 @@ export async function knockBackToken(tokens, distance, options = {})
             }
         };
     });
+
     if (game.user.isGM)
     {
         await applyKnockbackMoves(moveList, options.triggeringToken ?? null, distance, options.actionName ?? "", options.item ?? null, {
@@ -682,10 +903,14 @@ export async function knockBackToken(tokens, distance, options = {})
                 distance,
                 actionName: options.actionName ?? "",
                 itemId: options.item?.id || null,
-                asVoluntary: !!options.asVoluntary
+                itemUuid: options.item?.uuid || null,
+                asVoluntary: !!options.asVoluntary,
+                sceneId: canvas.scene?.id ?? null,
+                requestingUserName: game.user.name
             }
         });
     }
+
     return moveList;
 }
 

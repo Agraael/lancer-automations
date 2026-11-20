@@ -11,10 +11,12 @@ import { broadcastToolPresence, clearToolPresence } from "../presence.js";
 import { playUiSound } from "../../tah/sound.js";
 
 let _activeCancel = null;
+
 export function isAreaPickerActive()
 {
     return !!_activeCancel;
 }
+
 export function cancelAreaPicker()
 {
     if (_activeCancel)
@@ -24,15 +26,18 @@ export function cancelAreaPicker()
 // Placed shapes + targeted ids, kept after the picker exits (cleared on restart/HUD-close/scene-change).
 let _placedStore = null;
 const _placedBlastCenters = [];
+const _placedAreas = [];
 const _persistTargetIds = new Set();
 let _persistRelated = null;
 let _persistBeat = null;
+
 function ensurePlacedStore()
 {
     if (!_placedStore)
         _placedStore = createPlacedShapeStore();
     return _placedStore;
 }
+
 function startPersistBeat()
 {
     if (_persistBeat)
@@ -44,9 +49,11 @@ function startPersistBeat()
             stopPersistBeat();
             return;
         }
+
         broadcastToolPresence('areaPick', { placedCells: _placedStore.cells, labels: _placedStore.labels, relatedToken: _persistRelated });
     }, 1200);
 }
+
 function stopPersistBeat()
 {
     if (_persistBeat)
@@ -55,23 +62,34 @@ function stopPersistBeat()
         _persistBeat = null;
     }
 }
+
 export function getPlacedBlastCenters()
 {
     return _placedBlastCenters.map(blast => ({ center: { ...blast.center }, tokenIds: [...blast.tokenIds] }));
 }
+
+export function getPlacedAreas()
+{
+    return _placedAreas.map(area => ({ ...area, center: { ...area.center }, cells: [...area.cells], tokenIds: [...area.tokenIds] }));
+}
+
 export function clearAreaTargetShape()
 {
     stopPersistBeat();
+
     if (_placedStore)
     {
         _placedStore.destroy();
         _placedStore = null;
     }
+
     _placedBlastCenters.length = 0;
+    _placedAreas.length = 0;
     _persistTargetIds.clear();
     _persistRelated = null;
     clearToolPresence('areaPick');
 }
+
 function releasePickerTargets()
 {
     for (const id of _persistTargetIds)
@@ -80,6 +98,7 @@ function releasePickerTargets()
         if (token)
             token.setTarget(false, { releaseOthers: false });
     }
+
     _persistTargetIds.clear();
 }
 
@@ -96,6 +115,7 @@ export function pickAreaTargetToggle(casterToken = null, opts = {})
         hitChanceFor = null,
         castRange = -1,
     } = opts;
+
     playUiSound('targeting');
 
     return new Promise((resolve) =>
@@ -105,17 +125,21 @@ export function pickAreaTargetToggle(casterToken = null, opts = {})
             releasePickerTargets();
             clearAreaTargetShape();
         }
+
         _persistRelated = casterToken;
         const store = ensurePlacedStore();
 
         const hitLabelLayer = new PIXI.Container();
         canvas.stage.addChild(hitLabelLayer).eventMode = 'none';
         const hitLabels = new Map();
+
         const updateHitLabels = (caught) =>
         {
             if (!hitChanceFor)
                 return;
+
             const wanted = new Set();
+
             for (const token of caught)
             {
                 const chance = hitChanceFor(token);
@@ -123,16 +147,19 @@ export function pickAreaTargetToggle(casterToken = null, opts = {})
                     continue;
                 wanted.add(token.id);
                 let label = hitLabels.get(token.id);
+
                 if (!label)
                 {
                     label = makeHitLabel(hitLabelLayer);
                     hitLabels.set(token.id, label);
                 }
+
                 applyTargetInfoLabel(label, chance);
                 label.resolution = gridTextResolution();
                 const anchor = hitLabelAnchor(token);
                 label.position.set(anchor.x, anchor.y);
             }
+
             for (const [id, label] of hitLabels)
             {
                 if (!wanted.has(id))
@@ -148,6 +175,7 @@ export function pickAreaTargetToggle(casterToken = null, opts = {})
         {
             if (castRange < 0 || !casterToken || !result?.affected)
                 return TG.inRange;
+
             const inRangeSet = getInRangeOffsets(casterToken, castRange, { includeSelf: true, elevationAware: false });
             return [...result.affected].some(cell => !inRangeSet.has(cell)) ? TG.outOfRange : TG.inRange;
         };
@@ -160,6 +188,7 @@ export function pickAreaTargetToggle(casterToken = null, opts = {})
                 broadcastToolPresence('areaPick', { cells: [], tokens: [], placedCells: store.cells, labels: store.labels, relatedToken: _persistRelated });
                 return;
             }
+
             updateHitLabels(result.caught);
             broadcastToolPresence('areaPick', {
                 cells: [...result.affected],
@@ -174,6 +203,9 @@ export function pickAreaTargetToggle(casterToken = null, opts = {})
         {
             if (pattern === 'blast' && result.labelPt)
                 _placedBlastCenters.push({ center: { x: result.labelPt.x, y: result.labelPt.y }, tokenIds: result.caught.map(token => token.id) });
+            if (result.labelPt)
+                _placedAreas.push({ pattern, areaRange, center: { x: result.labelPt.x, y: result.labelPt.y }, cells: [...result.affected], tokenIds: result.caught.map(token => token.id) });
+
             for (const token of result.caught)
             {
                 const already = Array.from(game.user.targets ?? []).some(target => target.id === token.id);
@@ -208,6 +240,7 @@ export function pickAreaTargetToggle(casterToken = null, opts = {})
             includeSelf,
             includeHidden,
             getToggles,
+            cancelOnRightClick: true,
             placedStore: store,
             colorFor,
             onHover,
@@ -224,12 +257,14 @@ export function pickAreaTargetToggle(casterToken = null, opts = {})
             },
             onDispose,
         });
+
         _activeCancel = () =>
         {
             playUiSound('toggle');
             controller.dispose();
             resolve(null);
         };
+
         controller.start();
     });
 }

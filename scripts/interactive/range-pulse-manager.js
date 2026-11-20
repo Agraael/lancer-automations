@@ -3,7 +3,7 @@
 
 import { createPulsingRangeHighlight } from "./canvas-helpers.js";
 import { awaitMovementSettled } from "../movement/move-api.js";
-import { invalidateLosCaches } from "../vision/lancerDetectionModes.js";
+import { isLosBlockerToken } from "../vision/tokenBlocksVision.js";
 
 export const RANGE_PULSE_PRIORITY = Object.freeze({
     INTERACTIVE: 60,
@@ -22,6 +22,7 @@ let activeSignature = null;
 function pickWinner()
 {
     let winner = null;
+
     for (const [ownerId, request] of requests)
     {
         if (!winner
@@ -31,6 +32,7 @@ function pickWinner()
             winner = { ownerId, request };
 
     }
+
     return winner;
 }
 
@@ -47,6 +49,7 @@ function destroyActive()
             console.warn("lancer-automations | range pulse destroy failed", err);
         }
     }
+
     activeOwner = null;
     activeDestroy = null;
     activeSignature = null;
@@ -55,6 +58,7 @@ function destroyActive()
 function reconcile()
 {
     const winner = pickWinner();
+
     if (!winner)
     {
         const had = activeOwner !== null;
@@ -63,11 +67,13 @@ function reconcile()
             Hooks.callAll("lancer-automations.rangePulseChanged", null);
         return;
     }
+
     if (winner.ownerId === activeOwner && winner.request.signature === activeSignature)
         return;
     destroyActive();
     activeOwner = winner.ownerId;
     activeSignature = winner.request.signature;
+
     try
     {
         activeDestroy = winner.request.build() ?? null;
@@ -77,6 +83,7 @@ function reconcile()
         console.warn("lancer-automations | range pulse build failed", err);
         activeDestroy = null;
     }
+
     Hooks.callAll("lancer-automations.rangePulseChanged", activeOwner);
 }
 
@@ -87,6 +94,10 @@ export const rangePulse = {
         requests.set(ownerId, { priority, build, seq, signature: signature ?? `seq:${seq}` });
         reconcile();
     },
+    /**
+     * @param {string} ownerId
+     * @param {{ token?: any, range?: number, priority?: number, includeSelf?: boolean, glowColor?: number, los?: boolean, freeRange?: number }} [options]
+     */
     setRange(ownerId, { token = null, range = 0, priority = 0, includeSelf = false, glowColor = undefined, ...opts } = {})
     {
         const signature = `${token?.document?.id ?? "pt"}|${range}|${includeSelf}|${glowColor ?? ""}|${opts.los === true}|${opts.freeRange ?? 0}`;
@@ -118,20 +129,41 @@ export const rangePulse = {
 
 Hooks.on("canvasTearDown", () => rangePulse.clearAll());
 
-// A settled move gets the same treatment as a re-toggle: destroy the active build, create it fresh.
-Hooks.on("updateToken", (tokenDoc, changes) =>
+function footprintRect(position, tokenDoc)
+{
+    const size = canvas.grid.size;
+    return new PIXI.Rectangle(position.x, position.y, (position.width ?? tokenDoc.width ?? 1) * size, (position.height ?? tokenDoc.height ?? 1) * size);
+}
+
+function moveChangesPulse(tokenDoc, from)
+{
+    const handle = activeDestroy;
+    if (!handle?.reachRect || isLosBlockerToken(tokenDoc))
+        return true;
+    if (handle.origins?.has(tokenDoc.id))
+        return false;
+
+    const reach = handle.reachRect();
+    if (!reach || !from)
+        return true;
+    return reach.intersects(footprintRect(tokenDoc, tokenDoc)) || reach.intersects(footprintRect(from, tokenDoc));
+}
+
+// A settled move rebuilds the active pulse only when the mover can change it: a blocker, or a footprint touching the reach.
+Hooks.on("updateToken", (tokenDoc, changes, options) =>
 {
     if (!("x" in changes) && !("y" in changes))
         return;
     if (!requests.size)
         return;
+
+    const from = options?._movement?.[tokenDoc.id]?.origin ?? null;
     awaitMovementSettled(tokenDoc)
         .then(() => new Promise(resolve => setTimeout(resolve, 100)))
         .then(() =>
         {
-            if (!requests.size)
+            if (!requests.size || !moveChangesPulse(tokenDoc, from))
                 return;
-            invalidateLosCaches();
             destroyActive();
             reconcile();
         });

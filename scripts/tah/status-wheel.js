@@ -98,6 +98,7 @@ function collectEntries(actor)
     {
         if (!status.id)
             continue;
+
         const effects = effectsForStatus(actor, status.id);
         if (!effects.length && !favorites.has(status.id))
             continue;
@@ -113,10 +114,12 @@ function collectEntries(actor)
     }
 
     const customs = new Map();
+
     for (const effect of liveEffects(actor))
     {
         if (!effect.getFlag?.('temporary-custom-statuses', 'isCustom'))
             continue;
+
         const name = effect.getFlag('temporary-custom-statuses', 'originalName') || effect.name;
         if (!isCustomStatusEffect(effect, name))
             continue;
@@ -124,11 +127,13 @@ function collectEntries(actor)
             customs.set(name, { kind: 'custom', key: `custom:${name}`, name, icon: effect.img ?? '', effects: [] });
         customs.get(name).effects.push(effect);
     }
+
     entries.push(...customs.values());
 
     // Constant bonuses carry no token icon on purpose, so they stay off a ring that shows what is applied.
     // A global bonus whose linked effect already sits on the ring would show twice.
     const ringEffects = entries.flatMap(entry => entry.effects);
+
     for (const bonus of /** @type {any[]} */ (getLAFlag(actor,'global_bonuses') || []))
     {
         if (isBonusRemovalPending(actor, bonus.id) || ringEffects.some(effect => getLAFlag(effect, 'linkedBonusId') === bonus.id))
@@ -149,6 +154,7 @@ function collectEntries(actor)
         entry.active = entry.kind === 'bonus' ? !entry.off : entry.effects.length > 0;
         entry.permanent = isPermanentEffect(entry.effects);
     }
+
     entries.sort((a, b) => (entryRank(a) - entryRank(b)) || a.name.localeCompare(b.name));
     return entries;
 }
@@ -202,6 +208,7 @@ async function applyStatus(tokens, entry)
             await api.addStatus(token.actor, entry.name, entry.icon, 1);
         return;
     }
+
     await applyEffectsToTokens({ tokens, effectNames: entry.status.name });
 }
 
@@ -210,11 +217,13 @@ async function clearStatus(tokens, entry)
 {
     if (!await confirmPermanentRemoval(entry.name, entry.effects))
         return;
+
     for (const token of tokens)
     {
         const effects = entry.kind === 'custom'
             ? effectsForCustom(token.actor, entry.name)
             : effectsForStatus(token.actor, entry.status.id);
+
         if (effects.length)
             await token.actor.deleteEmbeddedDocuments('ActiveEffect', effects.map(effect => effect.id));
     }
@@ -228,15 +237,19 @@ async function unwindStatus(tokens, entry)
         const effects = entry.kind === 'custom'
             ? effectsForCustom(token.actor, entry.name)
             : effectsForStatus(token.actor, entry.status.id);
+
         const last = effects.at(-1);
         if (!last)
             continue;
+
         const stack = getStack(last);
+
         if (stack > 1)
         {
             await setEffectStack(last, stack - 1);
             continue;
         }
+
         if (!await confirmPermanentRemoval(entry.name, [last]))
             continue;
         await token.actor.deleteEmbeddedDocuments('ActiveEffect', [last.id]);
@@ -253,16 +266,19 @@ async function onLeftClick(tokens, entry)
 {
     if (isBonusEntry(entry))
         return;
+
     if (!entry.effects.length)
     {
         await applyStatus(tokens, entry);
         return;
     }
+
     if (entry.effects.length === 1)
     {
         await stepStack(entry, 1);
         return;
     }
+
     await clearStatus(tokens, entry);
 }
 
@@ -272,6 +288,7 @@ async function onRightClick(tokens, entry)
     {
         if (entry.replaced)
             return;
+
         for (const token of tokens)
         {
             if (entry.kind === 'data' || entry.bonus?.sourceItemUuid)
@@ -281,21 +298,26 @@ async function onRightClick(tokens, entry)
             else
                 await removeGlobalBonus(token.actor, entry.bonus.id);
         }
+
         return;
     }
+
     const itemBonuses = entry.effects.map(effect => ({ actor: effect.parent, bonus: linkedBonusOf(effect.parent, effect) }))
         .filter(linked => linked.bonus?.sourceItemUuid);
+
     if (itemBonuses.length && itemBonuses.length === entry.effects.length)
     {
         for (const linked of itemBonuses)
             await setItemBonusOff(linked.actor, linked.bonus.id, true);
         return;
     }
+
     if (!entry.effects.length)
     {
         await applyStatus(tokens, entry);
         return;
     }
+
     await unwindStatus(tokens, entry);
 }
 
@@ -348,6 +370,7 @@ function tooltipData(entry, actor)
             conditional: hasLambdaGate(entry.bonus) ? getBonusConditionLines(entry.bonus) : []
         };
     }
+
     if (entry.effects.length)
         return effectTooltipData(actor, entry.effects[0]);
     // Starred but not applied: only the status config has anything to say.
@@ -370,6 +393,7 @@ function buildWheelItem(entry, tokens)
         {
             el.classList.add('lancer-sw-btn');
             el.innerHTML = iconHtml(entry.icon);
+
             if (turns > 0)
                 el.insertAdjacentHTML('beforeend', `<span class="lancer-sw-turns">${turns}</span>`);
             else if (rounds > 0)
@@ -377,14 +401,17 @@ function buildWheelItem(entry, tokens)
                 const color = roundBadgeColor();
                 el.insertAdjacentHTML('beforeend', `<span class="lancer-sw-turns" style="color:${color}; border-color:color-mix(in srgb, ${color} 55%, #000);">${rounds}</span>`);
             }
+
             // the token badge's own rule and colours
             const badge = statusBadge({ instances, uses, usage: entry.effects.some(isUsageEffect) });
+
             if (badge)
             {
                 el.insertAdjacentHTML('beforeend', `<span class="lancer-sw-stack" style="color:${badge.color}; border-color:color-mix(in srgb, ${badge.color} 55%, #000);">${badge.count}</span>`);
                 if (badge.uses !== null)
                     el.insertAdjacentHTML('beforeend', `<span class="lancer-sw-uses" style="color:${badge.usesColor}; border-color:color-mix(in srgb, ${badge.usesColor} 55%, #000);">${badge.uses}</span>`);
             }
+
             el.onmouseenter = () =>
             {
                 hideTip();
@@ -396,6 +423,7 @@ function buildWheelItem(entry, tokens)
                     moveStatusTooltip(_tip, rect.right, rect.top, 8);
                 }, TIP_DELAY_MS);
             };
+
             el.onmouseleave = () => hideTip();
         },
         styleButton: (el) =>
@@ -444,20 +472,25 @@ function rebuild()
 {
     if (!_openToken || !isRadialWheelOpen())
         return;
+
     const items = wheelItems(_openToken, _page);
     const other = wheelItems(_openToken, _page === 2 ? 1 : 2);
+
     if (!items.length && !other.length)
     {
         closeRadialWheel();
         return;
     }
+
     _pageCount = other.length ? 2 : 1;
+
     if (!items.length)
     {
         _page = _page === 2 ? 1 : 2;
         refreshRadialWheel(other, { page: _page, pageCount: _pageCount });
         return;
     }
+
     refreshRadialWheel(items, { page: _page, pageCount: _pageCount });
 }
 
@@ -468,21 +501,26 @@ export function toggleStatusWheel()
         closeRadialWheel();
         return;
     }
+
     if (!getModuleSetting('tahEnabled'))
     {
         ui.notifications.info(localize('LA.notify.enableTahForStatusWheel'));
         return;
     }
+
     const token = canvas.tokens?.controlled?.[0] ?? null;
     if (!token?.actor)
         return;
+
     const statusItems = wheelItems(token, 1);
     const constantItems = wheelItems(token, 2);
+
     if (!statusItems.length && !constantItems.length)
     {
         ui.notifications.info(localize('LA.notify.noActiveOrStarredStatusesStarSome'));
         return;
     }
+
     _pageCount = constantItems.length ? 2 : 1;
     _page = statusItems.length ? 1 : 2;
     _openToken = token;
@@ -506,6 +544,7 @@ function scheduleWheelRefresh(changedDoc)
 {
     if (!_openToken)
         return;
+
     const actor = changedDoc?.documentName === 'ActiveEffect' ? changedDoc.parent : changedDoc;
     if (!actor || actor !== _openToken.actor)
         return;

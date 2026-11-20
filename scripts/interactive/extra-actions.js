@@ -5,23 +5,18 @@ import { setItemFlag, unsetItemFlag } from "../socket.js";
 import { localize, localizeFormat } from "../tools/string-utils.js";
 import { applyActionOverlays } from "./action-overlays.js";
 
-/**
- * Get the effective actions for an item, merging system.actions with extra actions
- * stored in the 'lancer-automations.extraActions' flag.
- * @param {Item} item
- * @param {{extraOnly?: boolean}} [opts]  extraOnly: return only LA extra actions (skip system/profile)
- * @returns {Array} Array of action objects
- */
 const actionGateCache = new Map();
 
 function compileActionGate(src)
 {
     let fn = actionGateCache.get(src);
+
     if (!fn)
     {
         fn = new Function('actor', 'action', 'item', `return(${src})(actor,action,item);`);
         actionGateCache.set(src, fn);
     }
+
     return fn;
 }
 
@@ -50,6 +45,7 @@ export function resolveGrant(actionOrGrant)
     const grant = actionOrGrant?._grant ?? actionOrGrant;
     if (!grant?.tokenId)
         return null;
+
     const token = canvas.tokens?.get(grant.tokenId) ?? null;
     const actor = /** @type {any} */ (token)?.actor ?? null;
     const item = grant.itemId ? (actor?.items?.get(grant.itemId) ?? null) : null;
@@ -81,10 +77,13 @@ export function resolveActionGate(action, actor, item = null)
 {
     if (isGrantStale(action))
         return 'hidden';
+
     const gate = action?.condition;
     if (!gate)
         return 'visible';
+
     let result;
+
     try
     {
         if (typeof gate === 'function')
@@ -102,6 +101,7 @@ export function resolveActionGate(action, actor, item = null)
         console.warn(`lancer-automations | resolveActionGate: condition threw on "${action?.name}"`, err);
         return 'visible';
     }
+
     if (result === false || result === 'hidden')
         return 'hidden';
     if (result === 'locked' || result === 'disabled')
@@ -119,6 +119,7 @@ export function resolveActionGate(action, actor, item = null)
 export function gateActions(actions, actor, item = null)
 {
     const out = [];
+
     for (const action of actions ?? [])
     {
         const gate = resolveActionGate(action, actor, item);
@@ -126,21 +127,92 @@ export function gateActions(actions, actor, item = null)
             continue;
         out.push(gate === 'visible' ? action : { ...action, _gate: gate });
     }
+
     return out;
 }
 
+const STATEFUL_TAGS = new Set(['tg_loading', 'tg_recharge', 'tg_limited', 'tg_turn', 'tg_round']);
+const STATE_FIELDS = ['recharge', 'charged', 'loaded', 'uses', 'usesPerTurn', 'usesPerRound'];
+
+/**
+ * Actions granted by the actor's effects through their `grantActions` flag. They exist while the effect does.
+ * Uses, loading and recharge are dropped, an effect holds no action state.
+ * @param {Actor} actor
+ * @returns {any[]}
+ */
+export function getEffectActions(actor)
+{
+    const granted = [];
+
+    for (const effect of actor?.effects ?? [])
+    {
+        if (effect.disabled || getLAFlag(effect,'isActorTemplate') || getLAFlag(effect,'isItemTemplate'))
+            continue;
+
+        for (const action of getLAFlag(effect,'grantActions') ?? [])
+        {
+            if (!action?.name)
+                continue;
+
+            const copy = { ...action, _grantEffectId: effect.id };
+            for (const field of STATE_FIELDS)
+                delete copy[field];
+            if (Array.isArray(copy.tags))
+                copy.tags = copy.tags.filter(tag => !STATEFUL_TAGS.has(tag?.lid));
+            granted.push(copy);
+        }
+    }
+
+    return granted;
+}
+
+/**
+ * The actor's own extra actions plus the ones its effects grant, gated. Effect actions show once per name.
+ * @param {Actor} actor
+ * @returns {any[]}
+ */
+export function getHeldActions(actor)
+{
+    if (!actor)
+        return [];
+
+    const held = [...(getLAFlag(actor,'extraActions') || [])];
+    const names = new Set(held.map(action => action.name));
+
+    for (const action of getEffectActions(actor))
+    {
+        if (names.has(action.name))
+            continue;
+        names.add(action.name);
+        held.push(action);
+    }
+
+    return gateActions(held.filter(action => linkTierGate(action, actor)), actor);
+}
+
+/**
+ * Get the effective actions for an item, merging system.actions with extra actions
+ * stored in the 'lancer-automations.extraActions' flag.
+ * @param {Item} item
+ * @param {{extraOnly?: boolean}} [opts]  extraOnly: return only LA extra actions (skip system/profile)
+ * @returns {Array} Array of action objects
+ */
 export function getItemActions(item, opts = {})
 {
     if (!item)
         return [];
+
     const owner = item.parent?.documentName === 'Actor' ? item.parent : null;
+
     const extraActions = gateActions(
         (getLAFlag(item,'extraActions') || []).filter(action => linkTierGate(action, owner, item)),
         owner,
         item
     );
+
     if (opts.extraOnly)
         return extraActions;
+
     const systemActions = applyActionOverlays(item, item.system?.actions ?? []);
     // Multi-profile weapons (e.g. Dynamo Blade) keep per-profile actions here.
     const profileActions = applyActionOverlays(item, item.system?.active_profile?.actions ?? []);
@@ -179,6 +251,7 @@ export async function addExtraActions(target, actions, opts = {})
         ui.notifications.error(localize('LA.notify.addExtraActionsTarget'));
         return null;
     }
+
     const newActions = Array.isArray(actions) ? actions : [actions];
     if (newActions.length === 0)
         return null;
@@ -201,15 +274,18 @@ export async function addExtraActions(target, actions, opts = {})
 
     // Stamp _sourceItemId on item extras so onlyOnSourceMatch can trace back.
     const isItem = doc.documentName === 'Item';
+
     if (isItem)
     {
         // Strip consumable tags already on the item to avoid double-tracking state.
         const CONSUMABLE_LIDS = new Set(['tg_loading', 'tg_recharge', 'tg_limited']);
         const FIELD_FOR = { tg_loading: 'loaded', tg_recharge: 'charged', tg_limited: 'uses' };
         const itemTagLids = new Set(((doc.system?.tags ?? [])).map((/** @type {any} */ tag) => tag.lid));
+
         for (const action of newActions)
         {
             const actionAny = /** @type {any} */ (action);
+
             if (Array.isArray(actionAny.tags) && actionAny.tags.length)
             {
                 const dropped = [];
@@ -225,12 +301,14 @@ export async function addExtraActions(target, actions, opts = {})
                             delete actionAny.recharge;
                         return false;
                     }
+
                     return true;
                 });
                 if (dropped.length)
                     ui.notifications.warn(localizeFormat('LA.notify.tagsAlreadyOn', { tags: dropped.join(', '), doc: doc.name, action: actionAny.name }));
             }
         }
+
         for (const action of newActions)
         {
             const actionAny = /** @type {any} */ (action);
@@ -245,6 +323,7 @@ export async function addExtraActions(target, actions, opts = {})
     const grantKey = (/** @type {any} */ entry) => `${entry.name}|${entry._grant?.tokenId ?? ''}`;
     const existingKeys = new Set(existing.map(grantKey));
     const fresh = newActions.filter(action => !existingKeys.has(grantKey(action)));
+
     if (!fresh.length)
         return doc;
 
@@ -264,6 +343,7 @@ export function getActorActions(target)
 {
     if (!target)
         return [];
+
     const asAny = /** @type {any} */ (target);
     const doc = (asAny.documentName === 'Item') ? asAny : (asAny.actor ?? asAny.document ?? asAny);
     return getLAFlag(doc,'extraActions') || [];
@@ -281,13 +361,16 @@ export async function removeExtraActions(target, filter = null)
 {
     if (!target)
         return;
+
     const asAny = /** @type {any} */ (target);
     const doc = (asAny.documentName === 'Item') ? asAny : (asAny.actor ?? asAny.document ?? asAny);
     const existing = getLAFlag(doc,'extraActions') || [];
+
     if (existing.length === 0)
         return;
 
     let kept;
+
     if (!filter)
         kept = [];
     else if (typeof filter === 'function')
@@ -310,6 +393,7 @@ export async function sweepStaleGrants({ tokenId = null, itemId = null } = {})
 {
     if (!tokenId && !itemId)
         return;
+
     const matches = (/** @type {any} */ action) =>
     {
         const grant = action?._grant;
@@ -317,11 +401,13 @@ export async function sweepStaleGrants({ tokenId = null, itemId = null } = {})
             return false;
         return (!!tokenId && grant.tokenId === tokenId) || (!!itemId && grant.itemId === itemId);
     };
+
     const sweep = async (/** @type {any} */ doc) =>
     {
         if ((getLAFlag(doc,'extraActions') || []).some(matches))
             await removeExtraActions(doc, matches);
     };
+
     for (const token of (canvas.tokens?.placeables ?? []))
     {
         const actor = /** @type {any} */ (token).actor;
@@ -338,10 +424,13 @@ export async function consumeExtraAction(actor, actionName)
 {
     if (!actor)
         return true;
+
     const all = getLAFlag(actor,'extraActions') || [];
     const idx = all.findIndex(action => action.name === actionName);
+
     if (idx < 0)
         return true;
+
     const entry = { ...all[idx] };
     const tags = entry.tags ?? [];
     const hasLoading = tags.some(tag => tag.lid === 'tg_loading');
@@ -358,9 +447,11 @@ export async function consumeExtraAction(actor, actionName)
             ui.notifications.warn(localizeFormat('LA.notify.notLoaded', { name: entry.name }));
             return false;
         }
+
         entry.loaded = false;
         needsWrite = true;
     }
+
     if (hasRecharge)
     {
         if (entry.charged === false)
@@ -368,39 +459,49 @@ export async function consumeExtraAction(actor, actionName)
             ui.notifications.warn(localizeFormat('LA.notify.uncharged', { name: entry.name }));
             return false;
         }
+
         entry.charged = false;
         needsWrite = true;
     }
+
     if (hasLimited)
     {
         const cur = entry.uses?.value ?? 0;
+
         if (cur <= 0)
         {
             ui.notifications.warn(localizeFormat('LA.notify.noUsesLeft', { name: entry.name }));
             return false;
         }
+
         entry.uses = { ...entry.uses, value: cur - 1 };
         needsWrite = true;
     }
+
     if (hasPerTurn)
     {
         const cur = entry.usesPerTurn?.value ?? 0;
+
         if (cur <= 0)
         {
             ui.notifications.warn(localizeFormat('LA.notify.perTurnLimit', { name: entry.name }));
             return false;
         }
+
         entry.usesPerTurn = { ...entry.usesPerTurn, value: cur - 1 };
         needsWrite = true;
     }
+
     if (hasPerRound)
     {
         const cur = entry.usesPerRound?.value ?? 0;
+
         if (cur <= 0)
         {
             ui.notifications.warn(localizeFormat('LA.notify.perRoundLimit', { name: entry.name }));
             return false;
         }
+
         entry.usesPerRound = { ...entry.usesPerRound, value: cur - 1 };
         needsWrite = true;
     }
@@ -411,6 +512,7 @@ export async function consumeExtraAction(actor, actionName)
         next[idx] = entry;
         await setLAFlag(actor,'extraActions', next);
     }
+
     return true;
 }
 
@@ -419,38 +521,47 @@ export async function reloadExtraAction(actor, actionName)
 {
     if (!actor)
         return;
+
     const all = getLAFlag(actor,'extraActions') || [];
     const idx = all.findIndex(action => action.name === actionName);
+
     if (idx < 0)
         return;
+
     const entry = { ...all[idx] };
     const tags = entry.tags ?? [];
     let changed = false;
+
     if (tags.some(tag => tag.lid === 'tg_loading') && entry.loaded !== true)
     {
         entry.loaded = true;
         changed = true;
     }
+
     if (tags.some(tag => tag.lid === 'tg_recharge') && entry.charged !== true)
     {
         entry.charged = true;
         changed = true;
     }
+
     if (tags.some(tag => tag.lid === 'tg_limited') && entry.uses?.max != null && entry.uses?.value !== entry.uses.max)
     {
         entry.uses = { ...entry.uses, value: entry.uses.max };
         changed = true;
     }
+
     if (entry.usesPerTurn?.max != null && entry.usesPerTurn?.value !== entry.usesPerTurn.max)
     {
         entry.usesPerTurn = { ...entry.usesPerTurn, value: entry.usesPerTurn.max };
         changed = true;
     }
+
     if (entry.usesPerRound?.max != null && entry.usesPerRound?.value !== entry.usesPerRound.max)
     {
         entry.usesPerRound = { ...entry.usesPerRound, value: entry.usesPerRound.max };
         changed = true;
     }
+
     if (changed)
     {
         const next = all.slice();
@@ -475,11 +586,13 @@ export function isPrimaryActionHidden(item)
 export async function setHidePrimaryAction(itemOrUuid, hidden = true)
 {
     const item = typeof itemOrUuid === 'string' ? /** @type {any} */ (await fromUuid(itemOrUuid)) : itemOrUuid;
+
     if (!item || item.documentName !== 'Item')
     {
         ui.notifications.error(localize('LA.notify.setHidePrimaryActionItem'));
         return null;
     }
+
     if (hidden)
         await setItemFlag(item, MODULE_ID,'hidePrimaryAction', true);
     else
@@ -492,44 +605,55 @@ export async function rechargeExtraActionsForActor(actor)
 {
     if (!actor)
         return;
+
     const rollFor = (list) =>
     {
         let mutated = false;
+
         const next = list.map(entry =>
         {
             let current = entry;
             const tags = entry?.tags ?? [];
+
             if (tags.some(tag => tag.lid === 'tg_recharge') && current.charged === false)
             {
                 const threshold = Number(current.recharge ?? 6);
+
                 if (1 + Math.floor(Math.random() * 6) >= threshold)
                 {
                     current = { ...current, charged: true };
                     mutated = true;
                 }
             }
+
             // Per-turn usage resets at the actor's turn start.
             if (current.usesPerTurn?.max != null && current.usesPerTurn.value !== current.usesPerTurn.max)
             {
                 current = { ...current, usesPerTurn: { ...current.usesPerTurn, value: current.usesPerTurn.max } };
                 mutated = true;
             }
+
             return current;
         });
+
         return { next, mutated };
     };
+
     const actorList = getLAFlag(actor,'extraActions') || [];
+
     if (actorList.length)
     {
         const { next, mutated } = rollFor(actorList);
         if (mutated)
             await setLAFlag(actor,'extraActions', next);
     }
+
     for (const item of (actor.items ?? []))
     {
         const itemList = getLAFlag(item,'extraActions') || [];
         if (!itemList.length)
             continue;
+
         const { next, mutated } = rollFor(itemList);
         if (mutated)
             await setLAFlag(item,'extraActions', next);
@@ -551,9 +675,11 @@ async function resetExtraActionUses(actor, field)
 {
     if (!actor)
         return;
+
     const resetList = (list) =>
     {
         let mutated = false;
+
         const next = list.map(entry =>
         {
             if (entry?.[field]?.max != null && entry[field].value !== entry[field].max)
@@ -561,22 +687,28 @@ async function resetExtraActionUses(actor, field)
                 mutated = true;
                 return { ...entry, [field]: { ...entry[field], value: entry[field].max } };
             }
+
             return entry;
         });
+
         return { next, mutated };
     };
+
     const actorList = getLAFlag(actor,'extraActions') || [];
+
     if (actorList.length)
     {
         const { next, mutated } = resetList(actorList);
         if (mutated)
             await setLAFlag(actor,'extraActions', next);
     }
+
     for (const item of (actor.items ?? []))
     {
         const itemList = getLAFlag(item,'extraActions') || [];
         if (!itemList.length)
             continue;
+
         const { next, mutated } = resetList(itemList);
         if (mutated)
             await setLAFlag(item,'extraActions', next);
@@ -594,6 +726,7 @@ export function getLinkedActions(source)
 {
     if (!source)
         return [];
+
     const asAny = /** @type {any} */ (source);
     const doc = (asAny.documentName === 'Item') ? asAny : (asAny.actor ?? asAny.document ?? asAny);
     return /** @type {any[]} */ (getLAFlag(doc,'extraActions') || []);

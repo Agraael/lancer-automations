@@ -2,6 +2,19 @@
     "version": 1,
     "entries": [
         {
+            "id": "2026-11-20-lancer-4-8-3",
+            "date": "2026-11-20",
+            "title": "Lancer Automations 4.8.3",
+            "body": [
+                "<p style='padding: 8px 10px; background: rgba(192,57,43,0.15); border-left: 4px solid #c0392b; border-radius: 2px;'><b style='color: #c0392b; font-size: 1.15em;'><i class='fas fa-triangle-exclamation'></i> WARNING</b><br><b>BE SURE to update my Terrain Height Tools fork</b> along with LA.<br>Automations on an invade option have to move from <b>On Tech Hit</b> to the new <b>On Invade Hit</b> trigger.</p>",
+                "<p>Big update: <b>Reinforcements</b>, <b>Prepare</b>, the <b>Invade</b> rebuild, <b>world clocks</b>, <b>custom deployables</b>, new <b>weapon effects</b>, new <b>status effects</b> and a lot of <b>performance</b> work.</p>",
+                "<p>Also straight-line movement, solid tokens, Variable damage and a bunch of new tutorials.</p>"
+            ],
+            "link": "https://www.patreon.com/LaSossis/posts/lancer-4-8-3-175794986",
+            "linkLabel": "Lancer Automations 4.8.3 dev blog",
+            "linkNote": "Read the full write-up on Patreon"
+        },
+        {
             "id": "2026-11-14-no-update-this-week",
             "date": "2026-11-14",
             "title": "No update this week",
@@ -9,8 +22,7 @@
                 "<p>Sorry, no update this week. I'm cooking a bit more this time, some new stuff and reworks I've been planning. A few previews are on Patreon.</p>"
             ],
             "link": "https://www.patreon.com/LaSossis/posts/la-4-8-0-little-175277017",
-            "linkLabel": "LA 4.8.0 preview",
-            "linkNote": "Images on Patreon"
+            "linkLabel": "LA 4.8.0 preview"
         },
         {
             "id": "2026-11-01-lancer-4-5-4",

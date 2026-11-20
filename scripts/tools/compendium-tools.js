@@ -10,12 +10,16 @@ export async function executePackMacro(macroName, scope = {})
 {
     const packKey = "lancer-automations.macros";
     const pack = game.packs.get(packKey);
+
     if (!pack)
         return ui.notifications.error(localize('LA.notify.lancerAutomationsMacroPackNotFound'));
+
     const index = await pack.getIndex();
     const entry = index.find(indexEntry => indexEntry.name === macroName);
+
     if (!entry)
         return ui.notifications.error(localizeFormat('LA.notify.macroNotFoundInPack', { name: macroName }));
+
     const macro = await pack.getDocument(entry._id);
     await macro.execute({ ParamActor: null, ...scope });
 }
@@ -57,11 +61,13 @@ export async function packMacros()
             const metadata = await response.json();
 
             let command = "";
+
             if (metadata.command_source)
             {
                 // Fetch actual script command from the .js file
                 const jsPath = `${sourcePath}/${metadata.command_source}`;
                 const jsResponse = await fetch(jsPath);
+
                 if (jsResponse.ok)
                     command = await jsResponse.text();
                 else

@@ -14,6 +14,7 @@ const WEAPONS = [
     { name: 'HEAT GUN',        dtype: 'heat',      dice: [2, 4], reach: 'ranged' },
     { name: 'FLAME PROJECTOR', dtype: 'burn',      dice: [2, 3], reach: 'ranged' },
 ];
+
 // Names sourced from token-action-hud-lancer's action registry.
 const TECH_ACTS      = ['INVADE', 'FRAG SIGNAL'];
 const TECH_UTILITIES = ['LOCK ON', 'SCAN', 'BOLSTER'];
@@ -99,6 +100,7 @@ function absorbDamage(state, damageType, raw)
 {
     let remaining = raw;
     let absorbedOvershield = 0;
+
     if (state.overshield > 0 && remaining > 0)
     {
         const eaten = Math.min(state.overshield, remaining);
@@ -106,14 +108,17 @@ function absorbDamage(state, damageType, raw)
         remaining -= eaten;
         absorbedOvershield = eaten;
     }
+
     let absorbedArmor = 0;
     // Armor only bites once per instance and doesn't apply to heat/burn/infection.
     const bypassArmor = damageType === 'heat' || damageType === 'burn' || damageType === 'infection';
+
     if (!bypassArmor && state.armor > 0 && remaining > 0)
     {
         absorbedArmor = Math.min(state.armor, remaining);
         remaining -= absorbedArmor;
     }
+
     return { landed: Math.max(0, remaining), absorbedArmor, absorbedOvershield };
 }
 
@@ -125,20 +130,24 @@ function applyHpDamage(round, combatant, state, landed)
     state.hp -= landed;
     if (state.hp > 0 || state.destroyed || state.struct <= 0)
         return false;
+
     // Mock cheat: players on their last structure refill instead, one mech is force-destroyed post-sim.
     if (state.side === 'player' && state.struct === 1)
     {
         state.hp += state.hpMax;
         return false;
     }
+
     state.struct -= 1;
     pushEvent(combatant, { type: 'structure-loss', round, tokenId: combatant.tokenId });
     state.hp += state.hpMax;
+
     if (state.struct === 0)
     {
         state.destroyed = true;
         return true;
     }
+
     return false;
 }
 
@@ -151,6 +160,7 @@ function weaponAttack(round, actor, actorState, target, targetState, hitChance)
     const crit = hit && Math.random() < CRIT_CHANCE;
     const attackType = weapon.reach === 'melee' ? 'Melee' : 'Ranged';
     const targetEntry = { targetId: target.tokenId, hit, defense };
+
     if (crit)
         targetEntry.crit = true;
     pushEvent(actor, {
@@ -164,6 +174,7 @@ function weaponAttack(round, actor, actorState, target, targetState, hitChance)
     });
     if (!hit)
         return;
+
     const rawAmount = _rand(weapon.dice[0], weapon.dice[1]) * (crit ? 2 : 1);
     const { landed, absorbedArmor, absorbedOvershield } = absorbDamage(targetState, weapon.dtype, rawAmount);
     pushEvent(actor, {
@@ -176,17 +187,21 @@ function weaponAttack(round, actor, actorState, target, targetState, hitChance)
         overshieldAbsorbed: absorbedOvershield,
         armorAbsorbed: absorbedArmor,
     });
+
     const destroyed = applyHpDamage(round, target, targetState, landed);
+
     if (weapon.dtype === 'burn' && _chance(DOT_APPLY_CHANCE) && !targetState.destroyed)
     {
         targetState.dot.burn = Math.min(DOT_MAX, targetState.dot.burn + _rand(2, 3));
         targetState.dotSource.burn = actor.tokenId;
     }
+
     if (destroyed)
     {
         pushEvent(target, { type: 'destroyed', round, tokenId: target.tokenId });
         return true;
     }
+
     return false;
 }
 
@@ -197,6 +212,7 @@ function techAction(round, actor, actorState, target, targetState)
         pushEvent(actor, { type: 'action', round, byId: actor.tokenId, activation: 'Quick Tech', name: _pick(TECH_UTILITIES), success: true });
         return;
     }
+
     const name = _pick(TECH_ACTS);
     const success = _chance(0.7);
     const targetEntry = { targetId: target.tokenId, hit: success, defense: 'edef' };
@@ -209,6 +225,7 @@ function techAction(round, actor, actorState, target, targetState)
         attackType: 'Tech',
         targets: [targetEntry],
     });
+
     // INVADE occasionally applies infection; other tech has no damage.
     if (success && name === 'INVADE' && _chance(0.5))
     {
@@ -228,11 +245,13 @@ function techAction(round, actor, actorState, target, targetState)
         targetState.dotSource.infection = actor.tokenId;
         applyHpDamage(round, target, targetState, landed);
     }
+
     if (targetState.destroyed)
     {
         pushEvent(target, { type: 'destroyed', round, tokenId: target.tokenId });
         return true;
     }
+
     return false;
 }
 
@@ -299,11 +318,13 @@ function moveAction(round, actor)
 function dotTicks(round, target, targetState)
 {
     let destroyedThisRound = false;
+
     for (const dtype of DOT_TYPES)
     {
         const amount = targetState.dot[dtype];
         if (amount <= 0 || targetState.destroyed)
             continue;
+
         const sourceId = targetState.dotSource[dtype] ?? target.tokenId;
         const { landed, absorbedArmor, absorbedOvershield } = absorbDamage(targetState, dtype, amount);
         pushEvent(target, {
@@ -316,13 +337,16 @@ function dotTicks(round, target, targetState)
             overshieldAbsorbed: absorbedOvershield,
             armorAbsorbed: absorbedArmor,
         });
+
         const destroyed = applyHpDamage(round, target, targetState, landed);
+
         if (destroyed)
         {
             pushEvent(target, { type: 'destroyed', round, tokenId: target.tokenId });
             destroyedThisRound = true;
         }
     }
+
     return destroyedThisRound;
 }
 
@@ -338,12 +362,14 @@ function gainHeat(round, combatant, state, amount)
     if (amount <= 0)
         return;
     state.heat += amount;
+
     while (state.heat > state.heatMax && state.stress > 0)
     {
         state.stress -= 1;
         state.heat -= state.heatMax;
         pushEvent(combatant, { type: 'stress-loss', round, tokenId: combatant.tokenId });
     }
+
     if (state.heat > state.heatMax)
         state.heat = state.heatMax;
 }
@@ -353,6 +379,7 @@ function playerTurn(round, actor, actorState, targets)
 {
     if (targets.length === 0)
         return;
+
     const hasTargets = () => targets.some(target => !target.__state.destroyed);
 
     if (_chance(0.3))
@@ -384,6 +411,7 @@ function playerTurn(round, actor, actorState, targets)
         {
             if (!hasTargets())
                 break;
+
             const roll = Math.random();
             if (roll < 0.5)
                 weaponAttack(round, actor, actorState, ...pickTargetWithState(targets), PLAYER_HIT_CHANCE);
@@ -409,6 +437,7 @@ function hostileTurn(round, actor, actorState, targets)
 {
     if (targets.length === 0)
         return;
+
     const roll = Math.random();
     if (roll < 0.55)
         weaponAttack(round, actor, actorState, ...pickTargetWithState(targets), HOSTILE_HIT_CHANCE);
@@ -432,39 +461,51 @@ export function mockCombatTelemetry({ small = _chance(0.5) } = {})
 {
     const mechs = game.actors?.filter(a => a.type === 'mech') ?? [];
     const excludedNpcClasses = new Set(['human', 'pilot']);
+
     const npcClassName = actor => String(
         actor?.items?.find?.(item => item.type === 'npc_class')?.name ?? '',
     ).toLowerCase();
+
     const npcs = (game.actors?.filter(a => a.type === 'npc') ?? [])
         .filter(a => !excludedNpcClasses.has(npcClassName(a)));
+
     // Full Lancer pools (4 structure, 4 stress). Players won't die in the sim; one is forced destroyed post-sim.
     // Fabricated token ids mirror real per-token entries; clones get numbered names.
     let tokenSerial = 0;
+
     const mockEntry = (actor, index, count) => ({
         tokenId: actor.id + '-t' + tokenSerial++,
         actorId: actor.id,
         name: count > 1 ? `${actor.name} ${index + 1}` : actor.name,
         events: [],
     });
+
     const players = pickRandom(mechs, Math.min(mechs.length, small ? _rand(2, 3) : _rand(3, 5)))
         .map(actor => ({ ...mockEntry(actor, 0, 1), __state: freshState(actor, PLAYER_HP_FLOOR, PLAYER_HEAT_FLOOR, 4, 4, 'player') }));
+
     // Bigger hostile pool + hostiles have 1 structure so ~90 % actually get killed.
     const hostiles = [];
     const typePool = pickRandom(npcs, Math.min(npcs.length, small ? _rand(2, 3) : _rand(6, 9)));
+
     for (const typeActor of typePool)
     {
         const count = small ? _rand(1, 2) : _rand(3, 5);
         for (let copy = 0; copy < count; copy++)
             hostiles.push({ ...mockEntry(typeActor, copy, count), __state: freshState(typeActor, HOSTILE_HP_FLOOR, HOSTILE_HEAT_FLOOR, 1) });
     }
+
     const spareMechs = mechs.filter(actor => !players.some(player => player.actorId === actor.id));
+
     const enemyMechs = pickRandom(spareMechs, spareMechs.length)
         .sort((left, right) => Number(!!right.system?.pilot?.value) - Number(!!left.system?.pilot?.value))
         .slice(0, small ? 1 : 2);
+
     for (const mechActor of enemyMechs)
         hostiles.push({ ...mockEntry(mechActor, 0, 1), __state: freshState(mechActor, HOSTILE_HP_FLOOR, HOSTILE_HEAT_FLOOR, 2) });
+
     // Ancillary sides so the recap can preview friendlies / neutrals / secrets.
     const friendlies = [];
+
     if (npcs.length > 0)
     {
         for (const typeActor of pickRandom(npcs, _rand(1, 2)))
@@ -474,23 +515,29 @@ export function mockCombatTelemetry({ small = _chance(0.5) } = {})
                 friendlies.push({ ...mockEntry(typeActor, copy, count), __state: freshState(typeActor, HOSTILE_HP_FLOOR, HOSTILE_HEAT_FLOOR, 3, 3, 'friendly') });
         }
     }
+
     const neutrals = [];
+
     if (npcs.length > 0 && _chance(0.7))
     {
         const typeActor = _pick(npcs);
         neutrals.push({ ...mockEntry(typeActor, 0, 1), __state: freshState(typeActor, HOSTILE_HP_FLOOR, HOSTILE_HEAT_FLOOR, 2, 2, 'neutral') });
     }
+
     const secrets = [];
+
     if (npcs.length > 0 && _chance(0.5))
     {
         const typeActor = _pick(npcs);
         secrets.push({ ...mockEntry(typeActor, 0, 1), __state: freshState(typeActor, HOSTILE_HP_FLOOR, HOSTILE_HEAT_FLOOR, 2, 2, 'secret') });
     }
+
     const roundCount = small ? _rand(3, 4) : _rand(8, 12);
 
     for (let round = 1; round <= roundCount; round++)
     {
         const combatants = [...players, ...hostiles, ...friendlies, ...neutrals, ...secrets];
+
         const tickAll = () =>
         {
             for (const combatant of combatants)
@@ -499,8 +546,10 @@ export function mockCombatTelemetry({ small = _chance(0.5) } = {})
                     statTick(combatant, round, combatant.__state);
             }
         };
+
         // Mirror the real recorder: everyone ticks at every turn, so changes land mid-round.
         let turnIdx = 0;
+
         const startTurn = (combatant) =>
         {
             if (combatant.__state.destroyed)
@@ -508,10 +557,12 @@ export function mockCombatTelemetry({ small = _chance(0.5) } = {})
             _turn = turnIdx++;
             return true;
         };
+
         const actAlly = (ally) =>
         {
             if (!startTurn(ally))
                 return;
+
             const targets = hostiles.filter(hostile => !hostile.__state.destroyed);
             if (players.includes(ally))
                 playerTurn(round, ally, ally.__state, targets);
@@ -519,6 +570,7 @@ export function mockCombatTelemetry({ small = _chance(0.5) } = {})
                 hostileTurn(round, ally, ally.__state, targets);
             tickAll();
         };
+
         const actFoe = (foe) =>
         {
             if (!startTurn(foe))
@@ -526,45 +578,56 @@ export function mockCombatTelemetry({ small = _chance(0.5) } = {})
             hostileTurn(round, foe, foe.__state, players.filter(player => !player.__state.destroyed));
             tickAll();
         };
+
         // Lancer alternating activation: one ally acts, then a proportional share of hostiles.
         const aliveAllies = [...players, ...friendlies].filter(ally => !ally.__state.destroyed);
         const aliveFoes = hostiles.filter(foe => !foe.__state.destroyed);
         const ratio = aliveAllies.length > 0 ? aliveFoes.length / aliveAllies.length : aliveFoes.length;
         let foeIdx = 0;
         let foeBudget = 0;
+
         for (const ally of aliveAllies)
         {
             actAlly(ally);
             foeBudget += ratio;
+
             while (foeBudget >= 1 && foeIdx < aliveFoes.length)
             {
                 actFoe(aliveFoes[foeIdx++]);
                 foeBudget -= 1;
             }
         }
+
         while (foeIdx < aliveFoes.length)
             actFoe(aliveFoes[foeIdx++]);
+
         // Neutrals / secrets fire occasionally at anyone still up.
         for (const combatant of [...neutrals, ...secrets])
         {
             if (!startTurn(combatant))
                 continue;
+
             if (_chance(0.3))
             {
                 const anyone = [...players, ...hostiles, ...friendlies]
                     .filter(target => !target.__state.destroyed && target !== combatant);
+
                 if (anyone.length > 0)
                     hostileTurn(round, combatant, combatant.__state, anyone);
             }
+
             tickAll();
         }
+
         // End-of-round upkeep lands on the last turn.
         _turn = Math.max(0, turnIdx - 1);
+
         for (const combatant of combatants)
         {
             if (!combatant.__state.destroyed)
                 dotTicks(round, combatant, combatant.__state);
         }
+
         for (const combatant of combatants)
             coolHeat(combatant.__state);
         tickAll();
@@ -597,22 +660,27 @@ export function mockCombatTelemetry({ small = _chance(0.5) } = {})
         const state = combatant.__state;
         if (state.destroyed)
             continue;
+
         const finalHp = Math.max(1, Math.round(state.hpMax * (_rand(30, 100) / 100)));
         state.hp = finalHp;
         const targetStructLosses = _rand(0, state.structMax - 1);
         const alreadyLostStruct = combatant.events.filter(ev => ev.type === 'structure-loss').length;
+
         for (let i = alreadyLostStruct; i < targetStructLosses && state.struct > 1; i++)
         {
             pushEvent(combatant, { type: 'structure-loss', round: _rand(2, roundCount), tokenId: combatant.tokenId });
             state.struct -= 1;
         }
+
         const targetStressLosses = _rand(0, state.stressMax - 1);
         const alreadyLostStress = combatant.events.filter(ev => ev.type === 'stress-loss').length;
+
         for (let i = alreadyLostStress; i < targetStressLosses && state.stress > 1; i++)
         {
             pushEvent(combatant, { type: 'stress-loss', round: _rand(2, roundCount), tokenId: combatant.tokenId });
             state.stress -= 1;
         }
+
         const finalHeat = _rand(0, state.heatMax);
         state.heat = finalHeat;
         statTick(combatant, roundCount, state);
@@ -623,6 +691,7 @@ export function mockCombatTelemetry({ small = _chance(0.5) } = {})
     {
         if (player.__state.destroyed)
             continue;
+
         const repairsUsed = _rand(0, 4);
         for (let i = 0; i < repairsUsed; i++)
             pushEvent(player, { type: 'action', round: _rand(2, roundCount), byId: player.tokenId, activation: 'Quick', name: 'SELF REPAIR', success: true });
@@ -647,6 +716,7 @@ export function mockCombatTelemetry({ small = _chance(0.5) } = {})
     const stillAlive = hostiles.filter(hostile => !hostile.__state.destroyed);
     const finishOff = Math.max(0, targetDead - (hostiles.length - stillAlive.length));
     const doomedHostiles = pickRandom(stillAlive, finishOff);
+
     for (const hostile of doomedHostiles)
     {
         hostile.__state.destroyed = true;

@@ -17,27 +17,35 @@ function rollerLiveChance(state)
 {
     if (!targetInfoAllowed())
         return null;
+
     const skill = String(state.data?.path ?? '').split('.').pop()?.toUpperCase();
+
     return () =>
     {
         const base = state.data?.acc_diff?.base;
         const netAcc = (Number(base?.accuracy) || 0) - (Number(base?.difficulty) || 0);
         const contest = state.la_extraData?.contest;
+
         if (contest)
         {
             const opponent = contest.actorUuid ? fromUuidSync(contest.actorUuid) : null;
             const oppActor = opponent?.actor ?? opponent;
+
             if (oppActor && !targetInfoAllowedFor(oppActor))
                 return UNKNOWN_CHANCE;
-            return oppActor ? contestWinChance(state.actor, skill, oppActor, contest.stat, { netAcc }) : null;
+            return oppActor ? contestWinChance(state.actor, skill, oppActor, contest.stat, { netAcc, winTies: contest.winsTies === true }) : null;
         }
+
         const seededTokenId = state.la_extraData?.targetTokenId;
         let hovered = isSingleTargetPickerActive() ? canvas.tokens?.hover : null;
+
         if (hovered && hovered.actor === state.actor)
             hovered = null;
+
         const chosen = hovered ?? Array.from(game.user.targets ?? [])[0] ?? null;
         if (chosen && !targetInfoAllowedFor(chosen.actor))
             return UNKNOWN_CHANCE;
+
         let dc = 10;
         if (chosen)
             dc = (!hovered && seededTokenId && chosen.id === seededTokenId) ? (Number(state.la_extraData?.targetVal) || deriveTargetVal(chosen)) : deriveTargetVal(chosen);
@@ -53,19 +61,15 @@ function deriveTargetVal(targetToken)
     return deriveSaveDc(targetToken?.actor);
 }
 
-// "HULL" / "HULL Save (>= 8)" -> "HULL Save (>= N)"; targetVal null strips the save/threshold back to the base stat.
+// "HULL" / "HULL Check" / "HULL Save (>= 8)" -> "HULL Save", or "HULL Check" when targetVal is null.
 function applySaveTitle(state, targetVal)
 {
-    const base = String(state.data?.title ?? '').replace(/\s*\(>=\s*\d+\)\s*$/, '').trim();
-    if (targetVal == null)
-    {
-        state.data.title = base.replace(/\s+Save\s*$/, '');
-        return;
-    }
-    let saveTitle = base.includes('Save') ? base : base.replace('Check', 'Save');
-    if (!saveTitle.includes('Save'))
-        saveTitle += ' Save';
-    state.data.title = `${saveTitle} (>= ${targetVal})`;
+    const base = String(state.data?.title ?? '')
+        .replace(/\s*\(>=\s*\d+\)\s*$/, '')
+        .replace(/\s+(Check|Save)\s*$/, '')
+        .trim();
+
+    state.data.title = targetVal == null ? `${base} Check` : `${base} Save`;
 }
 
 // The stat-roll HUD shares form[id^="accdiff"] with the attack HUD; the inner body div tells them apart.
@@ -86,10 +90,12 @@ function injectButton(state, $form)
         return;
 
     let $row = $form.find('.accdiff-ranges').first();
+
     if (!$row.length)
     {
         const $section = $(htmlToElement('<div class="accdiff-grid__section svelte-13q4b2q"><span class="accdiff-weight flex-center flexrow">Targeting</span><div class="accdiff-ranges flexrow svelte-13q4b2q"></div></div>'));
         const $footer = $form.find('.accdiff-footer').first();
+
         if ($footer.length)
             $footer.before($section);
         else
@@ -103,12 +109,15 @@ function injectButton(state, $form)
     {
         ev.preventDefault();
         ev.stopPropagation();
+
         if (isSingleTargetPickerActive())
         {
             cancelSingleTargetPicker();
             return;
         }
+
         $btn.addClass('la-targeting-active');
+
         try
         {
             await pickSingleTargetToggle(caster(), { single: true });
@@ -144,13 +153,16 @@ function keepSaveTargetsNeutral(state)
     const accDiff = state.data?.acc_diff;
     if (typeof accDiff?.replaceTargets !== 'function')
         return;
+
     const replace = accDiff.replaceTargets.bind(accDiff);
+
     accDiff.replaceTargets = function (targetUuids)
     {
         replace(targetUuids);
         neutralizeSaveTargets(this);
         return this;
     };
+
     neutralizeSaveTargets(accDiff);
 }
 
@@ -159,6 +171,7 @@ function seedSingleTarget(state)
 {
     const seededTokenId = state.la_extraData?.targetTokenId;
     const seededToken = seededTokenId ? canvas.tokens.get(seededTokenId) : null;
+
     if (seededToken)
         seededToken.setTarget(true, { releaseOthers: true });
     else
@@ -182,25 +195,32 @@ export function registerStatRollTargetButton()
             const isStatOrSkillRoll = state?.name === 'StatRollFlow'
                 || state?.name === 'SkillTriggerOther'
                 || state?.data?.path === 'system.__generic_skill_trigger';
+
             const active = isStatOrSkillRoll && !isTargetSessionActive() && (() =>
             {
                 return getModuleSetting('statRollTargeting') || !!state.la_extraData?.forceTargeting;
             })();
+
             const seededTokenId = active ? state.la_extraData?.targetTokenId : null;
-            const seeded = { tokenId: state.la_extraData?.targetTokenId, val: state.la_extraData?.targetVal, title: state.data?.title };
+            if (active && !seededTokenId)
+                applySaveTitle(state, null);
+            const seeded ={ tokenId: state.la_extraData?.targetTokenId, val: state.la_extraData?.targetVal, title: state.data?.title };
             let rollerMark = null;
             let rollerChance = null;
             let saveTether = null;
             let tetherHookId = null;
             let pickHookId = null;
+
             if (isStatOrSkillRoll)
                 keepSaveTargetsNeutral(state);
+
             const syncPick = (user) =>
             {
                 if (user && user !== game.user)
                     return;
                 state.la_extraData = state.la_extraData || {};
                 const chosen = Array.from(game.user.targets ?? [])[0] ?? null;
+
                 if (chosen && !(seededTokenId && chosen.id === seededTokenId))
                 {
                     state.la_extraData.targetTokenId = chosen.id;
@@ -225,9 +245,8 @@ export function registerStatRollTargetButton()
                         state.la_extraData.targetVal = seeded.val;
                     state.data.title = seeded.title;
                 }
-                if (state.data?.acc_diff)
-                    state.data.acc_diff.title = state.data.title;
             };
+
             if (active)
             {
                 try
@@ -240,9 +259,11 @@ export function registerStatRollTargetButton()
                     rollerMark = createTokenMark(roller);
                     // Tether the roller to whatever it is currently saving against.
                     saveTether = createTokenTether();
+
                     const refreshTether = () => saveTether.setPairs(roller
                         ? [...(game.user.targets ?? [])].map(target => [roller, target])
                         : []);
+
                     refreshTether();
                     tetherHookId = Hooks.on('targetToken', refreshTether);
                     pickHookId = Hooks.on('targetToken', syncPick);
@@ -250,8 +271,10 @@ export function registerStatRollTargetButton()
                 catch
                 { /* */ }
             }
+
             injectWhenReady(state, statRollForm, laInstallRollCardTags, 'roll card tags');
             injectWhenReady(state, statRollForm, laInstallRollCardHeader, 'roll card header');
+
             if (isStatOrSkillRoll && chanceLabelsOn())
             {
                 try
@@ -263,6 +286,7 @@ export function registerStatRollTargetButton()
                 catch
                 { /* */ }
             }
+
             try
             {
                 return await original(state, options);
@@ -270,6 +294,7 @@ export function registerStatRollTargetButton()
             finally
             {
                 rollerChance?.destroy();
+
                 if (active)
                 {
                     // HUD closed: fold the chosen target into la_extraData (onCheck + card read it)...
@@ -277,6 +302,7 @@ export function registerStatRollTargetButton()
                     {
                         const chosen = Array.from(game.user.targets ?? [])[0] ?? null;
                         state.la_extraData = state.la_extraData || {};
+
                         if (chosen && !(seededTokenId && chosen.id === seededTokenId))
                         {
                             // new/changed pick: derive difficulty here (an untouched pre-seed keeps executeStatRoll's value)

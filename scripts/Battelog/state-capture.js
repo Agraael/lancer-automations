@@ -1,6 +1,6 @@
 import { appendEvent, appendEventComputed, getTelemetry, findEntry, pushEvent } from './telemetry-store.js';
 import { findActiveCombatForToken, findTelemetryCombatForToken, resolveEntryTokenId, numOr } from './battelog-utils.js';
-import { attributeKill } from './kill-attribution.js';
+import { attributeKill, liveDestroyed } from './kill-attribution.js';
 import { getLAFlag } from '../tools/flag-utils.js';
 import { isExecutorGM } from '../tools/misc-tools.js';
 
@@ -35,11 +35,21 @@ export function reconcileCombatant(telemetry, combatant, round, turn = null)
 {
     const tokenId = combatant?.tokenId ?? combatant?.actorId;
     const entry = findEntry(telemetry, tokenId);
-    if (!entry || entry.events.some(ev => ev.type === 'destroyed'))
+
+    if (!entry)
         return;
+
     const sys = combatant.actor?.system;
     if (!sys)
         return;
+
+    if (liveDestroyed(entry.events))
+    {
+        if (numOr(sys.structure?.value, 1) <= 0 || numOr(sys.stress?.value, 1) <= 0)
+            return;
+        pushEvent(telemetry, entry, { type: 'revived', round, turn, tokenId });
+    }
+
     pushEvent(telemetry, entry, { type: 'stat-tick', round, turn, tokenId, ..._vitals(sys) });
 }
 
@@ -58,23 +68,51 @@ async function _gmEmitDestroyed(combat, tokenId, actor, round, cause = null)
     const key = `${combat.id}:${tokenId}`;
     if (_destroyedInFlight.has(key))
         return;
+
     const telemetry = getTelemetry(combat);
     const entry = telemetry ? findEntry(telemetry, tokenId) : null;
-    if (!entry || entry.events.some(ev => ev.type === 'destroyed'))
+
+    if (!entry || liveDestroyed(entry.events))
         return;
     _destroyedInFlight.add(key);
     const useRound = round ?? combat.round ?? 0;
     const useTurn = combat.turn ?? null;
     const sys = (actor ?? _tokenActor(combat, tokenId))?.system;
-    if (sys)
-        await appendEvent(combat, tokenId, { type: 'stat-tick', round: useRound, turn: useTurn, tokenId, ..._vitals(sys) });
-    await appendEventComputed(combat, tokenId, (currentTelemetry, currentEntry) =>
+
+    try
     {
-        if (currentEntry.events.some(ev => ev.type === 'destroyed'))
-            return null;
-        const { killerId, assistIds } = attributeKill(currentTelemetry, tokenId, useRound, cause);
-        return { type: 'destroyed', round: useRound, turn: useTurn, tokenId, killerId, assistIds, ...(cause ? { cause } : {}) };
-    });
+        if (sys)
+            await appendEvent(combat, tokenId, { type: 'stat-tick', round: useRound, turn: useTurn, tokenId, ..._vitals(sys) });
+        await appendEventComputed(combat, tokenId, (currentTelemetry, currentEntry) =>
+        {
+            if (liveDestroyed(currentEntry.events))
+                return null;
+
+            const { killerId, assistIds } = attributeKill(currentTelemetry, tokenId, useRound, cause);
+            return { type: 'destroyed', round: useRound, turn: useTurn, tokenId, killerId, assistIds, ...(cause ? { cause } : {}) };
+        });
+    }
+    finally
+    {
+        _destroyedInFlight.delete(key);
+    }
+}
+
+export async function recordLeft(combat, tokenId, actor)
+{
+    if (!isExecutorGM())
+        return;
+
+    const telemetry = getTelemetry(combat);
+    const entry = telemetry ? findEntry(telemetry, tokenId) : null;
+    if (!entry || liveDestroyed(entry.events))
+        return;
+
+    const round = combat.round ?? 0;
+    const turn = combat.turn ?? null;
+    if (actor?.system)
+        await appendEvent(combat, tokenId, { type: 'stat-tick', round, turn, tokenId, ..._vitals(actor.system) });
+    await appendEvent(combat, tokenId, { type: 'left', round, turn, tokenId });
 }
 
 function _emitLoss(combat, tokenId, event)
@@ -99,9 +137,11 @@ export function handleRemoteStateEvent(payload)
 {
     if (!isExecutorGM())
         return;
+
     const combat = game.combats?.get(payload?.combatId);
     if (!getLAFlag(combat,'telemetry'))
         return;
+
     const event = payload.event;
     if (event?.type === 'destroyed')
         _gmEmitDestroyed(combat, payload.entryId ?? event.tokenId, null, event.round, event.cause ?? null);
@@ -115,11 +155,14 @@ function _onStateTrigger(triggerType, data)
     const tokenId = data?.triggeringToken?.id;
     if (!tokenId)
         return;
+
     const combat = findActiveCombatForToken(tokenId) ?? findTelemetryCombatForToken(tokenId);
     if (!combat)
         return;
+
     const round = combat.round ?? 0;
     const actor = data?.triggeringToken?.actor;
+
     if (triggerType === 'onStructure')
     {
         _emitLoss(combat, tokenId, { type: 'structure-loss', round, tokenId });
@@ -144,17 +187,21 @@ async function _onUpdateItem(item, change)
         return;
     if (change?.system?.destroyed !== true && change?.system?.cascading !== true)
         return;
+
     let kind = GEAR_KIND[item?.type];
     if (!kind && item?.type === 'npc_feature')
         kind = item.system?.type === 'Weapon' ? 'weapon' : 'system';
     if (!kind)
         return;
+
     const tokenId = resolveEntryTokenId(item?.parent);
     if (!tokenId)
         return;
+
     const combat = findActiveCombatForToken(tokenId) ?? findTelemetryCombatForToken(tokenId);
     if (!combat)
         return;
+
     const key = `${combat.id}:${item.uuid}`;
     if (_gearEmitted.has(key))
         return;
@@ -173,12 +220,15 @@ function _onUpdateActorDot(actor, change)
 {
     if (!isExecutorGM())
         return;
+
     const kinds = ['burn', 'infection'].filter(kind => change?.system?.[kind] !== undefined);
     if (!kinds.length)
         return;
+
     const tokenId = resolveEntryTokenId(actor);
     if (!tokenId)
         return;
+
     const combat = findActiveCombatForToken(tokenId);
     if (!combat)
         return;
@@ -189,11 +239,13 @@ function _onUpdateActorDot(actor, change)
 export function forgetCombatState(combatId)
 {
     const prefix = `${combatId}:`;
+
     for (const key of _destroyedInFlight)
     {
         if (key.startsWith(prefix))
             _destroyedInFlight.delete(key);
     }
+
     for (const key of _gearEmitted)
     {
         if (key.startsWith(prefix))

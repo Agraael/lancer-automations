@@ -20,16 +20,19 @@ function _bodyEntryId(tokenId)
 // next turn start), so this reads the revert-safe net distance for the turn.
 function _onTurnEnd(combat, prior)
 {
-    if (!game.users?.activeGM?.isSelf)
+    if (!isExecutorGM())
         return;
+
     let tokenId = prior?.tokenId;
     if (!tokenId && prior?.combatantId)
         tokenId = combat.combatants?.get(prior.combatantId)?.token?.id;
     if (!tokenId)
         return;
+
     const telemetryCombat = findActiveCombatForToken(tokenId) ?? findTelemetryCombatForToken(tokenId);
     if (!telemetryCombat)
         return;
+
     const moved = _round1(getIntentionalMoveData(tokenId)?.moved);
     if (moved <= 0)
         return;
@@ -47,20 +50,25 @@ function _onInvoluntaryMove(data)
     const tokenId = data?.token?.id ?? data?.token?.document?.id;
     if (!tokenId)
         return;
+
     const telemetryCombat = findActiveCombatForToken(tokenId) ?? findTelemetryCombatForToken(tokenId);
+
     if (!telemetryCombat)
     {
         _knockbackSource.delete(tokenId);
         return;
     }
+
     const distance = _round1(data?.distance);
     const sourceId = _knockbackSource.get(tokenId);
     _knockbackSource.delete(tokenId);
     if (distance <= 0)
         return;
+
     const event = { type: 'move', round: telemetryCombat.round ?? 0, byId: tokenId, distance, knockback: true };
     if (sourceId)
         event.sourceId = sourceId;
+
     const entryId = _bodyEntryId(tokenId);
     if (isExecutorGM())
         appendEvent(telemetryCombat, entryId, event);

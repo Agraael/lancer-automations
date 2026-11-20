@@ -9,6 +9,7 @@ export class BondPanel extends HudPanel
         this._resetPanel(anchorRow);
         const actor = /** @type {any} */ (this._actor);
         const bond = actor?.system?.bond ?? actor?.items?.find((/** @type {any} */ item) => item.type === 'bond') ?? null;
+
         if (!actor || !bond)
             return;
 
@@ -44,6 +45,7 @@ export class BondPanel extends HudPanel
 
         // XP checklist
         body.append(htmlToElement(`<div class="la-hud-panel-section-header">XP CHECKLIST</div>`));
+
         const checkRow = (/** @type {string} */ label, /** @type {boolean} */ checked, /** @type {(on: boolean) => Promise<any>} */ write) =>
         {
             const row = $(htmlToElement(`<label class="la-bond-check"></label>`));
@@ -56,6 +58,7 @@ export class BondPanel extends HudPanel
             row.on('mouseenter', () => this._cancelCollapse());
             return row;
         };
+
         (bond.system?.major_ideals ?? []).forEach((/** @type {string} */ ideal, /** @type {number} */ idealIdx) =>
         {
             body.append(checkRow(ideal, state.xp_checklist?.major_ideals?.[idealIdx] === true,
@@ -89,6 +92,7 @@ export class BondPanel extends HudPanel
             await actor.tallyBondXP?.();
             this.refresh();
         });
+
         const refreshBtn = $(htmlToElement(`<button type="button" class="la-bond-btn"><i class="mdi mdi-refresh"></i> Refresh Powers</button>`));
         swallow(refreshBtn);
         refreshBtn.on('click', async () =>

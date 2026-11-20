@@ -10,12 +10,13 @@ import {
     pointerToWorld, makeSafe, suppressTokenInteraction, addGraphicsBelowTokens, addGraphicsAboveTokens,
     destroyGraphics, paintSingleMarkCursor, gridLineWidth, TG, createMergedRangeHighlight, RANGE_GLOW,
     createCtrlMarkIndicator,
-    suppressEvent,
+    suppressEvent, watchRightClick,
 } from "../canvas-helpers.js";
 import { isHexGrid, getHexCenter, pixelToOffset, drawHexAt, getOccupiedOffsets } from "../../combat/grid-helpers.js";
 import { rangePulse, RANGE_PULSE_PRIORITY } from "../range-pulse-manager.js";
 import { createMovementReachHighlight } from "../movement-reach-highlight.js";
 import { isLancerRulerActive } from "../../movement/cost-rules.js";
+import { groundTop, solidTokenBandsAtPoint } from "../../movement/ground.js";
 import { drawSightlines, clearSightlines } from "../../vision/sightlines.js";
 import { initGlobalCtrlRuler, showToolCursor, setCanvasCursorHidden, tokenDragActive, ctrlRulerMode, CTRL_RULER_HOLD_MS } from "./measureToolCursor.js";
 export { setPickerTargetCursor } from "./measureToolCursor.js";
@@ -92,6 +93,7 @@ function tokenAt(tx, ty)
     {
         if (!isTokenVisible(token))
             return false;
+
         const bounds = token.bounds;
         return tx >= bounds.left && tx <= bounds.right && ty >= bounds.top && ty <= bounds.bottom;
     }) || null;
@@ -132,6 +134,7 @@ function pointerOverToolbar()
 {
     if (!_toolbarEl || !_toolbarEl.isConnected || _lastClientX < 0)
         return false;
+
     const el = document.elementFromPoint(_lastClientX, _lastClientY);
     return !!el && _toolbarEl.contains(el);
 }
@@ -163,15 +166,19 @@ function markedTokens()
     const store = _saved.whiteMarks;
     if (!store)
         return [];
+
     const out = [];
+
     for (const mark of store.marks)
     {
         if (!mark.tokenId)
             continue;
+
         const token = canvas.tokens.get(mark.tokenId);
         if (isValidRef(token) && isTokenVisible(token))
             out.push(token);
     }
+
     return out;
 }
 
@@ -180,6 +187,7 @@ function getReferenceTokens()
     const primary = (_hoverToken && isValidRef(_hoverToken))
         ? [_hoverToken]
         : getControlled().filter(isValidRef);
+
     const byId = new Map();
     for (const token of [...primary, ...markedTokens()])
         byId.set(token.id, token);
@@ -194,6 +202,7 @@ function computeRadiusForToken(token, source = _saved.rangeSource, weaponItemId 
         return _saved.manualRadius;
     if (!isKnownToken(token))
         return null;
+
     const actor = token?.actor;
     if (!actor)
         return _saved.manualRadius;
@@ -204,11 +213,13 @@ function computeRadiusForToken(token, source = _saved.rangeSource, weaponItemId 
     // weapon is owner-only (loadout is yours to know); a scanned enemy falls back to max reach
     if (source === 'reach' || (source === 'weapon' && !token.isOwner))
         return getActorMaxReach_WithBonus(actor);
+
     if (source === 'weapon')
     {
         const weapon = actor.items.get(weaponItemId) ?? getWeapons(token)[0];
         return weapon ? weaponMaxRange(weapon, actor) : _saved.manualRadius;
     }
+
     return _saved.manualRadius;
 }
 
@@ -229,6 +240,7 @@ function losInfoForToken(token, range, source = _saved.rangeSource)
 {
     const none = { los: false, freeRange: 0 };
     const stored = _saved.losBySource?.[source];
+
     if (stored === false)
         return none;
     if (stored === true)
@@ -239,15 +251,18 @@ function losInfoForToken(token, range, source = _saved.rangeSource)
         return { los: true, freeRange: 0 };
     if (source !== 'weapon' && source !== 'reach')
         return none;
+
     const actor = token?.actor;
     if (!actor)
         return none;
+
     if (source === 'weapon' && token.isOwner)
     {
         const weapon = actor.items.get(_saved.weaponItemId) ?? getWeapons(token)[0];
         if (weapon)
             return { los: !weaponIgnoresLineOfSight(weapon), freeRange: 0 };
     }
+
     const freeMax = Math.min(range, getActorReachBands_WithBonus(actor).freeMax);
     return { los: range > freeMax, freeRange: freeMax };
 }
@@ -282,6 +297,7 @@ function _tokenHasPin(tokenId)
         if (pin.tokenId === tokenId)
             return true;
     }
+
     return false;
 }
 
@@ -325,6 +341,7 @@ function _rebuildPinVisuals()
 {
     _hidePins();
     const bySource = new Map();
+
     for (const pin of _rangePins.values())
     {
         const token = canvas.tokens.get(pin.tokenId);
@@ -336,6 +353,7 @@ function _rebuildPinVisuals()
     }
 
     const allEntries = [...bySource.values()].flat();
+
     if (allEntries.length)
     {
         _pinGroups.set('__fill', createMergedRangeHighlight(allEntries, {
@@ -345,6 +363,7 @@ function _rebuildPinVisuals()
             fadeInMs: 0,
         }));
     }
+
     for (const [source, entries] of bySource)
     {
         _pinGroups.set(source, createMergedRangeHighlight(entries, {
@@ -358,6 +377,7 @@ function _rebuildPinVisuals()
             fadeInMs: 0,
         }));
     }
+
     _syncPinFill();
     _raisePins();
 }
@@ -381,8 +401,10 @@ export function hasRangePin(token, source, weaponItemId = null)
             if (pin.tokenId === token?.id && pin.source === 'weapon')
                 return true;
         }
+
         return false;
     }
+
     return _rangePins.has(_pinKey(token?.id, source, weaponItemId));
 }
 
@@ -390,7 +412,9 @@ export function toggleRangePin(token, source, { weaponItemId = null, range = nul
 {
     if (!token || !source || source === 'none')
         return;
+
     const key = _pinKey(token.id, source, weaponItemId);
+
     if (_rangePins.has(key))
         _destroyPin(key);
     else
@@ -400,6 +424,7 @@ export function toggleRangePin(token, source, { weaponItemId = null, range = nul
             return;
         _rangePins.set(key, { tokenId: token.id, source, range: radius });
     }
+
     _rebuildPinVisuals();
     Hooks.callAll('lancer-automations.advancedMeasureStateChange');
 }
@@ -411,6 +436,7 @@ export function clearRangePins(tokenId = null)
         if (tokenId === null || _rangePins.get(key)?.tokenId === tokenId)
             _destroyPin(key);
     }
+
     _rebuildPinVisuals();
     Hooks.callAll('lancer-automations.advancedMeasureStateChange');
 }
@@ -436,6 +462,7 @@ function weaponRangeHtml(ranges)
         .filter(([, distance]) => distance > 0)
         .sort(([typeA], [typeB]) => RANGE_TYPE_ORDER.indexOf(String(typeA).toLowerCase()) - RANGE_TYPE_ORDER.indexOf(String(typeB).toLowerCase()))
         .map(([type, distance]) => `<i class="cci ${RANGE_TYPE_CCI[String(type).toLowerCase()] ?? 'cci-range'}"></i>${distance}`);
+
     return parts.join(' ');
 }
 
@@ -443,22 +470,26 @@ function weaponRangeHtml(ranges)
 function rebuildPulse()
 {
     const entries = [];
+
     for (const token of getReferenceTokens())
     {
         const range = computeRadiusForToken(token);
         if (range > 0)
             entries.push({ token, range, ...losInfoForToken(token, range) });
     }
+
     if (_saved.rangeSource === 'manual' && _saved.manualRadius > 0)
     {
         for (const mark of groundMarks())
             entries.push({ point: getHexCenter(mark.col, mark.row), range: _saved.manualRadius });
     }
+
     if (_suppressed || _saved.rangeSource === 'none' || !entries.length)
     {
         rangePulse.clear('advanced-measure');
         return;
     }
+
     const glowColor = RANGE_GLOW[_saved.rangeSource] ?? RANGE_GLOW.manual;
     const signature = `${_saved.rangeSource}|` + entries.map(entry => entry.token ? `${entry.token.document.id}:${entry.range}:${entry.los === true}:${entry.freeRange ?? 0}` : `c:${entry.point.x},${entry.point.y}:${entry.range}`).sort().join('|');
     rangePulse.set('advanced-measure', {
@@ -473,9 +504,11 @@ function rebuildMovementReach(force = false)
 {
     const tokens = getReferenceTokens().filter(isKnownToken);
     const enabled = _saved.movementReachEnabled && isLancerRulerActive();
+
     const signature = (!_suppressed && enabled && tokens.length)
         ? tokens.map(token => token.document.id).sort().join('|')
         : null;
+
     if (!force && signature !== null && signature === _movementReachSig)
         return;
     _movementReach?.();
@@ -502,11 +535,13 @@ function groundMarks()
 function targetCells()
 {
     const out = [];
+
     for (const mark of _saved.marks?.marks ?? [])
     {
         if (mark.tokenId)
         {
             const token = canvas.tokens.get(mark.tokenId);
+
             if (token && isTokenVisible(token))
             {
                 for (const offset of getOccupiedOffsets(token))
@@ -516,6 +551,7 @@ function targetCells()
         else
             out.push(`${mark.col},${mark.row}`);
     }
+
     return out;
 }
 
@@ -525,6 +561,7 @@ function createShapeTokenMarker()
     const gfx = new PIXI.Graphics();
     addGraphicsAboveTokens(gfx);
     let lastKey = '';
+
     const tick = () =>
     {
         if (gfx.destroyed)
@@ -532,7 +569,9 @@ function createShapeTokenMarker()
             canvas.app.ticker.remove(tick);
             return;
         }
+
         const cells = new Set(_open && !_suppressed ? [...(_saved.store?.cells ?? []), ...targetCells()] : []);
+
         if (!cells.size)
         {
             if (lastKey)
@@ -540,15 +579,18 @@ function createShapeTokenMarker()
             lastKey = '';
             return;
         }
+
         gfx.alpha = 0.65 + 0.35 * Math.sin(performance.now() / 280);
         const tokens = (canvas.tokens?.placeables ?? []).filter(isTokenVisible);
         const key = `${[...cells].join(';')}|${tokens.map(token => `${token.id}:${token.document.x}:${token.document.y}:${token.document.width}:${token.document.height}`).join(';')}`;
+
         if (key === lastKey)
             return;
         lastKey = key;
         gfx.clear();
         gfx.lineStyle(gridLineWidth(4), TG.placed, 0.9);
         gfx.beginFill(TG.placed, 0.2);
+
         for (const token of tokens)
         {
             const offsets = getOccupiedOffsets(token);
@@ -562,9 +604,12 @@ function createShapeTokenMarker()
             else
                 gfx.drawRect(token.document.x, token.document.y, token.document.width * canvas.grid.size, token.document.height * canvas.grid.size);
         }
+
         gfx.endFill();
     };
+
     canvas.app.ticker.add(tick);
+
     return () =>
     {
         canvas.app.ticker.remove(tick);
@@ -600,6 +645,7 @@ function applyMark(mark, token, adding, sound)
 function onCtrlMarkMove(event)
 {
     _ctrlCursorWorld = pointerToWorld(event);
+
     // drop the hover reference once the cursor leaves the token, even without a hover-out event
     if (_hoverToken && !pointerOverToolbar()
         && (_hoverToken.destroyed || !_hoverToken.bounds.contains(_ctrlCursorWorld.x, _ctrlCursorWorld.y)))
@@ -607,11 +653,13 @@ function onCtrlMarkMove(event)
         _hoverToken = null;
         onSelectionChange();
     }
+
     _ctrlIndicator?.move(_ctrlCursorWorld.x, _ctrlCursorWorld.y);
     _areaIndicator?.move(_ctrlCursorWorld.x, _ctrlCursorWorld.y);
     _targetIndicator?.move(_ctrlCursorWorld.x, _ctrlCursorWorld.y);
     if (_ctrlDistanceHeld)
         pushDistancePoint();
+
     if (_markPaint && ctrlMarkActive())
     {
         const { token, mark } = markAtCursor(_ctrlCursorWorld.x, _ctrlCursorWorld.y);
@@ -658,6 +706,7 @@ function ctrlQueryMarked(worldX, worldY)
         return null;
     if (_markPaint)
         return !_markPaint.adding;
+
     const { mark } = markAtCursor(worldX, worldY);
     return _saved.whiteMarks ? _saved.whiteMarks.has(mark) : false;
 }
@@ -667,12 +716,15 @@ function onWhiteMarkTokenDeleted(doc)
     const store = _saved.whiteMarks;
     if (!store)
         return;
+
     const before = store.marks.length;
+
     for (const mark of store.marks.slice())
     {
         if (mark.tokenId === doc.id)
             store.remove(mark);
     }
+
     if (store.marks.length !== before)
     {
         refreshLosEye();
@@ -805,17 +857,20 @@ function onDistanceKey(event)
             cancelCtrlArm();
         return;
     }
+
     if (_suppressed)
         return;
     // 'always' mode is handled by the global layer (works with the tool closed too).
     if (ctrlRulerMode() !== 'tool' || !_open)
         return;
+
     if (event.type === 'keyup')
     {
         cancelCtrlArm();
         setCtrlDistance(false);
         return;
     }
+
     if (event.repeat || _ctrlDistanceHeld || _ctrlArmTimer || tokenDragActive() || isTypingTarget(event.target))
         return;
     _ctrlArmTimer = setTimeout(() =>
@@ -840,6 +895,7 @@ function onDistanceBlur()
 
 // controlToken/hoverToken fire per-token; coalesce a burst into a single refresh.
 let _selectionRaf = null;
+
 function onSelectionChange()
 {
     if (_selectionRaf)
@@ -849,12 +905,14 @@ function onSelectionChange()
         _selectionRaf = null;
         if (!_open)
             return;
+
         if (_saved.rangeSource === 'weapon' && getControlled().length > 1)
         {
             _saved.rangeSource = 'reach';
             _saved.weaponItemId = null;
             _emitStateChange();
         }
+
         rebuildPulse();
         rebuildMovementReach();
         updateDistanceLabels();
@@ -872,6 +930,7 @@ function onHoverToken(token, hovered)
         onSelectionChange();
         return;
     }
+
     requestAnimationFrame(() =>
     {
         if (_hoverToken !== token || token.hover)
@@ -928,6 +987,7 @@ function onFreeWheel(event)
         cancelCtrlArm();
     if (!_open || _suppressed || _saved.mode === 'area')
         return;
+
     if (event.shiftKey && _saved.mode === 'free' && _saved.rangeSource === 'manual')
     {
         event.preventDefault();
@@ -943,7 +1003,8 @@ function onAreaPlace(result)
     const store = ensureStore();
     const offset = pixelToOffset(result.labelPt.x, result.labelPt.y);
     const clickedCell = `${offset.col},${offset.row}`;
-    if (store.removeAt(clickedCell))
+
+    if (!result.aimed && store.removeAt(clickedCell))
         return;
     store.addShape(result);
 }
@@ -963,6 +1024,7 @@ function startAreaMode()
         visibleOnly: true,
         sound: () => !_overToolbar,
         resolveOnClick: false,
+        cancelOnRightClick: true,
         placedStore: null,
         colorFor: () => TG.inRange,
         getToggles: () => ({ elevationAware: _saved.elevationAware, autoElevation: _saved.autoElevation, propagation: _saved.propagation }),
@@ -982,6 +1044,7 @@ function stopAreaMode()
         _controller.dispose();
         _controller = null;
     }
+
     _areaIndicator?.dispose();
     _areaIndicator = null;
 }
@@ -998,6 +1061,7 @@ function markAtCursor(tx, ty)
     const token = tokenAt(tx, ty);
     if (token)
         return { token, mark: { tokenId: token.id } };
+
     const cell = pixelToOffset(tx, ty);
     return { token: null, mark: { col: cell.col, row: cell.row } };
 }
@@ -1011,17 +1075,20 @@ function startSingleMode()
     const cursorGfx = new PIXI.Graphics();
     canvas.stage.addChild(cursorGfx).eventMode = 'none';
     const safe = makeSafe('advancedMeasureSingle', () => closeAdvancedMeasure());
+
     const onMove = safe((event) =>
     {
         const { x, y } = pointerToWorld(event);
         // Marking is not targeting: no range check, never red.
         paintSingleMarkCursor(cursorGfx, x, y, { tokens: canvas.tokens.placeables.filter(isTokenVisible) });
+
         if (!_overToolbar)
         {
             const cell = pixelToOffset(x, y);
             playTargetingMove(cell.col, cell.row);
         }
     });
+
     const onClick = safe((event) =>
     {
         const { x, y } = pointerToWorld(event);
@@ -1035,17 +1102,20 @@ function startSingleMode()
             playUiSound('targetingConfirm');
         renderToolbar();
     });
+
     const onRight = safe((event) =>
     {
-        const { x, y } = pointerToWorld(event);
+        const { x, y } = canvas.canvasCoordinatesFromClient({ x: event.clientX, y: event.clientY });
         const marks = ensureMarkStore();
         const { token, mark } = markAtCursor(x, y);
+
         if (!marks.has(mark))
             return;
         marks.remove(mark);
         playUiSound(token ? 'tokenUntarget' : 'targetingConfirm');
         renderToolbar();
     });
+
     const onKey = safe((event) =>
     {
         if (event.key === 'Escape' && !isTypingInToolbar(event) && !isTypingTarget(event.target))
@@ -1054,12 +1124,13 @@ function startSingleMode()
             escapeToFree();
         }
     });
+
     canvas.stage.on('pointermove', onMove);
     canvas.stage.on('click', onClick);
-    canvas.stage.on('rightdown', onRight);
+    const unwatchRight = watchRightClick(onRight);
     document.addEventListener('keydown', onKey, true);
     _singleCursor = { gfx: cursorGfx, restoreTokenInteraction };
-    _singleHandlers = { onMove, onClick, onRight, onKey };
+    _singleHandlers = { onMove, onClick, onKey, unwatchRight };
     _targetIndicator = createCtrlMarkIndicator({ queryMarked: targetRemoveQuery, alwaysOn: true });
 }
 
@@ -1068,20 +1139,23 @@ function stopSingleMode()
     if (!_singleActive)
         return;
     _singleActive = false;
+
     if (_singleHandlers)
     {
         canvas.stage.off('pointermove', _singleHandlers.onMove);
         canvas.stage.off('click', _singleHandlers.onClick);
-        canvas.stage.off('rightdown', _singleHandlers.onRight);
+        _singleHandlers.unwatchRight();
         document.removeEventListener('keydown', _singleHandlers.onKey, true);
         _singleHandlers = null;
     }
+
     if (_singleCursor)
     {
         destroyGraphics(_singleCursor.gfx);
         _singleCursor.restoreTokenInteraction();
         _singleCursor = null;
     }
+
     _targetIndicator?.dispose();
     _targetIndicator = null;
 }
@@ -1098,7 +1172,9 @@ function setMode(mode)
         if (mode === 'free' && !_controller && !_singleActive)
             return;
     }
+
     _saved.mode = mode;
+
     if (mode === 'free')
     {
         stopAreaMode();
@@ -1114,6 +1190,7 @@ function setMode(mode)
         stopAreaMode();
         startSingleMode();
     }
+
     renderToolbar();
 }
 
@@ -1185,6 +1262,7 @@ function makeIcon(iconSpec)
         span.style.maskImage = `url("${url}")`;
         return span;
     }
+
     const icon = document.createElement('i');
     icon.className = iconSpec;
     return icon;
@@ -1254,12 +1332,14 @@ function renderRangeDropdown(items)
     trigger.className = `lancer-action-btn la-mt-dd-trigger${currentItem ? '' : ' la-mt-placeholder'}`;
     if (currentItem)
         markActive(trigger);
+
     const labelText = localize(currentItem?.label ?? 'LA.measure.range');
     trigger.title = labelText;
     const label = document.createElement('span');
     label.className = 'la-mt-dd-label';
     label.textContent = labelText;
     trigger.append(makeIcon(currentItem?.icon ?? 'systems/lancer/assets/icons/range.svg'), label);
+
     if (currentItem?.number)
     {
         const value = document.createElement('b');
@@ -1267,7 +1347,9 @@ function renderRangeDropdown(items)
         value.textContent = currentItem.number;
         trigger.appendChild(value);
     }
+
     const pinCount = items.filter(item => item.pinned).length;
+
     if (pinCount)
     {
         const pins = document.createElement('span');
@@ -1275,6 +1357,7 @@ function renderRangeDropdown(items)
         pins.textContent = `★${pinCount}`;
         trigger.appendChild(pins);
     }
+
     const caret = document.createElement('i');
     caret.className = 'fa-solid fa-caret-down la-mt-dd-caret';
     trigger.appendChild(caret);
@@ -1284,11 +1367,14 @@ function renderRangeDropdown(items)
         playUiSound('toggle');
         setOpenMenu(open ? null : 'range');
     });
+
     const panel = document.createElement('div');
     panel.className = `la-mt-dd-panel${open ? ' open' : ''}`;
+
     if (open)
     {
         const losColumn = getSettingEnabled('rangePulseLos');
+
         for (const item of items)
         {
             const active = item.value === _saved.rangeSource;
@@ -1334,6 +1420,7 @@ function renderRangeDropdown(items)
                 toggleSourcePin(item.value);
                 renderToolbar();
             }));
+
             if (losColumn)
             {
                 const sightOn = losStateFor(item.value);
@@ -1345,13 +1432,16 @@ function renderRangeDropdown(items)
                     renderToolbar();
                 }));
             }
+
             panel.appendChild(entry);
         }
+
         const foot = document.createElement('div');
         foot.className = 'la-mt-dd-foot';
         foot.textContent = localize('LA.measure.clickAgainOff');
         panel.appendChild(foot);
     }
+
     wrap.append(trigger, panel);
     return wrap;
 }
@@ -1383,11 +1473,13 @@ let _menuOutside = null;
 function setOpenMenu(name)
 {
     _openMenu = name;
+
     if (_menuOutside)
     {
         document.removeEventListener('mousedown', _menuOutside, true);
         _menuOutside = null;
     }
+
     if (name)
     {
         _menuOutside = (event) =>
@@ -1395,8 +1487,10 @@ function setOpenMenu(name)
             if (!_toolbarEl?.querySelector(`[data-menu="${name}"]`)?.contains(event.target))
                 setOpenMenu(null);
         };
+
         document.addEventListener('mousedown', _menuOutside, true);
     }
+
     renderToolbar();
 }
 
@@ -1407,6 +1501,7 @@ function keyLabel(action, fallback = '')
         const binding = game.keybindings.get(MODULE_ID, action)?.[0];
         if (!binding?.key)
             return fallback;
+
         const key = binding.key.replace(/^Key/, '').replace(/^Digit/, '');
         return [...(binding.modifiers ?? []), key].join('+');
     }
@@ -1421,7 +1516,7 @@ const HELP_ROWS = [
     { name: 'LA.measure.help.shapeButton', text: 'LA.measure.help.armShape' },
     { kbd: 'LA.measure.help.key.click', text: 'LA.measure.help.dropShape' },
     { kbd: 'LA.measure.help.key.shiftWheel', text: 'LA.measure.help.size' },
-    { kbd: 'LA.measure.help.key.ctrlWheel', text: 'LA.measure.help.turn' },
+    { kbd: 'LA.measure.help.key.drag', text: 'LA.measure.help.turn' },
     { bind: ['elevationDown', 'elevationUp'], text: 'LA.measure.help.height' },
     { bind: ['lineTiltDown', 'lineTiltUp'], text: 'LA.measure.help.tilt' },
     { bind: ['resetShape'], text: 'LA.measure.help.reset' },
@@ -1449,6 +1544,7 @@ function renderHelpCard()
     card.className = `la-mt-helpcard${open ? ' open' : ''}`;
     if (!open)
         return card;
+
     for (const row of HELP_ROWS)
     {
         if (row.group)
@@ -1458,6 +1554,7 @@ function renderHelpCard()
             card.appendChild(heading);
             continue;
         }
+
         const line = document.createElement('div');
         line.className = 'la-mt-help-row';
         const cell = document.createElement(row.name ? 'b' : 'kbd');
@@ -1465,11 +1562,13 @@ function renderHelpCard()
             cell.textContent = row.bind.map(action => keyLabel(action, '?')).join(' / ');
         else
             cell.textContent = localize(row.name ?? row.kbd);
+
         const text = document.createElement('span');
         text.textContent = localize(row.text);
         line.append(cell, text);
         card.appendChild(line);
     }
+
     const foot = document.createElement('div');
     foot.className = 'la-mt-help-foot';
     const note = document.createElement('span');
@@ -1565,6 +1664,7 @@ function renderControlledChip()
     const tokens = getReferenceTokens();
     const chip = document.createElement('div');
     chip.className = 'la-mt-ref';
+
     if (!tokens.length)
     {
         const name = document.createElement('span');
@@ -1573,13 +1673,16 @@ function renderControlledChip()
         chip.appendChild(name);
         return chip;
     }
+
     const first = tokens[0];
+
     for (const token of tokens.slice(0, 3))
     {
         const img = document.createElement('img');
         img.src = token.document.texture.src;
         chip.appendChild(img);
     }
+
     const text = document.createElement('span');
     text.className = 'la-mt-ref-text';
     let origin = 'marked';
@@ -1587,6 +1690,7 @@ function renderControlledChip()
         origin = 'hover';
     else if (getControlled().some(isValidRef))
         origin = 'selected';
+
     const tag = document.createElement('b');
     tag.className = `la-mt-ref-tag la-mt-ref-tag-${origin}`;
     tag.textContent = localize(`LA.measure.refTag.${origin}`);
@@ -1619,9 +1723,11 @@ function renderModeButtons()
 {
     const group = document.createElement('div');
     group.className = 'la-mt-group la-mt-anchor la-mt-shapes';
+
     for (const { pattern, label, icon } of SHAPE_BUTTONS)
     {
         const active = _saved.mode === 'area' && _saved.pattern === pattern;
+
         const button = makeIconButton(icon, label, () =>
         {
             if (active)
@@ -1629,6 +1735,7 @@ function renderModeButtons()
                 setMode('free');
                 return;
             }
+
             _saved.pattern = pattern;
             if (_saved.mode === 'area')
             {
@@ -1638,12 +1745,15 @@ function renderModeButtons()
             else
                 setMode('area');
         });
+
         if (active)
             markActive(button);
         group.appendChild(button);
     }
+
     const markOn = _saved.mode === 'single';
     const single = makeIconButton('systems/lancer/assets/icons/reticule.svg', 'LA.measure.mark', () => setMode(markOn ? 'free' : 'single'));
+
     if (markOn)
         markActive(single);
     group.appendChild(single);
@@ -1665,12 +1775,14 @@ function makeParamRow(labelText, value, min, max, onValue)
     input.min = String(min);
     input.max = String(max);
     input.setAttribute('value', String(value));
+
     const commit = next =>
     {
         const clamped = Math.max(min, Math.min(max, next));
         input.value = String(clamped);
         onValue(clamped);
     };
+
     const current = () => Number.parseInt(input.value) || min;
     input.addEventListener('change', () => commit(current()));
     const minus = makeIconButton('fa-solid fa-minus', 'LA.measure.decrease', () => commit(current() - 1));
@@ -1687,11 +1799,13 @@ function makePopover(kind, classes)
 {
     const pop = document.createElement('div');
     pop.className = `la-mt-pop ${classes}`;
+
     if (!_popsShown.has(kind))
     {
         pop.classList.add('la-mt-appear');
         setTimeout(() => pop.classList.remove('la-mt-appear'), 200);
     }
+
     _popsNext.add(kind);
     return pop;
 }
@@ -1699,11 +1813,13 @@ function makePopover(kind, classes)
 function renderAreaPopover()
 {
     const pop = makePopover('area', 'la-mt-pop-end');
+
     const { row } = makeParamRow(localize('LA.measure.size'), _saved.areaRange, 1, 99, next =>
     {
         _saved.areaRange = next;
         _controller?.setAreaRange(next);
     });
+
     pop.append(row, renderToggleRow());
     return pop;
 }
@@ -1714,12 +1830,14 @@ function renderToggleRow()
     const wrap = document.createElement('div');
     wrap.className = 'la-mt-toggles';
     const elevOn = _saved.elevationAware;
+
     const addToggle = (cls, text, tip, checked, disabled, apply) =>
     {
         const label = document.createElement('label');
         label.title = tip;
         if (disabled)
             label.style.opacity = '0.5';
+
         const checkbox = document.createElement('input');
         checkbox.type = 'checkbox';
         checkbox.className = cls;
@@ -1733,11 +1851,13 @@ function renderToggleRow()
             _controller?.redraw();
             renderToolbar();
         });
+
         const span = document.createElement('span');
         span.textContent = text;
         label.append(checkbox, span);
         wrap.appendChild(label);
     };
+
     addToggle('la-tg-elev', localize('LA.measure.toggle.elevation'), localize('LA.measure.toggle.elevationHint'), elevOn, false, value =>
     {
         _saved.elevationAware = value;
@@ -1761,6 +1881,7 @@ function sourceValueText(refToken, source)
         return '';
     if (!isKnownToken(refToken))
         return '?';
+
     const radius = computeRadiusForToken(refToken, source);
     return radius === null || radius === undefined ? '?' : String(radius);
 }
@@ -1776,15 +1897,19 @@ function toggleSourcePin(value)
     const tokens = getReferenceTokens();
     if (!tokens.length)
         return;
+
     if (value === 'weapon')
     {
         const weapons = getWeapons(tokens[0]);
         const weaponItemId = weapons.some(weapon => weapon.id === _saved.weaponItemId) ? _saved.weaponItemId : weapons[0]?.id;
+
         if (weaponItemId)
             toggleRangePin(tokens[0], 'weapon', { weaponItemId });
         return;
     }
+
     const allPinned = tokens.every(pinToken => hasRangePin(pinToken, value));
+
     for (const pinToken of tokens)
     {
         if (allPinned || !hasRangePin(pinToken, value))
@@ -1802,6 +1927,7 @@ function renderRangeControls()
     const ownedRef = !!refToken?.isOwner;
     const hasWeapon = ownedRef ? getWeapons(refToken).length > 0 : false;
     const canResolve = value => value !== 'weapon' || (ownedRef && controlled.length === 1 && hasWeapon);
+
     const items = RANGE_SOURCES.filter(src => src.value !== 'none').map(src =>
     {
         const disabled = !canResolve(src.value);
@@ -1814,6 +1940,7 @@ function renderRangeControls()
             pinned: sourcePinned(src.value),
         };
     });
+
     group.appendChild(renderRangeDropdown(items));
     if (!_openMenu && (_saved.rangeSource === 'manual' || _saved.rangeSource === 'weapon'))
         group.appendChild(renderRangePopover(refToken));
@@ -1829,8 +1956,10 @@ function renderRangePopover(refToken)
         pop.appendChild(row);
         return pop;
     }
+
     const pop = makePopover('weapon', 'la-mt-pop-start la-mt-weap-pop');
     const weapons = refToken ? getWeapons(refToken) : [];
+
     if (!weapons.length)
     {
         const empty = document.createElement('span');
@@ -1839,8 +1968,10 @@ function renderRangePopover(refToken)
         pop.appendChild(empty);
         return pop;
     }
+
     if (!_saved.weaponItemId || !weapons.some(weapon => weapon.id === _saved.weaponItemId))
         _saved.weaponItemId = weapons[0].id;
+
     const actor = refToken.actor;
     const list = document.createElement('div');
     list.className = `la-mt-weap-scroll${weapons.length > 5 ? ' la-mt-weap-many' : ''}`;
@@ -1849,6 +1980,7 @@ function renderRangePopover(refToken)
     {
         _weapScroll = { tokenId: refToken.id, top: list.scrollTop };
     });
+
     for (const weapon of weapons)
     {
         const row = document.createElement('button');
@@ -1884,6 +2016,7 @@ function renderRangePopover(refToken)
         });
         list.appendChild(row);
     }
+
     pop.appendChild(list);
     return pop;
 }
@@ -1891,6 +2024,7 @@ function renderRangePopover(refToken)
 function renderMoveToggle()
 {
     const rulerOn = isLancerRulerActive();
+
     const button = makeIconButton('fa-solid fa-person-running', rulerOn ? 'LA.measure.move' : 'LA.measure.moveNeedsRuler', () =>
     {
         _saved.movementReachEnabled = !_saved.movementReachEnabled;
@@ -1898,6 +2032,7 @@ function renderMoveToggle()
         renderToolbar();
         _emitStateChange();
     });
+
     button.disabled = !rulerOn;
     if (_saved.movementReachEnabled && rulerOn)
         markActive(button);
@@ -1912,6 +2047,7 @@ function renderLabelsToggle()
         updateDistanceLabels();
         renderToolbar();
     });
+
     if (_saved.tacticalLabels)
         markActive(button);
     return button;
@@ -1921,6 +2057,7 @@ function renderLabelsToggle()
 function _markGroundHeight(center)
 {
     let top = 0;
+
     try
     {
         for (const shape of globalThis.terrainHeightTools?.getShapesAtPoint?.(center.x, center.y) ?? [])
@@ -1934,7 +2071,8 @@ function _markGroundHeight(center)
     {
         top = 0;
     }
-    return top + 1.1;
+
+    return Math.max(top, groundTop(solidTokenBandsAtPoint(center.x, center.y))) + 1.1;
 }
 
 // Adjacent ground marks fuse into one footprint that rays like a bigger token.
@@ -1943,6 +2081,7 @@ function _clusterGroundMarks(groundMarks)
     const byKey = new Map(groundMarks.map(mark => [`${mark.col},${mark.row}`, mark]));
     const seen = new Set();
     const clusters = [];
+
     for (const mark of groundMarks)
     {
         const startKey = `${mark.col},${mark.row}`;
@@ -1951,11 +2090,13 @@ function _clusterGroundMarks(groundMarks)
         seen.add(startKey);
         const cluster = [];
         const queue = [mark];
+
         while (queue.length)
         {
             const current = queue.pop();
             cluster.push(current);
             let adjacent = [];
+
             try
             {
                 adjacent = canvas.grid.getAdjacentOffsets({ i: current.row, j: current.col }) ?? [];
@@ -1964,6 +2105,7 @@ function _clusterGroundMarks(groundMarks)
             {
                 adjacent = [];
             }
+
             for (const offset of adjacent)
             {
                 const key = `${offset.j},${offset.i}`;
@@ -1973,8 +2115,10 @@ function _clusterGroundMarks(groundMarks)
                 queue.push(byKey.get(key));
             }
         }
+
         clusters.push(cluster);
     }
+
     return clusters;
 }
 
@@ -1984,21 +2128,26 @@ function refreshLosEye(force = false)
 {
     const viewer = _open && _saved.losEye ? getReferenceTokens()[0] : null;
     const markers = [...(_saved.whiteMarks?.marks ?? []), ...(_saved.marks?.marks ?? [])];
+
     const sig = viewer
         ? `${viewer.id}|${markers.map(mark => mark.tokenId ?? `${mark.col},${mark.row}`).sort().join(',')}|${[...(game.user?.targets ?? [])].map(token => token.id).sort().join(',')}`
         : '';
+
     if (!force && sig === _losEyeSig)
         return;
     _losEyeSig = sig;
     clearSightlines('adv-measure');
     if (!viewer)
         return;
+
     const targets = [];
     const groundMarks = [];
+
     // Markers when there are any, the user's targets otherwise.
     if (markers.length)
     {
         const seen = new Set();
+
         for (const mark of markers)
         {
             const key = mark.tokenId ?? `${mark.col},${mark.row}`;
@@ -2023,16 +2172,20 @@ function refreshLosEye(force = false)
                 targets.push(token);
         }
     }
+
     for (const cluster of _clusterGroundMarks(groundMarks))
     {
         const cells = cluster.map(mark => getHexCenter(mark.col, mark.row));
+
         const center = {
             x: cells.reduce((sum, cell) => sum + cell.x, 0) / cells.length,
             y: cells.reduce((sum, cell) => sum + cell.y, 0) / cells.length,
         };
+
         const height = Math.max(...cells.map(cell => _markGroundHeight(cell)));
         targets.push({ ...center, h: height, cells });
     }
+
     if (targets.length)
         drawSightlines('adv-measure', viewer, targets);
 }
@@ -2071,6 +2224,7 @@ function renderLosEyeToggle()
         refreshLosEye();
         renderToolbar();
     });
+
     if (_saved.losEye)
         markActive(button);
     return button;
@@ -2115,6 +2269,7 @@ function renderToolbar()
     _popsShown = _popsNext;
     _popsNext = new Set();
     const weapList = _toolbarEl.querySelector('.la-mt-weap-scroll');
+
     if (weapList)
     {
         const active = weapList.querySelector('.active');
@@ -2122,6 +2277,7 @@ function renderToolbar()
             ? _weapScroll.top
             : Math.max(0, (active?.offsetTop ?? 0) + (active?.offsetHeight ?? 0) - weapList.clientHeight);
     }
+
     _overToolbar = pointerOverToolbar();
     clampBarToViewport();
     refreshLosEye();
@@ -2131,6 +2287,7 @@ function pinBarLeft()
 {
     if (!_toolbarEl)
         return;
+
     const scale = Number(getComputedStyle(_toolbarEl).getPropertyValue('--la-mt-scale')) || 1;
     const width = _toolbarEl.offsetWidth * scale;
     _toolbarEl.style.left = `${Math.max(8, Math.round((window.innerWidth - width) / 2))}px`;
@@ -2140,6 +2297,7 @@ function clampBarToViewport()
 {
     if (!_toolbarEl?.style.left)
         return;
+
     const overflow = _toolbarEl.getBoundingClientRect().right - (window.innerWidth - 8);
     if (overflow > 0)
         _toolbarEl.style.left = `${Math.max(8, Math.round(Number.parseFloat(_toolbarEl.style.left) - overflow))}px`;
@@ -2156,14 +2314,17 @@ function positionAboveHotbar()
 {
     if (!_toolbarEl)
         return;
+
     const hotbar = document.getElementById('hotbar');
     let bottom = 12;
+
     if (hotbar)
     {
         const rect = hotbar.getBoundingClientRect();
         if (rect.height > 0 && rect.top < window.innerHeight)
             bottom = Math.max(12, window.innerHeight - rect.top + 8);
     }
+
     _toolbarEl.style.bottom = `${bottom}px`;
 }
 
@@ -2173,6 +2334,7 @@ function watchHotbar()
     _hotbarObserver?.disconnect();
     _hotbarObserver = null;
     const hotbar = document.getElementById('hotbar');
+
     if (hotbar && typeof ResizeObserver !== 'undefined')
     {
         _hotbarObserver = new ResizeObserver(() => positionAboveHotbar());
@@ -2192,6 +2354,7 @@ function buildToolbar()
     _toolbarEl = document.createElement('div');
     _toolbarEl.id = 'la-measure-toolbar';
     _toolbarEl.className = 'lancer lancer-hud';
+
     try
     {
         const toolbarScale = Number(getModuleSetting(TOOLBAR_SCALE_KEY)) || 1;
@@ -2200,6 +2363,7 @@ function buildToolbar()
     }
     catch
     { /* */ }
+
     _toolbarEl.addEventListener('mouseenter', () =>
     {
         _overToolbar = true;
@@ -2228,6 +2392,7 @@ function removeToolbar()
 {
     _hotbarObserver?.disconnect();
     _hotbarObserver = null;
+
     if (_toolbarEl)
     {
         _toolbarEl.remove();
@@ -2238,15 +2403,18 @@ function removeToolbar()
 function beginLeaveAnimation()
 {
     const element = _toolbarEl;
+
     if (!element)
     {
         _leaving = false;
         return;
     }
+
     _leaving = true;
     element.classList.remove('la-show');
     element.classList.add('la-hide');
     let fallbackTimer = null;
+
     const finish = () =>
     {
         element.removeEventListener('transitionend', onEnd);
@@ -2257,13 +2425,16 @@ function beginLeaveAnimation()
         if (_toolbarEl === element)
             removeToolbar();
     };
+
     const onEnd = (event) =>
     {
         if (event.target === element && event.propertyName === 'transform')
             finish();
     };
+
     element.addEventListener('transitionend', onEnd);
     fallbackTimer = setTimeout(finish, 320);
+
     _leaveCleanup = () =>
     {
         element.removeEventListener('transitionend', onEnd);
@@ -2311,6 +2482,7 @@ function updateSuppressed()
     if (next === _suppressed)
         return;
     _suppressed = next;
+
     if (_open)
     {
         if (_suppressed)
@@ -2318,6 +2490,7 @@ function updateSuppressed()
         else
             activateRunning();
     }
+
     syncSceneControls();
 }
 
@@ -2345,6 +2518,7 @@ function startCardWatch()
     _observer = new MutationObserver(() =>
     {
         const present = !!document.querySelector('.la-info-card');
+
         if (present !== _cardActive)
         {
             _cardActive = present;
@@ -2358,6 +2532,7 @@ function stopCardWatch()
 {
     _observer?.disconnect();
     _observer = null;
+
     if (_cardActive)
     {
         _cardActive = false;
@@ -2375,6 +2550,7 @@ export function openAdvancedMeasure(options)
     _overToolbar = false;
     document.addEventListener('pointermove', onClientPointerMove, { capture: true, passive: true });
     _showPins();
+
     if (!_togglesSeeded)
     {
         try
@@ -2384,8 +2560,10 @@ export function openAdvancedMeasure(options)
         }
         catch
         { /* setting not ready */ }
+
         _togglesSeeded = true;
     }
+
     if (!options?.preserveMode)
         _saved.mode = 'free';
     if (_leaving && _toolbarEl)
@@ -2434,6 +2612,7 @@ export function openAdvancedMeasure(options)
     startCardWatch();
     _cardActive = !!document.querySelector('.la-info-card');
     _suppressed = _hudDepth > 0 || _cardActive;
+
     if (_suppressed)
         deactivateRunning();
     else
@@ -2445,12 +2624,14 @@ export function openAdvancedMeasure(options)
         rebuildMovementReach();
         updateDistanceLabels();
     }
+
     if (_saved.mode !== 'free' && !_suppressed)
     {
         const mode = _saved.mode;
         _saved.mode = 'free';
         setMode(mode);
     }
+
     playUiSound('details');
     syncSceneControls();
     _emitStateChange();
@@ -2508,11 +2689,13 @@ export function closeAdvancedMeasure()
     showToolCursor(false);
     _ctrlCursorWorld = null;
     destroyShapeMarker();
+
     if (_selectionRaf)
     {
         cancelAnimationFrame(_selectionRaf);
         _selectionRaf = null;
     }
+
     _hoverToken = null;
     setMeasureDistanceReference(null);
     stopAreaMode();
@@ -2570,17 +2753,21 @@ export async function setAdvancedMeasureState(patch)
 {
     if (!patch || typeof patch !== 'object')
         return;
+
     let changed = false;
+
     for (const [key, value] of Object.entries(patch))
     {
         if (!_STATE_KEYS.has(key) || key === 'mode')
             continue;
+
         if (_saved[key] !== value)
         {
             _saved[key] = value;
             changed = true;
         }
     }
+
     if (Object.hasOwn(patch, 'mode') && patch.mode !== _saved.mode)
     {
         if (_open && !_suppressed)
@@ -2589,14 +2776,17 @@ export async function setAdvancedMeasureState(patch)
             _saved.mode = patch.mode;
         changed = true;
     }
+
     if (!changed)
         return;
+
     if (_open)
     {
         rebuildPulse();
         rebuildMovementReach();
         renderToolbar();
     }
+
     _emitStateChange();
 }
 
@@ -2651,6 +2841,7 @@ export function initAdvancedMeasureAutoClose()
     _autoCloseInstalled = true;
     initGlobalCtrlRuler();
     installSuppressionWatcher();
+
     for (const stepName of ['showAttackHUD', 'showDamageHUD', 'showStatRollHUD'])
     {
         const original = game.lancer?.flowSteps?.get?.(stepName);
@@ -2660,6 +2851,7 @@ export function initAdvancedMeasureAutoClose()
         {
             _hudDepth++;
             updateSuppressed();
+
             try
             {
                 return await original(state, options);
@@ -2683,13 +2875,16 @@ Hooks.on('canvasTearDown', () =>
 function syncSceneControls()
 {
     const active = _open;
+
     for (const group of Object.values(ui.controls?.controls ?? {}))
     {
         const tools = group?.tools;
         const tool = Array.isArray(tools) ? tools.find(existing => existing.name === 'advancedMeasure') : tools?.advancedMeasure;
+
         if (tool)
             tool.active = active;
     }
+
     document.body.classList.toggle('la-measure-suppressed', _suppressed);
     const button = document.querySelector('#controls .control-tool[data-tool="advancedMeasure"]');
     if (button)
@@ -2706,6 +2901,7 @@ Hooks.on('getSceneControlButtons', (controls) =>
         else
             closeAdvancedMeasure();
     };
+
     const tool = {
         name: 'advancedMeasure',
         title: localize('LA.measure.toolTitle'),
@@ -2722,19 +2918,23 @@ Hooks.on('getSceneControlButtons', (controls) =>
             ],
         },
     };
+
     if (!Array.isArray(controls))
     {
         const group = controls.tokens ?? controls.token;
         if (!group?.tools)
             return;
+
         const rulerOrder = group.tools.ruler?.order;
         tool.order = (typeof rulerOrder === 'number' ? rulerOrder : Object.keys(group.tools).length) + 0.5;
         group.tools[tool.name] = tool;
         return;
     }
+
     const group = controls.find(control => control.name === 'token' || control.name === 'tokens');
     if (!group?.tools)
         return;
+
     const rulerIndex = group.tools.findIndex(existing => existing.name === 'ruler');
     if (rulerIndex >= 0)
         group.tools.splice(rulerIndex + 1, 0, tool);
@@ -2744,11 +2944,13 @@ Hooks.on('getSceneControlButtons', (controls) =>
 
 // Inject sextant SVG after controls render (bare class, not glyph) to survive FA SVG mode and crlngn restyling.
 let _sextantSvg = null;
+
 function injectControlIcon(svg)
 {
     for (const node of Array.from(document.querySelectorAll('.la-mt-control-icon')))
         node.innerHTML = svg;
 }
+
 function paintControlIcon()
 {
     if (_sextantSvg)
@@ -2756,6 +2958,7 @@ function paintControlIcon()
         injectControlIcon(_sextantSvg);
         return;
     }
+
     fetch(sextantIconUrl())
         .then(response => response.text())
         .then(text =>
@@ -2772,6 +2975,7 @@ function isMeasureControlAllowed()
     const activeName = ui.controls?.control?.name;
     return activeName === 'token' || activeName === 'tokens' || activeName === 'templates';
 }
+
 Hooks.on('renderSceneControls', () =>
 {
     paintControlIcon();

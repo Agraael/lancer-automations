@@ -8,10 +8,11 @@
 
 import { getActivationIcon } from '../tools/misc-tools.js';
 import { getLAFlag, getLAFlags } from '../tools/flag-utils.js';
-import { damageBonusScope, normalizeBonusShape, statBonusValueText } from '../bonuses/genericBonuses.js';
+import { damageBonusScope, normalizeBonusShape, statBonusValueText, MOVEMENT_TRAITS } from '../bonuses/genericBonuses.js';
 import { isWhiteIcon } from '../tah/item-helpers.js';
-import { localize, escapeHtml } from '../tools/string-utils.js';
+import { localize, escapeHtml, signedNumber } from '../tools/string-utils.js';
 import { htmlToElement } from '../tools/dom-utils.js';
+import { playUiSound } from '../tah/sound.js';
 
 function activationChipContent(action)
 {
@@ -24,6 +25,7 @@ function activationChipContent(action)
             return `<i class="${icon}" style="margin-right:3px;vertical-align:-1px;"></i>`;
         return `<img src="${icon}" style="display:inline-block;width:0.95em;height:0.95em;margin-right:3px;vertical-align:-2px;filter:${isWhiteIcon(icon) ? 'none' : 'invert(1)'};">`;
     };
+
     return String(action.activation ?? '')
         .split('/')
         .map(part => part.trim())
@@ -89,28 +91,58 @@ export function laBindPopupBehavior(popup)
 
 /**
  * Appends a popup next to the parent dialog with a slide-from-left animation,
- * then binds close + outside-click dismiss.
+ * then binds close + outside-click dismiss. Follows its own size changes with a short slide.
  * @param {JQuery} popup
  * @param {JQuery} html  Dialog render-callback html element
+ * @param {HTMLElement|JQuery|null} [anchor]  Row the popup lines up with, the dialog top otherwise
  */
-export function laPositionPopup(popup, html)
+export function laPositionPopup(popup, html, anchor = null)
 {
+    playUiSound('details');
     popup.appendTo(document.body);
-    const dlg = html.closest('.app');
-    const dlgOffset = dlg.offset() ?? { left: 100, top: 100 };
-    const dlgWidth = dlg.outerWidth() ?? 480;
-    const popupWidth = popup.outerWidth(), popupHeight = popup.outerHeight();
-    const viewportWidth = window.innerWidth, viewportHeight = window.innerHeight;
-    let popupLeft = dlgOffset.left + dlgWidth + 8;
-    if (popupLeft + popupWidth > viewportWidth - 10)
-        popupLeft = dlgOffset.left - popupWidth - 8;
-    let popupTop = dlgOffset.top;
-    if (popupTop + popupHeight > viewportHeight - 10)
-        popupTop = viewportHeight - popupHeight - 10;
-    const finalLeft = Math.max(10, popupLeft);
-    popup.css({ left: finalLeft - 20, top: Math.max(10, popupTop), opacity: 0 });
-    popup.animate({ left: finalLeft, opacity: 1 }, { duration: 150, easing: 'swing' });
+    const dlg = html.closest('.app, .la-info-card');
+    const anchorTop = anchor ? $(anchor).offset()?.top : null;
+
+    const place = () =>
+    {
+        const dlgOffset = dlg.offset() ?? { left: 100, top: 100 };
+        const dlgWidth = dlg.outerWidth() ?? 480;
+        const popupWidth = popup.outerWidth(), popupHeight = popup.outerHeight();
+        const viewportWidth = window.innerWidth, viewportHeight = window.innerHeight;
+        const leftOfDlg = dlgOffset.left - popupWidth - 8;
+        const rightOfDlg = dlgOffset.left + dlgWidth + 8;
+        const onLeft = (dlg.is('.la-info-card') && leftOfDlg >= 10) || rightOfDlg + popupWidth > viewportWidth - 10;
+
+        let popupTop = anchorTop ?? dlgOffset.top;
+        if (popupTop + popupHeight > viewportHeight - 10)
+            popupTop = viewportHeight - popupHeight - 10;
+
+        return { left: Math.max(10, onLeft ? leftOfDlg : rightOfDlg), top: Math.max(10, popupTop), onLeft };
+    };
+
+    const start = place();
+    popup.css({ left: start.left + (start.onLeft ? 20 : -20), top: start.top, opacity: 0 });
+    popup.animate({ left: start.left, opacity: 1 }, { duration: 150, easing: 'swing' });
     laBindPopupBehavior(popup);
+
+    let lastSize = `${popup.outerWidth()}x${popup.outerHeight()}`;
+    const observer = new ResizeObserver(() =>
+    {
+        if (!document.contains(popup[0]))
+        {
+            observer.disconnect();
+            return;
+        }
+
+        const size = `${popup.outerWidth()}x${popup.outerHeight()}`;
+        if (size === lastSize)
+            return;
+        lastSize = size;
+
+        const target = place();
+        popup.stop(true).animate({ left: target.left, top: target.top, opacity: 1 }, { duration: 180, easing: 'swing' });
+    });
+    observer.observe(popup[0]);
 }
 
 // Content renderers
@@ -126,14 +158,17 @@ export function laFormatDetailHtml(rawHtml)
 {
     if (!rawHtml)
         return '';
+
     const withBreaks = String(rawHtml)
         .replaceAll(/<\/p>/gi, '\n')
         .replaceAll(/<br\s*\/?>/gi, '\n')
         .replaceAll(/<\/li>/gi, '\n')
         .replaceAll(/<\/div>/gi, '\n');
+
     const text = (new DOMParser().parseFromString(withBreaks, 'text/html').body.textContent ?? '')
         .replaceAll(/\n{3,}/g, '\n\n')
         .trim();
+
     return text ? escapeHtml(text).replaceAll('\n', '<br>') : '';
 }
 
@@ -142,6 +177,7 @@ function tagConfigName(lid)
 {
     if (!lid)
         return null;
+
     try
     {
         const game = /** @type {any} */ (globalThis).game;
@@ -163,13 +199,16 @@ export function laRenderTags(tags, resolveStr)
 {
     if (!tags?.length)
         return '';
+
     const resolve = resolveStr ?? (str => str);
+
     const chips = tags.map(tag =>
     {
         const raw = String(tag._resolvedName ?? tag.name ?? tagConfigName(tag.lid) ?? tag.lid ?? tag.id ?? '');
         const text = resolve(raw).replaceAll('{VAL}', resolve(String(tag.val ?? '')));
         return `<span style="background:rgba(255,255,255,0.1);border:1px solid #555;border-radius:3px;padding:1px 6px;font-size:0.75em;color:#ccc;white-space:nowrap;">${text}</span>`;
     }).join('');
+
     return `<div style="margin-bottom:6px;display:flex;flex-wrap:wrap;gap:4px;">${chips}</div>`;
 }
 
@@ -185,6 +224,7 @@ export function laRenderTextSection(label, text, labelColor, resolveStr)
 {
     if (!text)
         return '';
+
     const resolve = resolveStr ?? (s => s);
     return `<div style="margin-bottom:6px;">${laPopupSectionLabel(label, labelColor)}<div style="font-size:0.82em;color:#bbb;margin-top:2px;line-height:1.4;">${laFormatDetailHtml(resolve(text))}</div></div>`;
 }
@@ -198,7 +238,9 @@ export function laRenderActions(actions, resolveStr)
 {
     if (!actions?.length)
         return '';
+
     const resolve = resolveStr ?? (s => s);
+
     const items = actions.map((action, index) =>
     {
         const effectHtml = laFormatDetailHtml(resolve(action.detail || action.effect || ''));
@@ -207,6 +249,7 @@ export function laRenderActions(actions, resolveStr)
             ${effectHtml ? `<div style="font-size:0.78em;color:#aaa;margin-top:2px;line-height:1.3;">${effectHtml}</div>` : ''}
         </div>`;
     }).join('');
+
     return `<div style="margin-bottom:4px;">${laPopupSectionLabel('ACTIONS', '#1a5c3a')}${items}</div>`;
 }
 
@@ -225,10 +268,13 @@ export function laRenderDeployables(deployableActors, opts = {})
 {
     if (!deployableActors?.length)
         return '';
+
     const { label = 'DEPLOYABLE', metas = null } = opts;
+
     const items = deployableActors.map((deployable, idx) =>
     {
         const sys = deployable.system;
+
         const statPairs = [
             sys?.hp?.max != null ? `HP ${sys.hp.max}` : null,
             sys?.size != null ? `Size ${sys.size}` : null,
@@ -239,6 +285,7 @@ export function laRenderDeployables(deployableActors, opts = {})
             sys?.heatcap != null && sys.heatcap > 0 ? `Heat ${sys.heatcap}` : null,
             sys?.save != null && sys.save > 0 ? `Save ${sys.save}` : null
         ].filter(Boolean);
+
         const depDetail = laFormatDetailHtml(sys?.detail || sys?.effect || '');
         const depTags = laRenderTags(sys?.tags ?? []);
         const activationLabel = activationChip({ activation: sys?.activation });
@@ -246,6 +293,7 @@ export function laRenderDeployables(deployableActors, opts = {})
         const hasBody = !!(depDetail || depTags);
         const meta = metas?.[idx];
         const metaHtml = meta ? `<div style="font-size:0.72em;color:#e8a030;font-weight:bold;margin-bottom:2px;">Range ${meta.range} · Count ${meta.count === -1 ? '∞' : meta.count}</div>` : '';
+
         const actionsHtml = (sys?.actions ?? []).map(/** @type {any} */ action =>
         {
             const triggerHtml = action.trigger ? `<div style="font-size:0.8em;color:#aaa;margin-top:2px;"><span style="font-weight:bold;color:#c084fc;">TRIGGER</span> ${action.trigger}</div>` : '';
@@ -256,6 +304,7 @@ export function laRenderDeployables(deployableActors, opts = {})
                 ${triggerHtml}${detailHtml}
             </div>`;
         }).join('');
+
         return `<div style="margin-top:4px;padding:5px 7px;background:rgba(74,16,112,0.1);border:1px solid rgba(74,16,112,0.35);border-radius:3px;">
             <div style="font-size:0.85em;font-weight:bold;color:#c084fc;margin-bottom:3px;display:flex;align-items:center;flex-wrap:wrap;">${stripDeployOwner(deployable.name)}${typeChip}${activationLabel}</div>
             ${metaHtml}
@@ -265,6 +314,7 @@ export function laRenderDeployables(deployableActors, opts = {})
             ${actionsHtml}
         </div>`;
     }).join('');
+
     return `<div style="margin-bottom:4px;">${laPopupSectionLabel(label, '#4a1070')}${items}</div>`;
 }
 
@@ -278,8 +328,10 @@ export function laRenderItemStatusTemplates(item)
 {
     const templates = /** @type {any[]} */ (Array.from(item?.effects ?? []))
         .filter(effect => getLAFlags(effect)?.isItemTemplate === true);
+
     if (!templates.length)
         return '';
+
     const rows = templates.map(effect =>
     {
         const img = effect.img ? `<img src="${effect.img}" style="width:18px;height:18px;border:none;flex-shrink:0;background:rgba(0,0,0,0.3);border-radius:2px;padding:1px;">` : '';
@@ -288,6 +340,7 @@ export function laRenderItemStatusTemplates(item)
             <span style="font-size:0.78em;font-weight:bold;color:#9bb0e0;">${effect.name || ''}</span>
         </div>`;
     }).join('');
+
     return `<div style="margin-bottom:4px;">${laPopupSectionLabel('ATTACHED STATUSES', '#3d5aa0')}${rows}</div>`;
 }
 
@@ -300,9 +353,11 @@ function _summarizeBonusData(bonus)
 {
     if (!bonus)
         return '';
+
     const type = bonus.type ?? '';
     const subtype = bonus.subtype ? ` [${bonus.subtype}]` : '';
     let extra = '';
+
     if (bonus.stat)
         extra = ` ${bonus.stat}`;
     else if (Array.isArray(bonus.damageTypes) && bonus.damageTypes.length)
@@ -311,6 +366,7 @@ function _summarizeBonusData(bonus)
         extra = ` ${bonus.effects.join(', ')}`;
     else if (Array.isArray(bonus.rollTypes) && bonus.rollTypes.length)
         extra = ` (${bonus.rollTypes.join(', ')})`;
+
     const val = bonus.val !== undefined ? ` ${bonus.val}` : '';
     return `${type}${subtype}${extra}${val}`;
 }
@@ -326,16 +382,19 @@ export function laRenderItemBonusTemplates(item)
     const templates = /** @type {any[]} */ (getLAFlag(item,'bonusTemplates') || []);
     if (!templates.length)
         return '';
+
     const rows = templates.map(template =>
     {
         const bonus = template.bonusData ?? {};
         const name = bonus.name || 'Bonus';
         let summary = '';
+
         if (bonus.type === 'multi' && Array.isArray(bonus.bonuses) && bonus.bonuses.length)
         {
             const subs = bonus.bonuses.map(sub =>
                 `<div style="font-size:0.72em;color:#a5c7e8;margin-left:10px;">· ${_summarizeBonusData(sub)}</div>`
             ).join('');
+
             summary = `<span style="font-size:0.75em;color:#888;margin-left:6px;">multi</span>${subs}`;
         }
         else
@@ -344,6 +403,7 @@ export function laRenderItemBonusTemplates(item)
             <div><span style="font-size:0.78em;font-weight:bold;color:#a5c7e8;">${name}</span>${summary}</div>
         </div>`;
     }).join('');
+
     return `<div style="margin-bottom:4px;">${laPopupSectionLabel('ATTACHED BONUSES', '#1565c0')}${rows}</div>`;
 }
 
@@ -357,6 +417,7 @@ export async function laRenderItemExtras(item, { attachments = true } = {})
 {
     if (!item)
         return '';
+
     const laFlags = getLAFlags(item) ?? {};
     let html = '';
 
@@ -372,6 +433,7 @@ export async function laRenderItemExtras(item, { attachments = true } = {})
     }
 
     const extraActions = /** @type {any[]} */ (laFlags.extraActions ?? []);
+
     if (extraActions.length)
     {
         const items = extraActions.map(action =>
@@ -382,11 +444,13 @@ export async function laRenderItemExtras(item, { attachments = true } = {})
                 ${effectHtml ? `<div style="font-size:0.78em;color:#aaa;margin-top:2px;line-height:1.3;">${effectHtml}</div>` : ''}
             </div>`;
         }).join('');
+
         html += `<div style="margin-bottom:4px;">${laPopupSectionLabel('EXTRA ACTIONS', '#1a5c3a')}${items}</div>`;
     }
 
     const lids = /** @type {string[]} */ (laFlags.extraDeployables ?? []);
     const uuids = /** @type {string[]} */ (laFlags.extraDeployableActors ?? []);
+
     if (lids.length || uuids.length)
     {
         const { resolveDeployable, getItemDeployables, resolveDeployRangeCount } = await import('./deployables.js');
@@ -394,9 +458,11 @@ export async function laRenderItemExtras(item, { attachments = true } = {})
         const survivors = new Set(getItemDeployables(item, ownerActor));
         const combined = [...lids, ...uuids].filter(key => survivors.has(key));
         const resolved = [];
+
         for (const entry of combined)
         {
             const isUuid = typeof entry === 'string' && entry.includes('.');
+
             try
             {
                 if (isUuid)
@@ -416,6 +482,7 @@ export async function laRenderItemExtras(item, { attachments = true } = {})
                 resolved.push({ name: entry, _fallback: true });
             }
         }
+
         if (resolved.length)
         {
             const real = [];
@@ -428,6 +495,7 @@ export async function laRenderItemExtras(item, { attachments = true } = {})
                     fallbackHtml += `<div style="margin-top:4px;padding:5px 7px;background:rgba(74,16,112,0.1);border:1px solid rgba(74,16,112,0.35);border-radius:3px;"><div style="font-size:0.78em;font-weight:bold;color:#c084fc;">${deployable.name}</div></div>`;
                     return;
                 }
+
                 real.push(deployable);
                 realMetas.push(resolveDeployRangeCount(item, combined[idx], ownerActor));
             });
@@ -451,6 +519,7 @@ function _renderAttackLine(bonus, acc)
 {
     if (!bonus && !acc)
         return '';
+
     let parts = [];
     if (bonus)
         parts.push(`+${bonus} <i class="cci cci-reticule" title="Flat Attack Bonus"></i>`);
@@ -466,13 +535,17 @@ export function laRenderWeaponProfile(profile, showName)
     const nameHdr = showName && profile.name
         ? `<div style="font-size:0.75em;font-weight:bold;color:#aaa;text-transform:uppercase;letter-spacing:0.4px;margin-bottom:4px;margin-top:2px;">${profile.name}</div>`
         : '';
+
     const wpnAttackHtml = _renderAttackLine(profile.attack_bonus ?? 0, profile.accuracy ?? 0);
+
     const damageHtml = (() =>
     {
         if (!profile.damage?.length)
             return '';
+
         const dmgStr = profile.damage.map(dmg => `${damageIcon(dmg.type)}<b>${dmg.val}</b> ${dmg.type}`).join(' + ');
         let baseStr = '';
+
         if (profile.base_damage?.length)
         {
             const changed = profile.damage.length !== profile.base_damage.length
@@ -481,17 +554,22 @@ export function laRenderWeaponProfile(profile, showName)
                     const b = profile.base_damage[i];
                     return !b || String(b.val) !== String(d.val) || b.type !== d.type;
                 });
+
             if (changed)
                 baseStr = ` <span style="color:#777;font-size:0.85em;">(base: ${profile.base_damage.map(d => `${d.val} ${d.type}`).join(' + ')})</span>`;
         }
+
         return `<div>${laPopupSectionLabel('DAMAGE', '#b71c1c')}<div style="font-size:0.88em;color:#eee;margin-top:2px;">${dmgStr}${baseStr}</div></div>`;
     })();
+
     const rangeHtml = (() =>
     {
         if (!profile.range?.length)
             return '';
+
         const rangeStr = profile.range.map(rng => `${rangeIcon(rng.type)}<b>${rng.val}</b> ${rng.type}`).join(' · ');
         let baseStr = '';
+
         if (profile.base_range?.length)
         {
             const changed = profile.range.some(r =>
@@ -499,24 +577,32 @@ export function laRenderWeaponProfile(profile, showName)
                 const base = profile.base_range.find(b => b.type === r.type);
                 return !base || String(base.val) !== String(r.val);
             }) || profile.base_range.some(b => !profile.range.find(r => r.type === b.type));
+
             if (changed)
                 baseStr = ` <span style="color:#777;font-size:0.85em;">(base: ${profile.base_range.map(r => `${r.val} ${r.type}`).join(' · ')})</span>`;
         }
+
         return `<div>${laPopupSectionLabel('RANGE', '#1565c0')}<div style="font-size:0.88em;color:#eee;margin-top:2px;">${rangeStr}${baseStr}</div></div>`;
     })();
+
     const tagsHtml = laRenderTags(profile.tags);
+
     const onHitHtml = profile.on_hit
         ? `<div style="margin-bottom:4px;">${laPopupSectionLabel('ON HIT', '#6a1b9a')}<div style="font-size:0.82em;color:#bbb;margin-top:2px;line-height:1.4;">${laFormatDetailHtml(profile.on_hit)}</div></div>`
         : '';
+
     const effectHtml = profile.effect
         ? `<div style="margin-bottom:4px;">${laPopupSectionLabel('EFFECT', '#e65100')}<div style="font-size:0.82em;color:#bbb;margin-top:2px;line-height:1.4;">${laFormatDetailHtml(profile.effect)}</div></div>`
         : '';
+
     const dmgRangeSep = (damageHtml && rangeHtml)
         ? '<div style="width:1px;background:rgba(255,255,255,0.15);"></div>'
         : '';
+
     const dmgRangeRow = (damageHtml || rangeHtml)
         ? `<div style="display:flex;gap:10px;align-items:stretch;margin-bottom:6px;">${damageHtml}${dmgRangeSep}${rangeHtml}</div>`
         : '';
+
     return `${nameHdr}${wpnAttackHtml}${dmgRangeRow}${tagsHtml}${onHitHtml}${effectHtml}`;
 }
 
@@ -532,6 +618,7 @@ export function laRenderWeaponMod(modName, modItem)
     const modEffect = laFormatDetailHtml(system?.effect || system?.description || '');
     const modActionsHtml = laRenderActions(system?.actions ?? []);
     const modTagsArr = system?.tags ?? [];
+
     const modTagsHtml = modTagsArr.length
         ? `<div style="display:flex;flex-wrap:wrap;gap:3px;margin-top:3px;">${modTagsArr.map(tag =>
         {
@@ -539,6 +626,7 @@ export function laRenderWeaponMod(modName, modItem)
             return `<span style="background:rgba(255,255,255,0.08);border:1px solid #555;border-radius:3px;padding:0 5px;font-size:0.72em;color:#ccc;">${tagText}</span>`;
         }).join('')}</div>`
         : '';
+
     const modBody = `${modActionsHtml}${modEffect ? `<div style="font-size:0.8em;color:#bbb;margin-top:3px;line-height:1.3;">${modEffect}</div>` : ''}${modTagsHtml}`;
     const hasDetail = !!(modEffect || modTagsArr.length || modActionsHtml);
     return `<div class="la-mod-block la-weapon-mod" style="margin-bottom:8px;padding:5px 7px;background:rgba(255,100,0,0.07);border:1px solid rgba(255,100,0,0.35);border-radius:3px;${hasDetail ? 'cursor:pointer;' : ''}">
@@ -559,7 +647,9 @@ function laRenderBonusList(bonuses)
 {
     if (!bonuses?.length)
         return '';
+
     const activeKeys = (map) => Object.entries(map ?? {}).filter(([, isActive]) => isActive).map(([k]) => k);
+
     const lines = bonuses.map(bonus =>
     {
         // Lancer system bonuses use `lid`; LA custom bonuses use `type`
@@ -570,15 +660,18 @@ function laRenderBonusList(bonuses)
             return `Difficulty +${bonus.val}`;
         if (kind === 'flat')
             return `Flat ${statBonusValueText({ val: bonus.val })}`;
+
         if (kind === 'stat')
         {
             const name = (bonus.stat ?? bonus.id ?? '').split('.').pop() || kind;
             return `${name} ${statBonusValueText(bonus)}`;
         }
+
         if (kind === 'damage')
         {
             const mode = bonus.damageMode || 'add';
             const entries = bonus.damage || [];
+
             if (mode === 'change_type')
             {
                 const parts = entries.map(dmg =>
@@ -586,10 +679,12 @@ function laRenderBonusList(bonuses)
                     const from = (dmg.from && dmg.from !== 'all') ? dmg.from : 'All';
                     return `${from} → ${dmg.to}`;
                 });
+
                 const scope = damageBonusScope(bonus);
                 const scopeLabel = scope === 'base' ? '' : ` (${scope})`;
                 return `Change Type${scopeLabel}: ${parts.join(', ')}`;
             }
+
             const body = entries.map(dmg => `${dmg.val} ${dmg.type}`).join(' + ');
             if (mode === 'replace')
                 return `Replace: ${body}`;
@@ -597,23 +692,28 @@ function laRenderBonusList(bonuses)
                 return `Add: ${body}`;
             return body;
         }
+
         if (kind === 'tag')
             return bonus.removeTag ? `Remove Tag: ${bonus.tagName}` : `${bonus.tagMode === 'override' ? 'Set' : bonus.tagMode === 'at_least' ? 'At least' : 'Add'} Tag: ${bonus.tagName}${bonus.val ? ` ${bonus.val}` : ''}`;
         if (kind === 'range' && bonus.rangeMode === 'at_least')
             return `At least ${bonus.rangeType} ${bonus.val}`;
+
         if (kind === 'range')
         {
             // Lancer system format: range_types map + optional weapon_types/weapon_sizes filters
             const rangeTypes = activeKeys(bonus.range_types);
             const weaponTypes = activeKeys(bonus.weapon_types);
-            const sign = Number.parseInt(bonus.val) >= 0 ? '+' : '';
             const rangeStr = rangeTypes.length ? rangeTypes.join('/') : (bonus.rangeType ?? 'Range');
             const filterStr = weaponTypes.length < 6 && weaponTypes.length > 0 ? ` (${weaponTypes.join('/')})` : '';
-            return `${sign}${bonus.val} ${rangeStr}${filterStr}`;
+            return `${signedNumber(bonus.val)} ${rangeStr}${filterStr}`;
         }
+
         const defense = normalizeBonusShape(bonus);
         if (defense.type === 'resistance' || defense.type === 'vulnerability')
             return `${defense.type === 'resistance' ? 'Resistance' : 'Vulnerability'}: ${(defense.damageTypes || []).join(', ')}`;
+        if (defense.type === 'movement')
+            return `Movement: ${MOVEMENT_TRAITS[defense.subtype]?.label ?? defense.subtype}`;
+
         if (kind === 'immunity')
         {
             if (bonus.subtype === 'effect' && bonus.effects)
@@ -622,10 +722,12 @@ function laRenderBonusList(bonuses)
                 return `${bonus.subtype}: ${(bonus.damageTypes || []).join(', ')}`;
             return `Immunity: ${bonus.subtype}`;
         }
+
         if (kind === 'multi' && Array.isArray(bonus.bonuses))
             return bonus.bonuses.map(innerBonus => laRenderBonusList([innerBonus])).join('');
         return kind || '?';
     });
+
     return `<div style="margin-bottom:4px;">${laPopupSectionLabel('BONUSES', '#1565c0')}<div style="font-size:0.82em;color:#bbb;margin-top:2px;line-height:1.6;">${lines.map(line => `<div>· ${line}</div>`).join('')}</div></div>`;
 }
 
@@ -643,18 +745,22 @@ export function laRenderModBody(modItem)
     const tagsHtml    = laRenderTags(system?.tags ?? []);
     const bonusesHtml = laRenderBonusList(system?.bonuses ?? []);
     const addedParts  = [];
+
     if (system?.added_tags?.length)
         addedParts.push(`Tags: ${system.added_tags.map(tag => String(tag.name ?? tag.lid ?? '').replaceAll('{VAL}', tag.val ?? '')).join(', ')}`);
     if (system?.added_damage?.length)
         addedParts.push(`+Damage: ${system.added_damage.map(dmg => `${damageIcon(dmg.type)}${dmg.val} ${dmg.type}`).join(' + ')}`);
     if (system?.added_range?.length)
         addedParts.push(`+Range: ${system.added_range.map(rng => `${rangeIcon(rng.type)}${rng.val} ${rng.type}`).join(', ')}`);
+
     const addedHtml = addedParts.length
         ? `<div style="margin-bottom:4px;">${laPopupSectionLabel('ADDS', '#ff8c00')}<div style="font-size:0.82em;color:#bbb;margin-top:2px;line-height:1.6;">${addedParts.map(part => `<div>· ${part}</div>`).join('')}</div></div>`
         : '';
+
     const effectHtml = system?.effect
         ? `<div style="margin-bottom:4px;">${laPopupSectionLabel('EFFECT', '#ff6400')}<div style="font-size:0.82em;color:#bbb;margin-top:2px;line-height:1.4;">${laFormatDetailHtml(system.effect)}</div></div>`
         : '';
+
     return actionsHtml + tagsHtml + addedHtml + bonusesHtml + effectHtml;
 }
 
@@ -676,7 +782,9 @@ export function laRenderCoreSystemBody(cs)
     const activeEffectHtml = activeEffect
         ? `<div style="font-size:0.82em;color:#bbb;margin-top:2px;line-height:1.4;">${activeName ? `<b>${activeName}</b><br>` : ''}${laFormatDetailHtml(activeEffect)}</div>`
         : '';
+
     const activeActionsHtml = laRenderActions(activeActions);
+
     const activeHtml = (activeEffectHtml || activeActionsHtml)
         ? `<div style="margin-bottom:6px;">${laPopupSectionLabel('ACTIVE', '#b45309')}${activeEffectHtml}${activeActionsHtml}</div>`
         : '';
@@ -684,7 +792,9 @@ export function laRenderCoreSystemBody(cs)
     const passiveEffectHtml = passiveEffect
         ? `<div style="font-size:0.82em;color:#bbb;margin-top:2px;line-height:1.4;">${passiveName ? `<b>${passiveName}</b><br>` : ''}${laFormatDetailHtml(passiveEffect)}</div>`
         : '';
+
     const passiveActionsHtml = laRenderActions(passiveActions);
+
     const passiveHtml = (passiveEffectHtml || passiveActionsHtml)
         ? `<div style="margin-bottom:6px;">${laPopupSectionLabel('PASSIVE', '#1565c0')}${passiveEffectHtml}${passiveActionsHtml}</div>`
         : '';
@@ -711,9 +821,11 @@ export function laRenderCoreBonusBody(cbItem)
     const system = cbItem?.system;
     const tagsHtml    = laRenderTags(system?.tags ?? []);
     const bonusesHtml = laRenderBonusList(system?.bonuses ?? []);
+
     const effectHtml  = system?.effect
         ? `<div style="margin-bottom:4px;">${laPopupSectionLabel('EFFECT', '#c084fc')}<div style="font-size:0.82em;color:#bbb;margin-top:2px;line-height:1.4;">${laFormatDetailHtml(system.effect)}</div></div>`
         : '';
+
     return tagsHtml + bonusesHtml + effectHtml;
 }
 
@@ -727,6 +839,7 @@ export function laRenderCoreBonusBody(cbItem)
  * @param {string|null}  [opts.modName=null]         Display name for the mod header
  * @param {Object|null}  [opts.modItem=null]          Mod item (passed to laRenderWeaponMod)
  * @param {number}       [opts.activeProfileIndex=0]  Index of the currently active profile (shown open + gray)
+ * @param {boolean}      [opts.switchable=false]      Profiles get a dot to switch to them
  * @returns {string}
  */
 export function laRenderWeaponBody(profiles, opts = {})
@@ -735,6 +848,7 @@ export function laRenderWeaponBody(profiles, opts = {})
     const actionsHtml = laRenderActions(actions);
 
     let profilesHtml = '';
+
     if (profiles.length <= 1)
         profilesHtml = profiles.map(profile => laRenderWeaponProfile(profile, false)).join('');
     else
@@ -744,17 +858,22 @@ export function laRenderWeaponBody(profiles, opts = {})
             const inner   = laRenderWeaponProfile(profile, false);
             const name    = (profile.name || 'Profile').toUpperCase();
             const isActive = idx === activeProfileIndex;
+
             const blockStyle = isActive
                 ? 'margin-bottom:6px;padding:5px 7px;background:repeating-linear-gradient(45deg, #16283a 0 6px, #101f2e 6px 12px);border:1px solid rgba(160,160,160,0.35);border-left:3px solid #3a78b5;border-radius:3px;cursor:pointer;'
                 : 'margin-bottom:6px;padding:5px 7px;background:rgba(20,20,20,0.95);border:1px solid rgba(160,160,160,0.35);border-radius:3px;cursor:pointer;';
+
             const nameStyle = isActive
                 ? 'font-size:0.75em;font-weight:bold;color:#bbb;letter-spacing:0.4px;display:flex;justify-content:space-between;align-items:center;'
                 : 'font-size:0.75em;font-weight:bold;color:#e06060;letter-spacing:0.4px;display:flex;justify-content:space-between;align-items:center;';
+
             const bodyDisplay = isActive ? 'block' : 'none';
             const toggleChar  = isActive ? '▼' : '▶';
+
             const setDot = switchable
                 ? `<span class="la-profile-set" data-profile-idx="${idx}" title="${isActive ? 'Active profile' : 'Switch to this profile'}" style="cursor:${isActive ? 'default' : 'pointer'};color:${isActive ? '#5b9bd5' : '#777'};margin-right:5px;">${isActive ? '●' : '○'}</span>`
                 : '';
+
             return `<div class="la-mod-block" style="${blockStyle}">
                 <div style="${nameStyle}">
                     <span>${setDot}${name}</span>
@@ -763,6 +882,7 @@ export function laRenderWeaponBody(profiles, opts = {})
                 <div class="la-mod-body" style="display:${bodyDisplay};margin-top:4px;">${inner}</div>
             </div>`;
         }).join('');
+
         profilesHtml = `<div style="margin-bottom:4px;">${laPopupSectionLabel('PROFILES', 'var(--primary-color)')}${blocks}</div>`;
     }
 
@@ -776,18 +896,23 @@ export function laRenderWeaponBody(profiles, opts = {})
  * @param {Object} action  Lancer action object (name, activation, detail, trigger, range, damage, tags, tech_attack)
  * @param {Object} [opts]
  * @param {string} [opts.sourceName]  If provided, shown as "From: X" at the top
+ * @param {number} [opts.tier]  NPC tier for {a/b/c} values
  * @returns {string}
  */
 export function laRenderActionDetail(action, opts = {})
 {
     if (!action)
         return '';
+
     const { sourceName = null } = opts;
+
     const sourceHtml = sourceName
         ? `<div style="font-size:0.72em;color:#777;margin-bottom:6px;">From: ${escapeHtml(sourceName)}</div>`
         : '';
+
     // Attack roll info: just flat bonus and accuracy
     let attackHtml = '';
+
     if (action.attack_bonus)
     {
         const tier = (opts.tier ?? 1) - 1;
@@ -795,40 +920,52 @@ export function laRenderActionDetail(action, opts = {})
         const acc = Array.isArray(action.accuracy) ? (action.accuracy[tier] ?? 0) : (action.accuracy || 0);
         attackHtml = _renderAttackLine(bonus, acc);
     }
+
     const rangeHtml = action.range?.length
         ? `<div>${laPopupSectionLabel('RANGE', '#1565c0')}<div style="font-size:0.88em;color:#eee;margin-top:2px;">${action.range.map(rng => `${rangeIcon(rng.type)}<b>${rng.val}</b> ${rng.type}`).join(' · ')}</div></div>`
         : '';
+
     // Damage: handle both flat [{type,val}] and tiered [[{type,val}],[...],[...]]
     let damageHtml = '';
+
     if (action.damage?.length)
     {
         const tier = (opts.tier ?? 1) - 1;
         const dmgArr = Array.isArray(action.damage[0]) ? (action.damage[tier] ?? action.damage[0]) : action.damage;
+
         if (dmgArr?.length)
             damageHtml = `<div>${laPopupSectionLabel('DAMAGE', '#b71c1c')}<div style="font-size:0.88em;color:#eee;margin-top:2px;">${dmgArr.map(dmg => `${damageIcon(dmg.type)}<b>${dmg.val}</b> ${dmg.type}`).join(' + ')}</div></div>`;
     }
+
     const onHitHtml = action.on_hit
         ? `<div style="margin-bottom:6px;">${laPopupSectionLabel('ON HIT', '#b71c1c')}<div style="font-size:0.82em;color:#bbb;margin-top:2px;line-height:1.4;">${laFormatDetailHtml(action.on_hit)}</div></div>`
         : '';
+
     const triggerHtml = action.trigger
         ? `<div style="margin-bottom:6px;">${laPopupSectionLabel('TRIGGER', '#1a5c3a')}<div style="font-size:0.82em;color:#bbb;margin-top:2px;line-height:1.4;">${laFormatDetailHtml(action.trigger)}</div></div>`
         : '';
+
     const actionTags = [...(action.tags ?? [])];
     if (action.activation && !actionTags.some(tag => tag.lid?.includes('action') || tag.lid?.includes('protocol') || tag.lid?.includes('reaction') || tag.lid?.includes('tech')))
         actionTags.unshift({ name: activationChipContent(action) });
     if (action.recharge && !actionTags.some(tag => tag.lid === 'tg_recharge'))
         actionTags.push({ lid: 'tg_recharge', val: String(action.recharge), name: 'Recharge {VAL}+' });
+
     const tagsHtml = laRenderTags(actionTags);
     const detail = laFormatDetailHtml(action.detail || action.effect || '');
+
     const detailHtml = detail
         ? `<div style="margin-bottom:4px;">${laPopupSectionLabel('EFFECT', '#e65100')}<div style="font-size:0.82em;color:#bbb;margin-top:2px;line-height:1.4;">${detail}</div></div>`
         : '';
+
     const dmgRangeSep = (damageHtml && rangeHtml)
         ? '<div style="width:1px;background:rgba(255,255,255,0.15);"></div>'
         : '';
+
     const dmgRangeRow = (damageHtml || rangeHtml)
         ? `<div style="display:flex;gap:10px;align-items:stretch;margin-bottom:6px;">${damageHtml}${dmgRangeSep}${rangeHtml}</div>`
         : '';
+
     const body = sourceHtml + attackHtml + dmgRangeRow + onHitHtml + triggerHtml + tagsHtml + detailHtml;
     return body || '<div style="font-size:0.82em;color:#888;">No description.</div>';
 }
@@ -867,8 +1004,10 @@ const THEMES = {
 export function laDetailPopup(cssClass, title, subtitle, bodyHtml, theme = 'weapon')
 {
     const themeColors = THEMES[theme] ?? THEMES.default;
+
     const displayTitle = title.toLowerCase().replaceAll(/\b\w/g, letter => letter.toUpperCase())
         .replace(/^[ivxl]+(?=:)/i, numeral => numeral.toUpperCase());
+
     return $(htmlToElement(`
         <div class="${cssClass}" style="position:fixed;z-index:10000;background:#181818;border:1px solid ${themeColors.border};border-radius:4px;min-width:260px;max-width:380px;box-shadow:0 4px 24px rgba(0,0,0,0.9);color:#ddd;font-family:inherit;">
             <div style="background:linear-gradient(90deg,${themeColors.gradFrom},${themeColors.gradTo});padding:8px 12px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid ${themeColors.headerBorder};border-radius:4px 4px 0 0;">

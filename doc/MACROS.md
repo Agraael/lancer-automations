@@ -2,7 +2,7 @@
 
 [← Back to Home](index.md)
 
-Lancer Automations ships a compendium of ready-made macros, the **`L.A -`** set. Drag one to the hotbar and run it on the selected token. Downtime, Effect Manager, Choice Menu and Reinforcement need no selection. Each runs the matching feature documented in the other guides.
+Lancer Automations ships a compendium of ready-made macros. Their names all start with **`L.A -`**. Drag one to the hotbar and run it on the selected token. Downtime, Effect Manager, Choice Menu and Reinforcement need no selection. Each runs the matching feature documented in the other guides.
 
 ---
 
@@ -13,14 +13,14 @@ Lancer Automations ships a compendium of ready-made macros, the **`L.A -`** set.
 | Skirmish | Attack with a single weapon. |
 | Barrage | Attack with up to two weapons. |
 | Ram | Melee ram that knocks the target Prone. |
-| Grapple Choice | Grapple, Break Free, or End Grapple. |
+| Grapple Choice | Grapple attack. The grapple starts on a hit. |
 | Brace | Brace, as a reaction. |
 | Overwatch | Trigger an Overwatch skirmish. |
 | Lock On | Lock On a target. |
 | Disengage | Disengage for the turn. |
 | Bolster | Grant Bolster to an ally. |
 | Aid | Aid an adjacent ally. |
-| Fragment Signal | Tech attack that applies Impaired and Slowed from a mech, Impaired only from an NPC. |
+| Fragment Signal | Tech attack. From a mech, it applies Impaired and Slowed. From an NPC, it applies Impaired only. |
 | Invade | Run a tech Invade. |
 | Search | Search for hidden characters. |
 | Scan | Scan a target. |
@@ -41,7 +41,7 @@ Lancer Automations ships a compendium of ready-made macros, the **`L.A -`** set.
 | Throw Weapon | Throw a weapon onto the field as a token. |
 | Pickup Weapon | Pick a thrown weapon back up. |
 | Deploy Item | Place one of the actor's deployables. |
-| Reinforcement | Set up units to arrive later in combat. |
+| Reinforcement | Open the DROP ON MAP bar to plan units that arrive later in combat. |
 | Reactor Meltdown | Start a reactor-meltdown countdown. |
 | Reactor Explosion | Detonate the meltdown now. |
 | Suicide | Drop the token to 0 structure, stress, and HP. |

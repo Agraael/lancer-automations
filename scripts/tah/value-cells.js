@@ -37,6 +37,7 @@ export function buildValueCell(item, { incDepth, decDepth })
     const atMid = (/** @type {number} */ val) => invert ? val > 0 : val < max;
     const stateOf = (/** @type {number} */ val) => (noColor || !hasMax) ? null : atBad(val) ? 'bad' : atMid(val) ? 'mid' : 'ok';
     let cell;
+
     if (item.subtype === 'increment')
     {
         let cur = item.getValue();
@@ -44,6 +45,7 @@ export function buildValueCell(item, { incDepth, decDepth })
         const valText = () => formatAt(cur);
         const step = item.step ?? 1;
         let ghost = '';
+
         if (Number.isFinite(min) && Number.isFinite(max) && step > 0)
         {
             for (let val = min; val <= max; val += step)
@@ -53,12 +55,15 @@ export function buildValueCell(item, { incDepth, decDepth })
                     ghost = text;
             }
         }
+
         const ghostAttr = ghost ? ` data-ghost="${escapeHtml(ghost)}"` : '';
         cell = $(htmlToElement(`<div class="la-hud-cell">${iconHtml}<span class="la-hud-clip"><span class="la-hud-pan">${cellName}</span></span><div class="la-hud-cell__buttons"><span class="la-inc-val la-hud-cell__val"${ghostAttr}>${valText()}</span><span class="la-hud-cell__spin"><span class="la-inc-btn la-hud-cell__btn">▲</span><span class="la-dec-btn la-hud-cell__btn">▼</span></span></div></div>`));
+
         const suppress = () =>
         {
             incDepth(); setTimeout(decDepth, 300);
         };
+
         const updateDisplay = () =>
         {
             const state = stateOf(cur);
@@ -67,6 +72,7 @@ export function buildValueCell(item, { incDepth, decDepth })
             if (state)
                 cell.addClass(`la-value-cell--${state}`);
         };
+
         cell.find('.la-dec-btn').on('click', (ev) =>
         {
             ev.stopPropagation(); if (cur <= min)
@@ -82,6 +88,7 @@ export function buildValueCell(item, { incDepth, decDepth })
         cell.addClass('la-value-cell').data('laValueSync', () =>
         {
             const fresh = item.getValue();
+
             if (fresh !== cur)
             {
                 cur = fresh;
@@ -95,18 +102,55 @@ export function buildValueCell(item, { incDepth, decDepth })
         let pipsHtml = '';
         for (let segment = 1; segment <= max; segment++)
             pipsHtml += `<span class="la-hud-pip" data-segment="${segment}"></span>`;
-        cell = $(htmlToElement(`<div class="la-hud-cell la-pip-cell${item.bad ? ' la-pip-cell--bad' : ''}">${iconHtml}<span class="la-hud-clip"><span class="la-hud-pan">${cellName}</span></span><span class="la-hud-pips">${pipsHtml}</span></div>`));
+
+        const chipHtml = item.chip ? `<span class="la-pip-chip la-pip-chip--${item.chip.kind}">${escapeHtml(item.chip.text)}</span>` : '';
+        const toneClass = item.tone ? ` la-pip-cell--${item.tone}` : '';
+        const pinHtml = item.pin ? `<i class="la-pip-pin mdi" data-tooltip="${escapeHtml(item.pin.hint)}"></i>` : '';
+        cell = $(htmlToElement(`<div class="la-hud-cell la-pip-cell${item.bad ? ' la-pip-cell--bad' : ''}${toneClass}${item.readOnly ? ' la-pip-cell--readonly' : ''}">${iconHtml}<span class="la-hud-clip"><span class="la-hud-pan">${cellName}</span></span>${chipHtml}${pinHtml}<span class="la-hud-pips">${pipsHtml}</span></div>`));
+
+        const paintPin = () =>
+        {
+            if (!item.pin)
+                return;
+
+            const on = item.pin.isOn();
+            cell.find('.la-pip-pin').toggleClass('mdi-pin la-pip-pin--on', on).toggleClass('mdi-pin-outline', !on);
+        };
+
+        paintPin();
+        cell.on('click', '.la-pip-pin', async (ev) =>
+        {
+            ev.stopPropagation();
+            playUiSound('toggle');
+            incDepth();
+
+            try
+            {
+                await item.pin.toggle();
+                paintPin();
+            }
+            finally
+            {
+                decDepth();
+            }
+        });
+
         // Restyle in place: replacing the nodes under the pointer re-fires the cell's mouseenter.
         const repaint = () => cell.find('.la-hud-pip').each((idx, pip) =>
         {
             pip.classList.toggle('la-hud-pip--on', (idx + 1) <= cur);
         });
+
         repaint();
         cell.on('click', '.la-hud-pip', (ev) =>
         {
             ev.stopPropagation();
+            if (item.readOnly)
+                return;
+
             const segment = Number($(ev.currentTarget).data('segment'));
             const next = cur === segment ? segment - 1 : segment;
+
             if (next === cur)
                 return;
             playUiSound('toggle');
@@ -119,7 +163,9 @@ export function buildValueCell(item, { incDepth, decDepth })
         cell.data('restingBg', BG_DEFAULT);
         cell.addClass('la-value-cell').data('laValueSync', () =>
         {
+            paintPin();
             const fresh = item.getValue();
+
             if (fresh !== cur)
             {
                 cur = fresh;
@@ -134,6 +180,7 @@ export function buildValueCell(item, { incDepth, decDepth })
         const offColor = '#666';
         const switchHtml = `<span class="la-toggle-switch" style="background:${on ? onColor : offColor};"><span class="la-toggle-knob" style="left:${on ? '14px' : '1px'};"></span></span>`;
         cell = $(htmlToElement(`<div class="la-hud-cell la-toggle-cell${on ? '' : ' la-toggle-cell--off'}">${iconHtml}<span class="la-hud-clip"><span class="la-hud-pan">${cellName}</span></span>${switchHtml}</div>`));
+
         const paintSwitch = () =>
         {
             const sw = cell.find('.la-toggle-switch');
@@ -141,6 +188,7 @@ export function buildValueCell(item, { incDepth, decDepth })
             sw.find('.la-toggle-knob').css('left', on ? '14px' : '1px');
             cell.toggleClass('la-toggle-cell--off', !on);
         };
+
         cell.data('laToggleSync', () =>
         {
             on = !!item.getValue();
@@ -153,6 +201,7 @@ export function buildValueCell(item, { incDepth, decDepth })
             on = !on;
             paintSwitch();
             incDepth();
+
             try
             {
                 await item.onToggle(on);
@@ -168,11 +217,13 @@ export function buildValueCell(item, { incDepth, decDepth })
     {
         const states = item.pills.map((/** @type {any} */ pill) => !!pill.getValue());
         cell = $(htmlToElement(`<div class="la-hud-cell la-pill-cell">${item.pills.map((/** @type {any} */ pill, /** @type {number} */ idx) => `<span class="la-hud-pill" data-idx="${idx}"><i></i>${escapeHtml(pill.label)}</span>`).join('')}</div>`));
+
         const paintPills = () => cell.find('.la-hud-pill').each((idx, el) =>
         {
             const pill = item.pills[idx];
             $(el).toggleClass('la-hud-pill--on', states[idx]).children('i').attr('class', states[idx] ? pill.icon : (pill.iconOff ?? pill.icon));
         });
+
         paintPills();
         cell.on('click', '.la-hud-pill', async (ev) =>
         {
@@ -182,6 +233,7 @@ export function buildValueCell(item, { incDepth, decDepth })
             states[idx] = !states[idx];
             paintPills();
             incDepth();
+
             try
             {
                 await item.pills[idx].onToggle(states[idx]);
@@ -209,6 +261,7 @@ export function buildValueCell(item, { incDepth, decDepth })
                 input.val(item.getValue());
         });
     }
+
     return cell;
 }
 

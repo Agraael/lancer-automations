@@ -41,6 +41,7 @@ export class HudPanel
     openSilent(anchorRow)
     {
         this._silent = true;
+
         try
         {
             /** @type {any} */ (this).open(anchorRow);
@@ -58,6 +59,7 @@ export class HudPanel
             this._panel.stop(true).remove();
             this._panel = null;
         }
+
         this._anchor = anchorRow;
     }
 
@@ -67,6 +69,7 @@ export class HudPanel
         const scale = tahScale();
         let topInHud = (anchorRow.offset().top - this._el.offset().top) / scale;
         let leftInHud;
+
         if (useParentCol)
         {
             const parentCol = anchorRow.closest('[class*="la-hud-col"]').length ? anchorRow.closest('[class*="la-hud-col"]') : anchorRow.parent();
@@ -90,6 +93,7 @@ export class HudPanel
             panel.css({ maxHeight: Math.max(180, (window.innerHeight - hudOffset.top - margin) / scale - topInHud) });
             const panelHeight = /** @type {any} */ (panel[0]).getBoundingClientRect().height;
             const maxTopInHud = (window.innerHeight - margin - panelHeight - hudOffset.top) / scale;
+
             if (topInHud > maxTopInHud)
             {
                 topInHud = Math.max((margin - hudOffset.top) / scale, maxTopInHud);
@@ -103,6 +107,7 @@ export class HudPanel
             const panelHeight = /** @type {any} */ (panel[0]).getBoundingClientRect().height;
             const hudTop = this._el.offset().top;
             const maxTopInHud = (window.innerHeight - margin - panelHeight - hudTop) / scale;
+
             if (topInHud > maxTopInHud)
                 topInHud = Math.max((margin - hudTop) / scale, maxTopInHud);
             panel.css({ top: topInHud });

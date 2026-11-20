@@ -10,7 +10,7 @@ Lancer Automations draws its own bars and labels directly on the token, as a rep
 
 The bars and the hover popup live in the **Stat Bars & Hint** tab, in the **Custom Token Stat Bars** and **Token Stat Hint** sections. The halo, hover info and effect icon scale are in **Tokens & Display → Status Icons**, and **Allow Half-Size Tokens** at the top of **Tokens & Display**.
 
-**Enable Custom Token Stat Bars** (`tokenStatBar`) is on by default. It needs a reload, and the whole subsystem is skipped while the **Bar Brawl** module is active, so disable that module first.
+**Enable Custom Token Stat Bars** (`tokenStatBar`) is on by default. It needs a reload, and the bars are turned off while the **Bar Brawl** module is active, so disable that module first.
 
 <img src="../img/td-settings.png" width="70%"/>
 
@@ -26,7 +26,9 @@ Under the token, depending on the actor type:
 - **Structure** and **stress** as discrete pips (mechs and NPCs).
 - **Overshield** as a pulsing overlay on the HP bar, **burn** and **infection** as stripes when above zero.
 - **Pilot bond stress** on pilot tokens (when enabled).
-- A **reaction** pip on the edge (solid when available, dim when spent), and **armor** ticks beside HP (GM and owners only).
+- A **reaction** pip on the edge (solid when available, dim when spent). With extra reactions, there's one pip per reaction.
+- **Armor** ticks beside HP (GM and owners only).
+- For mechs (GM and owners only): **overcharge** ticks beside heat, a **repairs** gauge on the left, and a **core power** diamond.
 
 Elevation also gets a small badge at the token's corner (up/down arrow with the value) instead of Foundry's default tooltip. Numeric values next to the bars can be turned on with **Show Numeric Values on Bars**, and the status-effect icons on the token are scaled by **Effect Icon Scale** to make room.
 
@@ -41,13 +43,13 @@ Elevation also gets a small badge at the token's corner (up/down arrow with the 
 The settings hold the **world defaults**. Each token can override them from **Token Config → Resources tab**:
 
 - **Visibility mode**, set separately for **in combat** and **out of combat**: *All*, *Owners only*, *Owners + scanned*, or *None* (only when the token is selected). A fifth entry, *Use world default*, clears the override.
-- **Show Only In Combat** - bars appear only during an encounter.
-- **Hide Stat Bar** - suppress the bars on this token. They still flash briefly when a value changes.
-- **Disable Stat Bar** - never show them on this token, not even on value changes.
-- **Row Height (px)** - fixed pixels, blank or 0 to scale with the grid.
-- **Display Stress** - show the pilot bond-stress bar (pilot tokens).
+- **Show Only In Combat**: bars appear only during an encounter.
+- **Hide Stat Bar**: suppress the bars on this token. They still flash briefly when a value changes.
+- **Disable Stat Bar**: never show them on this token, not even on value changes.
+- **Row Height (px)**: fixed pixels, blank or 0 to scale with the grid.
+- **Display Stress**: show the pilot bond-stress bar (pilot tokens).
 
-The visibility mode says who *may* see the bars. On top of that, the bar hub is only drawn when the token is controlled, hovered, targeted by you, or while Alt is held.
+The visibility mode says who *may* see the bars. On top of that, the bars are only drawn when the token is controlled, hovered, targeted by you, or while Alt is held.
 
 When a value changes, the bar flashes into view for every viewer, whatever the visibility mode. Turn on **Change Flash Follows Visibility** to flash it only for viewers the mode allows.
 
@@ -68,11 +70,14 @@ The **Extra Bars** section of Token Config → Resources adds your own bars belo
 - a **value** and **max** that are either typed in (manual) or read from an actor data path,
 - **segmented** (a settable number of pips) or continuous fill,
 - a **label**, **width %**, **new line / same line** layout, **color**, and **icon**,
-- a **visibility** (owner / scanned / all), a **show-label-in-hint** toggle (label next to the icon in the hint), optional **floating-text + sound** on change, and an optional **linked item** (right-click the bar in the HUD's Resources to open its sheet).
+- a **visibility** (owner / scanned / all),
+- a **show-label-in-hint** toggle (label next to the icon in the hint),
+- optional **floating-text + sound** on change,
+- an optional **linked item** (right-click the bar in the HUD's Resources to open its sheet).
 
 Manual bars can be driven from code (`updateExtraBarValue`, `addExtraBar`, `removeExtraBar`), see [Token Display API](../API_TOKEN_DISPLAY.md).
 
-Set on an item or actor instead of one token, an extra bar becomes a template that auto-adds to that actor's tokens. **Alt Sheets** custom fraction flags show up as bars here too.
+An extra bar set on an item or actor instead of one token becomes a template that auto-adds to that actor's tokens. **Alt Sheets** custom fraction flags show up as bars here too.
 
 <br clear="right"/>
 
@@ -94,8 +99,8 @@ A bar you delete stays deleted (it isn't re-added), and a token's **Reset Auto-I
 
 In the Custom Token Stat Bars settings:
 
-- **Apply Defaults to Current Scene** - push the world default flags (hidden, combat-only, row height, visibility) onto every Lancer token on the active scene, clearing per-token overrides.
-- **Reinject Auto-Bars on All Tokens** - wipe and rebuild the auto-injected talent/frame bars across every scene token and actor prototype in the world.
+- **Apply Defaults to Current Scene**: apply the world defaults (hidden, combat-only, row height, visibility) onto every Lancer token on the active scene, clearing per-token overrides.
+- **Reinject Auto-Bars on All Tokens**: wipe and rebuild the auto-injected talent/frame bars across every scene token and actor prototype in the world.
 
 ---
 
@@ -103,13 +108,22 @@ In the Custom Token Stat Bars settings:
 
 <img align="right" src="../img/td-stat-hint.png" width="45%"/>
 
-A hover popup with a token's full stats, enabled with **Token Stats on Hover** (`tokenStatHintEnabled`, on by default). Settings cover the hover **delay**, the **Popup Position** (docked bottom-left by default, or next to the token), the popup **scale**, whether it shows for the token you control, whether it's **combat only**, and whether it carries a HASE line (**Show HASE**). Docked, it lists statuses and bonuses as names or icons (**Docked Status List**).
+A hover popup with a token's full stats, enabled with **Token Stats on Hover** (`tokenStatHintEnabled`, on by default). Settings cover:
+
+- the hover **delay**,
+- the **Popup Position** (docked bottom-left by default, or next to the token),
+- the popup **scale**,
+- whether it shows for the token you control,
+- whether it's **combat only**,
+- whether it carries a HASE line (**Show HASE**).
+
+Docked, it lists statuses and bonuses as names or icons (**Docked Status List**).
 
 For enemy tokens, the **label mode** decides what the header shows: the real name, or a scan-gated name that stays **UNKNOWN** until you scan the token (with options for the placeholder text and for hiding class/tier until scanned).
 
 A scanned token (or the GM view) shows the full stat block. An unscanned enemy shows only the damage taken, never its max values. A disposition color stripe runs down the edge.
 
-**Count As Scanned Without A Scan** (`scanRevealMode`, **Activations → Scan**) sets who reads as scanned without one: **Nobody**, **Player tokens**, **Players and allies** (default), or **Everyone**. **Everyone** drops the scan gate entirely, for the hint, the scanned stat bars, and the consume feedback alike.
+**Count As Scanned Without A Scan** (`scanRevealMode`, **Automations → Scan**) sets who reads as scanned without one: **Nobody**, **Player tokens**, **Players and allies** (default), or **Everyone**. **Everyone** drops the scan gate entirely, for the hint, the scanned stat bars, and the consume feedback alike.
 
 <br clear="right"/>
 

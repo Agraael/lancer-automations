@@ -14,13 +14,16 @@ function _themeNameHtml()
     const src = getBattleLogThemeSrc();
     if (!src)
         return '';
+
     let name = String(src).split('/').pop() ?? '';
+
     try
     {
         name = decodeURIComponent(name);
     }
     catch
     { /* keep raw */ }
+
     name = name.replace(/\.[^.]+$/, '');
     if (!name)
         return '';
@@ -78,6 +81,7 @@ export function openBattleLogRecap(battle, { outcome = 'VICTORY', mvpId = null }
     const sorted = _sortPlayers(players, mvpId);
     // mvpId (GM's pick) overrides the derived MVP: strip the old MVP entry and inject one for it.
     const nonMvpAwards = (battle?.awards ?? []).filter(award => award.key !== 'MVP');
+
     const effectiveAwards = mvpId && players.some(p => p.id === mvpId)
         ? [{
             key: 'MVP',
@@ -88,6 +92,7 @@ export function openBattleLogRecap(battle, { outcome = 'VICTORY', mvpId = null }
             sub: 'Recognized as the squad standout this engagement',
         }, ...nonMvpAwards]
         : nonMvpAwards;
+
     const squadTabHtml = _squadTabHtml(sorted, mvpId, effectiveAwards);
     const encounterTabHtml = _encounterTabHtml(encounter, sorted);
     const telemetryBattle = { ...battle, players: sorted };
@@ -164,6 +169,7 @@ export function openBattleLogRecap(battle, { outcome = 'VICTORY', mvpId = null }
                     block.parentElement?.classList.toggle('has-overflow', block.scrollHeight > block.clientHeight + 1);
                 });
             };
+
             globalThis.requestAnimationFrame(() => globalThis.requestAnimationFrame(markMedalOverflow));
             globalThis.setTimeout(markMedalOverflow, 500);
 
@@ -172,10 +178,12 @@ export function openBattleLogRecap(battle, { outcome = 'VICTORY', mvpId = null }
                 const themeName = $root[0]?.querySelector('.battelog-recap-theme-name');
                 const themeClip = themeName?.querySelector('.battelog-recap-theme-clip');
                 const themeScroll = /** @type {HTMLElement} */ (themeClip?.querySelector('.battelog-recap-theme-scroll'));
+
                 if (!themeName || !themeClip || !themeScroll)
                     return;
                 if (themeScroll.scrollWidth <= themeClip.clientWidth + 4)
                     return;
+
                 const single = themeScroll.innerHTML + '<span class="battelog-recap-theme-gap"></span>';
                 themeScroll.innerHTML = single + single;
                 themeName.classList.add('is-scrolling');
@@ -196,6 +204,7 @@ export function openBattleLogRecap(battle, { outcome = 'VICTORY', mvpId = null }
                 btn.classList.add('is-busy');
                 const focusedCard = /** @type {HTMLElement} */ ($root[0].querySelector('.battelog-recap-squad-grid.is-focus .battelog-pcol.is-focus-target'));
                 let exportPromise;
+
                 if (focusedCard)
                 {
                     const detailEl = /** @type {HTMLElement} */ (focusedCard.parentElement?.querySelector('.battelog-focus-detail'));
@@ -208,6 +217,7 @@ export function openBattleLogRecap(battle, { outcome = 'VICTORY', mvpId = null }
                     exportPromise = exportSquadPoster(/** @type {HTMLElement} */ ($root[0]), { date },
                         { toClipboard: !!ev.shiftKey });
                 }
+
                 exportPromise.finally(() => btn.classList.remove('is-busy'));
             });
 
@@ -216,6 +226,7 @@ export function openBattleLogRecap(battle, { outcome = 'VICTORY', mvpId = null }
             let bootLoop = null;
             let stopLoopTimer = null;
             let stopClassTimer = null;
+
             const stopBootLoop = () =>
             {
                 if (bootLoop)
@@ -224,6 +235,7 @@ export function openBattleLogRecap(battle, { outcome = 'VICTORY', mvpId = null }
                     bootLoop = null;
                 }
             };
+
             const suppressBooting = ($panel) =>
             {
                 // Cancel prior timers first; otherwise a stale one would kill the loop we're about to start.
@@ -232,11 +244,13 @@ export function openBattleLogRecap(battle, { outcome = 'VICTORY', mvpId = null }
                     clearTimeout(stopLoopTimer);
                     stopLoopTimer = null;
                 }
+
                 if (stopClassTimer)
                 {
                     clearTimeout(stopClassTimer);
                     stopClassTimer = null;
                 }
+
                 stopBootLoop();
                 $root.find('.battelog-recap-tab-panel.is-booting').removeClass('is-booting');
                 if (($panel[0]?.scrollHeight ?? 0) <= ($panel[0]?.clientHeight ?? 0))
@@ -249,18 +263,23 @@ export function openBattleLogRecap(battle, { outcome = 'VICTORY', mvpId = null }
                 {
                     if (!el.offsetParent && el.style.position !== 'fixed')
                         return;
+
                     const step = Number(el.style.getPropertyValue('--i'));
                     if (Number.isFinite(step))
                         lastDelayMs = Math.max(lastDelayMs, 100 + step * 40);
                 });
+
                 const isTelemetry = $panel.attr('data-tab-panel') === 'telemetry';
+
                 // Telemetry has no stagger elements; it uses the chart line-draw animation (~1.7s).
                 const opacityEndMs = lastDelayMs >= 0
                     ? lastDelayMs + 250
                     : (isTelemetry ? 640 : 900);
+
                 const animEndMs = lastDelayMs >= 0
                     ? lastDelayMs + 550
                     : (isTelemetry ? 640 : 1400);
+
                 if (lastDelayMs >= 0 || isTelemetry)
                     bootLoop = playBattleLogSound('displayList', { loop: true });
                 stopLoopTimer = setTimeout(() =>
@@ -278,6 +297,7 @@ export function openBattleLogRecap(battle, { outcome = 'VICTORY', mvpId = null }
                     $staggered.removeClass('stagger').addClass('stagger-done');
                 }, animEndMs);
             };
+
             suppressBooting($root.find('.battelog-recap-tab-panel.is-active'));
             $root.on('click', '.battelog-recap-tab', function (ev)
             {
@@ -285,6 +305,7 @@ export function openBattleLogRecap(battle, { outcome = 'VICTORY', mvpId = null }
                 const el = /** @type {HTMLElement} */ (this);
                 if (el.classList.contains('disabled') || el.classList.contains('on'))
                     return;
+
                 const target = el.dataset.tab;
                 $root.find('.battelog-recap-tab').removeClass('on');
                 el.classList.add('on');
@@ -292,6 +313,7 @@ export function openBattleLogRecap(battle, { outcome = 'VICTORY', mvpId = null }
                 const $newPanel = $root.find(`.battelog-recap-tab-panel[data-tab-panel="${target}"]`);
                 $newPanel.addClass('is-active');
                 const panelEl = $newPanel[0];
+
                 if (panelEl)
                 {
                     panelEl.scrollTop = 0;
@@ -303,18 +325,21 @@ export function openBattleLogRecap(battle, { outcome = 'VICTORY', mvpId = null }
                             node.scrollLeft = 0;
                         });
                 }
+
                 $root.find('.battelog-recap-share').prop('disabled', target !== 'squad');
                 suppressBooting($newPanel);
                 // Chart can't measure until the panel is visible.
                 if (target === 'telemetry')
                     requestAnimationFrame(() => rerenderTelemetry());
             });
+
             // Focused mech view: stat strip on top, panels in three labeled category columns.
             const PANEL_GROUPS = [
                 { label: localize('LA.recap.panelGroup.offense'), titles: new Set(['confirmed kills', 'assisted kills', 'damage dealt', 'attacks & tech', 'accuracy', 'weapons used']) },
                 { label: localize('LA.recap.panelGroup.defense'), titles: new Set(['damage taken', 'attacks avoided', 'h.a.s.e', 'grit', 'equipment destroyed']) },
                 { label: localize('LA.recap.panelGroup.operations'), titles: new Set(['actions used', 'movement', 'repairs', 'awards']) },
             ];
+
             const buildFocusDetail = (card) =>
             {
                 const detail = document.createElement('div');
@@ -333,22 +358,27 @@ export function openBattleLogRecap(battle, { outcome = 'VICTORY', mvpId = null }
                         anchor.setAttribute('data-tip-link', attacksPanelLink);
                         return;
                     }
+
                     // __scanTip: the stat tip lives in <body> once it has been hovered
                     const tip = /** @type {any} */ (anchor).__scanTip
                         ?? (anchor.classList.contains('battelog-pcol-medals')
                             ? face.querySelector('.battelog-awards-tip')
                             : anchor.querySelector('.battelog-tip-panel'));
+
                     if (!(tip instanceof HTMLElement))
                         return;
+
                     const key = (tip.textContent ?? '').replaceAll(/\s+/g, ' ').trim();
                     if (!key)
                         return;
+
                     // duplicates (top action) just link to the first copy
                     if (linkByKey.has(key))
                     {
                         anchor.setAttribute('data-tip-link', String(linkByKey.get(key)));
                         return;
                     }
+
                     const panelIndex = linkByKey.size;
                     linkByKey.set(key, panelIndex);
                     const panelClone = /** @type {HTMLElement} */ (tip.cloneNode(true));
@@ -358,19 +388,23 @@ export function openBattleLogRecap(battle, { outcome = 'VICTORY', mvpId = null }
                     panelClone.classList.add('stagger');
                     panelClone.setAttribute('data-tip-link', String(panelIndex));
                     anchor.setAttribute('data-tip-link', String(panelIndex));
+
                     if (panelClone.classList.contains('battelog-scan-tip'))
                     {
                         wideRow.appendChild(panelClone);
                         return;
                     }
+
                     const title = (panelClone.querySelector('.battelog-tip-title')?.textContent ?? '').trim().toLowerCase();
                     if (title === attacksPanelTitle)
                         attacksPanelLink = String(panelIndex);
+
                     const groupIndex = PANEL_GROUPS.findIndex(group => group.titles.has(title));
                     grouped[groupIndex >= 0 ? groupIndex : PANEL_GROUPS.length - 1].push(panelClone);
                 });
                 if (wideRow.childElementCount)
                     detail.appendChild(wideRow);
+
                 const colsWrap = document.createElement('div');
                 colsWrap.className = 'battelog-focus-cols';
                 PANEL_GROUPS.forEach((group, groupIndex) =>
@@ -380,6 +414,7 @@ export function openBattleLogRecap(battle, { outcome = 'VICTORY', mvpId = null }
                     colsWrap.appendChild(colEl);
                     if (!grouped[groupIndex].length)
                         return;
+
                     const head = document.createElement('div');
                     head.className = 'battelog-focus-colhead';
                     head.textContent = group.label;
@@ -395,6 +430,7 @@ export function openBattleLogRecap(battle, { outcome = 'VICTORY', mvpId = null }
                 card.insertAdjacentElement('afterend', detail);
                 return detail;
             };
+
             const closeFocus = () =>
             {
                 const $grid = $root.find('.battelog-recap-squad-grid.is-focus');
@@ -406,23 +442,29 @@ export function openBattleLogRecap(battle, { outcome = 'VICTORY', mvpId = null }
                 $grid.removeClass('is-focus');
                 return true;
             };
+
             $root.on('click', '.battelog-recap-tab-panel[data-tab-panel="squad"] .battelog-pcol', function (ev)
             {
                 if (ev.target.closest('button, a'))
                     return;
+
                 const card = /** @type {HTMLElement} */ (this);
                 const grid = card.closest('.battelog-recap-squad-grid');
+
                 if (!grid)
                     return;
+
                 const wasFocused = card.classList.contains('is-focus-target');
                 closeFocus();
                 const $panel = $root.find('.battelog-recap-tab-panel[data-tab-panel="squad"]');
+
                 if (wasFocused)
                 {
                     // re-shown siblings replay their stagger
                     suppressBooting($panel);
                     return;
                 }
+
                 grid.classList.add('is-focus');
                 card.classList.add('is-focus-target');
                 const crumb = $root[0].querySelector('.battelog-focus-crumb');
@@ -437,6 +479,7 @@ export function openBattleLogRecap(battle, { outcome = 'VICTORY', mvpId = null }
                 if (closeFocus())
                     suppressBooting($root.find('.battelog-recap-tab-panel[data-tab-panel="squad"]'));
             });
+
             const onFocusEscape = (ev) =>
             {
                 if (ev.key !== 'Escape' || !$root[0].querySelector('.battelog-recap-tab-panel.is-active .battelog-recap-squad-grid.is-focus'))
@@ -446,8 +489,10 @@ export function openBattleLogRecap(battle, { outcome = 'VICTORY', mvpId = null }
                 closeFocus();
                 suppressBooting($root.find('.battelog-recap-tab-panel[data-tab-panel="squad"]'));
             };
+
             document.addEventListener('keydown', onFocusEscape, true);
             const flipHolds = new WeakMap();
+
             const holdScrollbars = (el) =>
             {
                 for (const container of [el.closest('.battelog-recap-squad-scroll'), el.closest('.battelog-hostiles-grid'), el.closest('.battelog-recap-tab-panel')])
@@ -459,6 +504,7 @@ export function openBattleLogRecap(battle, { outcome = 'VICTORY', mvpId = null }
                     flipHolds.set(container, setTimeout(() => container.classList.remove('is-flipping'), 650));
                 }
             };
+
             $root.on('click', '.battelog-pcol [data-flip]', function (ev)
             {
                 ev.stopPropagation();
@@ -505,6 +551,7 @@ export function openBattleLogRecap(battle, { outcome = 'VICTORY', mvpId = null }
                 const el = /** @type {HTMLElement} */ (this);
                 if (el.scrollWidth <= el.clientWidth)
                     return;
+
                 const native = /** @type {WheelEvent} */ (ev.originalEvent ?? ev);
                 if (!native.deltaY)
                     return;
@@ -516,28 +563,35 @@ export function openBattleLogRecap(battle, { outcome = 'VICTORY', mvpId = null }
                 const uuid = /** @type {HTMLElement} */ (this).dataset.journalUuid;
                 if (!uuid)
                     return;
+
                 const entry = await fromUuid(uuid);
                 /** @type {any} */ (entry)?.sheet?.render(true);
             });
+
             const rerenderTelemetry = () =>
             {
                 const $tel = $root.find('.battelog-telemetry');
                 if ($tel.length === 0)
                     return;
+
                 const view = String($tel.attr('data-view') ?? 'hp');
                 const rawH = String($tel.attr('data-highlight') ?? '');
                 const highlight = rawH === '' ? null : rawH;
                 const showTotal = String($tel.attr('data-total') ?? '0') === '1';
                 const chartEl = $tel.find('.battelog-telemetry-chart')[0];
+
                 const chartSize = chartEl && chartEl.clientHeight > 40
                     ? { w: chartEl.clientWidth, h: chartEl.clientHeight }
                     : null;
+
                 $tel.html(_telemetryInnerHtml(telemetryBattle, view, highlight, showTotal, chartSize));
                 $root.find('.battelog-recap-tab-panel[data-tab-panel="telemetry"] > .battelog-recap-section-title').replaceWith(_telemetrySectionHtml(battle, view));
             };
+
             // Fire the displayList loop for the chart draw-in on metric / legend change.
             let chartDrawLoop = null;
             let chartDrawStopTimer = null;
+
             const playChartDrawSound = (durationMs = 640) =>
             {
                 if (chartDrawStopTimer)
@@ -545,11 +599,13 @@ export function openBattleLogRecap(battle, { outcome = 'VICTORY', mvpId = null }
                     clearTimeout(chartDrawStopTimer);
                     chartDrawStopTimer = null;
                 }
+
                 if (chartDrawLoop)
                 {
                     chartDrawLoop.stop();
                     chartDrawLoop = null;
                 }
+
                 chartDrawLoop = playBattleLogSound('displayList', { loop: true });
                 chartDrawStopTimer = setTimeout(() =>
                 {
@@ -558,6 +614,7 @@ export function openBattleLogRecap(battle, { outcome = 'VICTORY', mvpId = null }
                         chartDrawLoop.stop();
                         chartDrawLoop = null;
                     }
+
                     chartDrawStopTimer = null;
                 }, durationMs);
             };
@@ -567,8 +624,10 @@ export function openBattleLogRecap(battle, { outcome = 'VICTORY', mvpId = null }
                 const btn = /** @type {HTMLElement} */ (this);
                 if (btn.hasAttribute('disabled'))
                     return;
+
                 const next = btn.dataset.dispo ?? 'hostile';
                 const $enc = $root.find('.battelog-encounter');
+
                 if (String($enc.attr('data-dispo') ?? '') === next)
                     return;
                 $enc.attr('data-dispo', next);
@@ -603,20 +662,26 @@ export function openBattleLogRecap(battle, { outcome = 'VICTORY', mvpId = null }
                 rerenderTelemetry();
                 playChartDrawSound();
             });
+
             let lastHoverAt = 0;
             $root.on('mouseover', '.battelog-telemetry-hit', function ()
             {
                 const el = /** @type {SVGElement} */ (this);
                 const svg = el.ownerSVGElement;
+
                 if (!svg)
                     return;
+
                 const hoverLayer = svg.querySelector('.battelog-telemetry-hover');
                 if (!(hoverLayer instanceof Element))
                     return;
+
                 const raw = el.dataset.hover;
                 if (!raw)
                     return;
+
                 let payload;
+
                 try
                 {
                     payload = JSON.parse(decodeURIComponent(raw));
@@ -625,8 +690,10 @@ export function openBattleLogRecap(battle, { outcome = 'VICTORY', mvpId = null }
                 {
                     return;
                 }
+
                 hoverLayer.innerHTML = _telemetryHoverSvg(payload, svg);
                 const now = Date.now();
+
                 if (now - lastHoverAt > 120)
                 {
                     lastHoverAt = now;
@@ -638,6 +705,7 @@ export function openBattleLogRecap(battle, { outcome = 'VICTORY', mvpId = null }
                 const el = /** @type {SVGElement} */ (this);
                 const svg = el.ownerSVGElement;
                 const hoverLayer = svg?.querySelector('.battelog-telemetry-hover');
+
                 if (hoverLayer instanceof Element)
                     hoverLayer.innerHTML = '';
             });
@@ -645,6 +713,7 @@ export function openBattleLogRecap(battle, { outcome = 'VICTORY', mvpId = null }
             {
                 const muted = setBattleLogThemeMuted();
                 const icon = /** @type {HTMLElement} */ (this).querySelector('i');
+
                 if (icon)
                     icon.className = muted ? 'fas fa-volume-xmark' : 'fas fa-volume-high';
                 /** @type {HTMLElement} */ (this).title = muted ? 'Unmute theme' : 'Mute theme';
@@ -665,26 +734,31 @@ export function openBattleLogRecap(battle, { outcome = 'VICTORY', mvpId = null }
             $root.on('mouseenter', TIP_HOVER_SELECTOR, function ()
             {
                 const el = /** @type {HTMLElement} */ (this);
+
                 const variant = el.matches('.battelog-hcard-scan-btn.has-tip, .battelog-hcard-scan-state.has-tip, .battelog-pcol-frame-name.has-tip')
                     ? 'details'
                     : 'battleLogHover';
+
                 // the focused view has no tooltip reveal, so no sound delay
                 if (el.closest('.battelog-pcol.is-focus-target'))
                 {
                     playUiSound(variant);
                     return;
                 }
+
                 const timer = setTimeout(() =>
                 {
                     playUiSound(variant);
                     el.dataset.hoverSfxTimer = '';
                 }, HOVER_TIP_REVEAL_MS);
+
                 el.dataset.hoverSfxTimer = String(timer);
             });
             $root.on('mouseleave', TIP_HOVER_SELECTOR, function ()
             {
                 const el = /** @type {HTMLElement} */ (this);
                 const timerId = Number(el.dataset.hoverSfxTimer);
+
                 if (timerId)
                 {
                     clearTimeout(timerId);
@@ -700,7 +774,9 @@ export function openBattleLogRecap(battle, { outcome = 'VICTORY', mvpId = null }
                 // the focused view already shows the stat panel flat
                 if (btn.closest('.battelog-pcol.is-focus-target'))
                     return;
+
                 let tip = /** @type {HTMLElement | null} */ (btn.__scanTip ?? null);
+
                 if (!tip)
                 {
                     tip = btn.querySelector(':scope > .battelog-scan-tip');
@@ -710,6 +786,7 @@ export function openBattleLogRecap(battle, { outcome = 'VICTORY', mvpId = null }
                     btn.__scanTip = tip;
                     scanTips.add(tip);
                 }
+
                 const btnRect = btn.getBoundingClientRect();
                 const w = tip.offsetWidth || 260;
                 const h = tip.offsetHeight || 200;
@@ -731,6 +808,7 @@ export function openBattleLogRecap(battle, { outcome = 'VICTORY', mvpId = null }
             {
                 const btn = /** @type {any} */ (this);
                 const tip = /** @type {HTMLElement | null} */ (btn.__scanTip ?? null);
+
                 if (tip)
                     tip.classList.remove('is-visible');
             });
@@ -740,11 +818,13 @@ export function openBattleLogRecap(battle, { outcome = 'VICTORY', mvpId = null }
             {
                 const medal = /** @type {any} */ (this);
                 let tip = /** @type {HTMLElement | null} */ (medal.__medalTip ?? null);
+
                 if (!tip)
                 {
                     tip = medal.querySelector(':scope > .battelog-pcol-medal-tip');
                     if (!(tip instanceof HTMLElement))
                         return;
+
                     const medalStyle = globalThis.getComputedStyle(medal);
                     ['--la-panel-ink', '--la-primary', '--la-amber', '--la-danger'].forEach((varName) =>
                     {
@@ -763,6 +843,7 @@ export function openBattleLogRecap(battle, { outcome = 'VICTORY', mvpId = null }
                     medal.__medalTip = tip;
                     scanTips.add(tip);
                 }
+
                 const rect = medal.getBoundingClientRect();
                 const tipW = tip.offsetWidth || 200;
                 const tipH = tip.offsetHeight || 120;
@@ -772,6 +853,7 @@ export function openBattleLogRecap(battle, { outcome = 'VICTORY', mvpId = null }
                 const viewH = globalThis.innerHeight;
                 const left = Math.max(margin, Math.min(rect.left, viewW - tipW - margin));
                 let top = rect.top - tipH - gap;
+
                 if (top < margin)
                     top = rect.bottom + gap;
                 top = Math.max(margin, Math.min(top, viewH - tipH - margin));
@@ -783,6 +865,7 @@ export function openBattleLogRecap(battle, { outcome = 'VICTORY', mvpId = null }
             {
                 const medal = /** @type {any} */ (this);
                 const tip = /** @type {HTMLElement | null} */ (medal.__medalTip ?? null);
+
                 if (tip)
                     tip.classList.remove('is-visible');
             });
@@ -791,11 +874,13 @@ export function openBattleLogRecap(battle, { outcome = 'VICTORY', mvpId = null }
             {
                 const anchor = /** @type {any} */ (this);
                 let tip = /** @type {HTMLElement | null} */ (anchor.__killersTip ?? null);
+
                 if (!tip)
                 {
                     tip = anchor.querySelector(':scope > .battelog-hcard-killers-tip');
                     if (!(tip instanceof HTMLElement))
                         return;
+
                     const anchorStyle = globalThis.getComputedStyle(anchor);
                     ['--la-panel-ink', '--la-primary', '--la-amber', '--la-danger', '--la-ink', '--la-accent'].forEach((varName) =>
                     {
@@ -810,6 +895,7 @@ export function openBattleLogRecap(battle, { outcome = 'VICTORY', mvpId = null }
                     anchor.__killersTip = tip;
                     scanTips.add(tip);
                 }
+
                 const rect = anchor.getBoundingClientRect();
                 const tipW = tip.offsetWidth || 200;
                 const tipH = tip.offsetHeight || 120;
@@ -819,6 +905,7 @@ export function openBattleLogRecap(battle, { outcome = 'VICTORY', mvpId = null }
                 const viewH = globalThis.innerHeight;
                 const left = Math.max(margin, Math.min(rect.left, viewW - tipW - margin));
                 let top = rect.top - tipH - gap;
+
                 if (top < margin)
                     top = rect.bottom + gap;
                 top = Math.max(margin, Math.min(top, viewH - tipH - margin));
@@ -830,11 +917,13 @@ export function openBattleLogRecap(battle, { outcome = 'VICTORY', mvpId = null }
             {
                 const anchor = /** @type {any} */ (this);
                 const tip = /** @type {HTMLElement | null} */ (anchor.__killersTip ?? null);
+
                 if (tip)
                     tip.classList.remove('is-visible');
             });
 
             const origCloseWithTips = dlg.close.bind(dlg);
+
             dlg.close = (...args) =>
             {
                 for (const tip of scanTips)
@@ -858,9 +947,11 @@ export function openBattleLogRecap(battle, { outcome = 'VICTORY', mvpId = null }
             const measureRibbons = () =>
             {
                 const nodes = /** @type {NodeListOf<HTMLElement>} */ ($root[0].querySelectorAll('.battelog-pcol-ribbon-text'));
+
                 for (const node of nodes)
                 {
                     const overflow = node.scrollWidth - node.clientWidth;
+
                     if (overflow > 2)
                     {
                         node.classList.add('is-overflow');
@@ -869,11 +960,13 @@ export function openBattleLogRecap(battle, { outcome = 'VICTORY', mvpId = null }
                     }
                 }
             };
+
             setTimeout(measureRibbons, 260);
 
             const onResize = () => rerenderTelemetry();
             $(globalThis).on('resize.battelogRecap', onResize);
             const origClose = dlg.close.bind(dlg);
+
             dlg.close = (...args) =>
             {
                 $(globalThis).off('resize.battelogRecap', onResize);
@@ -884,6 +977,7 @@ export function openBattleLogRecap(battle, { outcome = 'VICTORY', mvpId = null }
         classes: ['lancer-dialog-base', 'lancer-no-title', 'battelog-recap-dialog'],
         width: 1080,
     });
+
     setTimeout(() => dlg.render(true), RECAP_OPEN_DELAY_MS);
     return dlg;
 }
@@ -892,6 +986,7 @@ function _formatRealtime(ms)
 {
     if (!ms || !Number.isFinite(ms))
         return '--:--';
+
     const total = Math.floor(ms / 1000);
     const hours = Math.floor(total / 3600);
     const minutes = Math.floor((total % 3600) / 60);
@@ -919,8 +1014,10 @@ function _sortPlayers(players, mvpId)
             if (b.id === mvpId && a.id !== mvpId)
                 return 1;
         }
+
         const aKills = a.kills ?? 0;
         const bKills = b.kills ?? 0;
+
         if (bKills !== aKills)
             return bKills - aKills;
         return (b.dmgDealt ?? 0) - (a.dmgDealt ?? 0);
@@ -947,6 +1044,7 @@ function _gearLostHtml(gear)
     const cascading = Array.isArray(gearObj.cascading) ? gearObj.cascading : [];
     const count = weapons.length + systems.length;
     const hasLost = count > 0;
+
     const groupHtml = (title, iconSvg, items) => items.length === 0 ? '' : `
         <div class="battelog-pcol-gearlost-group">
             <div class="battelog-pcol-gearlost-group-title">
@@ -957,6 +1055,7 @@ function _gearLostHtml(gear)
             </ul>
         </div>
     `;
+
     return `
         <div class="battelog-pcol-gearlost ${hasLost ? 'has-lost' : ''}" data-count="${count}">
             <i class="fas fa-triangle-exclamation"></i>
@@ -1043,6 +1142,7 @@ function _mitigatedRows(section)
     const rows = [];
     const armor = section?.mitigatedArmor ?? 0;
     const overshield = section?.mitigatedOvershield ?? 0;
+
     if (armor > 0)
         rows.push({ k: 'MITIGATED (ARMOR)', v: String(armor), sep: true, kIcon: 'modules/lancer-automations/icons/stats/armor.svg' });
     if (overshield > 0)
@@ -1054,13 +1154,16 @@ function _haseRows(hase)
 {
     const attempts = hase?.attempts ?? { hull: 0, agi: 0, sys: 0, eng: 0 };
     const total = hase?.total ?? { attempts: 0, rate: null };
+
     if (!(total.attempts > 0))
         return [];
+
     const row = (label, rate, count, icon) => (count > 0 ? {
         k: `${label} ×${count}`,
         v: rate != null ? rate + '%' : '-',
         kIcon: `modules/lancer-automations/icons/stats/${icon}`,
     } : null);
+
     return [
         row('HULL',        hase?.H, attempts.hull, 'hull.svg'),
         row('AGILITY',     hase?.A, attempts.agi,  'agi.svg'),
@@ -1096,13 +1199,16 @@ function _killListRows(list)
 {
     if (!Array.isArray(list) || list.length === 0)
         return [];
+
     // Same NPC name can appear multiple times; collapse to unique rows with ×N counts.
     const counts = new Map();
+
     for (const name of list)
     {
         const key = String(name);
         counts.set(key, (counts.get(key) ?? 0) + 1);
     }
+
     return [...counts.entries()].map(([name, count]) => ({ k: name, v: '×' + count }));
 }
 
@@ -1112,6 +1218,7 @@ function _splitKillRows(list, pilotList)
 {
     const pilotLeft = [...(pilotList ?? [])];
     const mechList = [];
+
     for (const name of list ?? [])
     {
         const at = pilotLeft.indexOf(name);
@@ -1120,6 +1227,7 @@ function _splitKillRows(list, pilotList)
         else
             mechList.push(name);
     }
+
     return [
         ..._killListRows(mechList),
         ..._killListRows(pilotList).map(row => ({ ...row, kIcon: _PILOT_ICON })),
@@ -1135,9 +1243,11 @@ function _accAvg(player)
     const total = player?.bd?.acc?.total;
     if (total != null)
         return total;
+
     const vals = ['ranged', 'melee', 'tech']
         .map(accField => player?.bd?.acc?.[accField])
         .filter(stat => stat != null);
+
     return vals.length ? Math.round(vals.reduce((a, b) => a + b, 0) / vals.length) : (player?.accuracy ?? 0);
 }
 
@@ -1147,12 +1257,15 @@ function _bestIds(players)
     {
         if (players.length < 2)
             return new Set();
+
         const scores = players.map(fn);
         const bestVal = Math.max(...scores);
+
         if (!(bestVal > 0))
             return new Set();
         return new Set(players.filter((player, idx) => scores[idx] === bestVal).map(player => player.id));
     };
+
     return {
         dmgDealt: top(player => player.dmgDealt ?? 0),
         dmgTaken: top(player => player.dmgTaken ?? 0),
@@ -1171,6 +1284,7 @@ function _bestIds(players)
 }
 
 const _CROWN = '<i class="fas fa-crown battelog-pcol-crown" title="Squad best"></i>';
+
 function _crown(on)
 {
     return on ? _CROWN : '';
@@ -1218,6 +1332,7 @@ function _tipPanelHtml({ title, rows, align = 'left', extraClass = '' })
                 <span class="battelog-tip-v" ${row.tone ? `style="color:${row.tone};"` : ''}>${_escape(row.v)}</span>
             </div>
         `).join('');
+
     return `
         <div class="battelog-tip-panel align-${align}${extraClass ? ` ${extraClass}` : ''}">
             <div class="battelog-tip-title">${_escape(title)}</div>
@@ -1235,6 +1350,7 @@ function _resolveImg(player)
 {
     if (player?.img)
         return player.img;
+
     const actor = player?.actorId ? game.actors?.get(player.actorId) : null;
     return actor?.img ?? '';
 }
@@ -1246,12 +1362,14 @@ function _squadTabHtml(players, mvpId, allAwards)
     const count = players.length;
     const scroll = count > 4;
     const empties = Math.max(0, 4 - count);
+
     const emptyCols = Array.from({ length: empties }, () => `
         <div class="battelog-pcol-empty">
             <i class="fas fa-user-slash"></i>
             <span>NO PILOT</span>
         </div>
     `).join('');
+
     const gridClass = 'battelog-recap-squad-grid' + (scroll ? ' scroll' : '');
     const gridStyle = scroll ? `style="grid-template-columns: repeat(${count}, 232px);"` : '';
     return `
@@ -1319,6 +1437,7 @@ function _playerColumnHtml(player, mvpId, rank = 0, best = {}, allAwards = [])
     const awards = _playerAwards(player, allAwards);
     const awardIcon = award => (award.second ? 'fa-medal battelog-award-second-icon' : award.icon);
     const secondTag = award => (award.second ? `<span class="battelog-award-second-tag">${_escape(localize('LA.recap.secondPlace'))}</span>` : '');
+
     const medalsHtml = awards.map(award => `
         <span class="battelog-pcol-medal ${award.key === 'MVP' ? 'is-mvp' : ''} ${award.key === 'KIA' ? 'is-kia' : ''}">
             <i class="fas ${awardIcon(award)}"></i> ${award.label}
@@ -1332,23 +1451,27 @@ function _playerColumnHtml(player, mvpId, rank = 0, best = {}, allAwards = [])
         </span>
     `).join('');
 
-    const ribbonSuffix = isMvp && dead
+    const left = !dead && !!player.left;
+
+    const ribbonSuffix = (isMvp && dead
         ? ' · MVP · DESTROYED'
         : isMvp
             ? ' · MVP'
             : dead
                 ? ' · DESTROYED'
-                : '';
-    const ribbonIcon = isMvp && dead
+                : '') + (left ? ` · LEFT · R${player.leftRound}` : '');
+
+    const ribbonIcon = (isMvp && dead
         ? '<i class="fas fa-star"></i><i class="fas fa-skull"></i>'
         : isMvp
             ? '<i class="fas fa-star"></i>'
             : dead
                 ? '<i class="fas fa-skull"></i>'
-                : '';
+                : '') + (left ? '<i class="fas fa-door-open"></i>' : '');
 
     const pilotSide = player.pilotSide ?? null;
     const pilotLine = pilotSide?.killed ? 'PILOT KILLED' : `PILOT ${pilotSide?.hpEnd ?? 0}/${pilotSide?.hpMax ?? 0} HP`;
+
     const flipBtnHtml = pilotSide
         ? `<button type="button" class="battelog-pcol-portrait-mfr battelog-pcol-flip-btn" data-flip>${pilotLine} <i class="fas fa-rotate"></i></button>`
         : '';
@@ -1590,13 +1713,16 @@ function _playerColumnHtml(player, mvpId, rank = 0, best = {}, allAwards = [])
                 </div>
             </div>
     `;
+
     const cardClass = `battelog-pcol stagger ${isMvp ? 'is-mvp' : ''} ${dead ? 'is-dead' : ''}`;
     const cardStyle = `--accent:${accent}; --i:${rank};`;
+
     if (player.pilotOnly)
     {
         const soloClass = `battelog-pcol stagger ${isMvp ? 'is-mvp' : ''} ${pilotSide?.killed ? 'is-dead' : ''}`;
         return `<div class="${soloClass}" style="${cardStyle}">${_pilotFaceHtml(player, medalsWrapHtml, killsHtml, isMvp, true)}${_EXPAND_GLYPH}</div>`;
     }
+
     if (!pilotSide)
         return `<div class="${cardClass}" style="${cardStyle}">${frontHtml}${_EXPAND_GLYPH}</div>`;
     return `
@@ -1613,9 +1739,12 @@ function _pilotFaceHtml(player, medalsWrapHtml, killsHtml, isMvp, solo = false)
 {
     const side = player.pilotSide;
     const killed = !!side.killed;
+
     const flipBack = solo
         ? ''
         : `<button type="button" class="battelog-pcol-portrait-mfr battelog-pcol-flip-btn" data-flip>MECH <i class="fas fa-rotate"></i></button>`;
+
+    const left = !killed && !player.destroyed && !!player.left;
     let ribbonSuffix = '';
     if (isMvp && killed)
         ribbonSuffix = ' · MVP · KILLED';
@@ -1623,8 +1752,12 @@ function _pilotFaceHtml(player, medalsWrapHtml, killsHtml, isMvp, solo = false)
         ribbonSuffix = ' · MVP';
     else if (killed)
         ribbonSuffix = ' · KILLED';
-    const ribbonIcon = `${isMvp ? '<i class="fas fa-star"></i>' : ''}${killed ? '<i class="fas fa-skull"></i>' : ''}`;
+    if (left)
+        ribbonSuffix += ` · LEFT · R${player.leftRound}`;
+
+    const ribbonIcon = `${isMvp ? '<i class="fas fa-star"></i>' : ''}${killed ? '<i class="fas fa-skull"></i>' : ''}${left ? '<i class="fas fa-door-open"></i>' : ''}`;
     const statTip = _playerStatTipHtml({ actorId: side.actorId });
+
     const head = `
         <div class="battelog-pcol-ribbon">
             <span class="battelog-pcol-ribbon-icon">${ribbonIcon}</span>
@@ -1648,6 +1781,7 @@ function _pilotFaceHtml(player, medalsWrapHtml, killsHtml, isMvp, solo = false)
         </div>
         ${killsHtml}
     `;
+
     const battleData = side.bd ?? {};
     const hpPct = Math.max(0, Math.min(100, Math.round((side.hpEnd / Math.max(1, side.hpMax)) * 100)));
     const grit = side.grit ?? { attempts: 0, rate: null };
@@ -1733,9 +1867,11 @@ function _groupHostiles(entries)
 {
     const map = new Map();
     const groups = [];
+
     for (const entry of entries)
     {
         const hasLicense = entry.actorType === 'mech' || entry.actorType === 'pilot';
+
         const key = [
             entry.side ?? 'hostile',
             entry.actorType ?? 'npc',
@@ -1745,15 +1881,19 @@ function _groupHostiles(entries)
             entry.scanned !== false,
             entry.actorId ?? '',
         ].join('|');
+
         let group = map.get(key);
+
         if (!group)
         {
             group = { ...entry, instances: [] };
             map.set(key, group);
             groups.push(group);
         }
+
         group.instances.push(entry);
     }
+
     return groups;
 }
 
@@ -1761,16 +1901,20 @@ function _scanJournalFor(actorId)
 {
     if (!actorId)
         return null;
+
     const actor = game.actors?.get(actorId);
     if (!actor)
         return null;
+
     let best = null;
+
     for (const entry of getScanJournalsForActor(actor, { user: game.user, allowGm: !!game.user?.isGM }))
     {
         const modified = entry._stats?.modifiedTime ?? 0;
         if (!best || modified > (best._stats?.modifiedTime ?? 0))
             best = entry;
     }
+
     return best;
 }
 
@@ -1778,11 +1922,13 @@ function _isActorForceScanned(actorId)
 {
     if (!actorId)
         return false;
+
     const actor = game.actors?.get(actorId);
     if (!actor)
         return false;
     if (getLAFlag(actor, 'scannedByAll'))
         return true;
+
     // Unlinked tokens carry the flag on their delta actor, not the base sheet recap reads.
     const tokens = /** @type {any} */ (actor).getActiveTokens?.() ?? [];
     return tokens.some((token) => getLAFlag(token?.actor, 'scannedByAll'));
@@ -1832,6 +1978,7 @@ const _KILLER_TEAM_LABEL = {
     secret: 'SECRET',
     unknown: 'UNKNOWN',
 };
+
 const _KILLER_TEAM_COLOR = {
     friendly: '#3aa955',
     hostile: 'var(--la-danger, #c8353d)',
@@ -1844,29 +1991,37 @@ function _hostileKillersHtml(instances, players)
 {
     const playerByTokenId = (id) => players.find(player => player.tokenId === id);
     const tally = new Map();
+
     for (const inst of instances)
     {
         if (inst.killed === false)
             continue;
+
         const team = inst.killedByTeam ?? 'unknown';
+
         const key = (team === 'player' && inst.killedBy)
             ? `player:${inst.killedBy}`
             : team;
+
         tally.set(key, (tally.get(key) ?? 0) + 1);
     }
+
     const mechRows = [];
     const teamRows = [];
+
     for (const [key, count] of tally.entries())
     {
         if (key.startsWith('player:'))
         {
             const player = playerByTokenId(key.slice(7));
+
             if (player)
             {
                 mechRows.push({ k: player.callsign, v: `×${count}`, n: count, dot: player.accent });
                 continue;
             }
         }
+
         const team = key.startsWith('player:') ? 'unknown' : key;
         teamRows.push({
             k: _KILLER_TEAM_LABEL[team] ?? _KILLER_TEAM_LABEL.unknown,
@@ -1876,13 +2031,17 @@ function _hostileKillersHtml(instances, players)
             sep: false,
         });
     }
+
     if (mechRows.length && teamRows.length)
         teamRows[0].sep = true;
+
     const rows = [...mechRows, ...teamRows];
     const top = rows.reduce((best, row) => (row.n > best.n ? row : best), rows[0]);
+
     const topHtml = top
         ? `<span class="battelog-hcard-killers-top"><span class="battelog-tip-dot" style="background:${top.dot};"></span>${_escape(top.k)}</span>${rows.length > 1 ? `<span class="battelog-hcard-killers-more">+${rows.length - 1}</span>` : ''}`
         : '';
+
     return topHtml + _tipPanelHtml({ title: localize('LA.recap.panel.destroyedBy'), rows, extraClass: 'battelog-hcard-killers-tip' });
 }
 
@@ -1898,16 +2057,29 @@ function _hcardBadgeTipHtml(title, body)
     `;
 }
 
-function _hostileCountBadgeHtml(count, killedCount)
+function _hostileCountBadgeHtml(count, killedCount, leftCount = 0)
 {
-    const aliveCount = count - killedCount;
+    const aliveCount = count - killedCount - leftCount;
+
     const alive = aliveCount > 0
         ? `<span class="battelog-hcard-badge-alive"><i class="fas fa-heart-pulse"></i> ${aliveCount}</span>`
         : '';
+
+    const gone = leftCount > 0
+        ? `<span class="battelog-hcard-badge-left"><i class="fas fa-door-open"></i> ${leftCount}</span>`
+        : '';
+
     const dead = killedCount > 0
         ? `<span class="battelog-hcard-badge-dead"><img class="battelog-hcard-badge-count-icon" src="modules/lancer-automations/FX/svg/Destroyed.svg" alt=""/>${killedCount}</span>`
         : '';
-    return alive + dead;
+
+    return alive + gone + dead;
+}
+
+function _hostileLeftHtml(instances, leftCount)
+{
+    const label = instances.length === 1 ? `LEFT · R${instances[0].leftRound}` : `${leftCount} LEFT`;
+    return `<div class="battelog-hcard-notkilled"><i class="fas fa-door-open"></i> ${label}</div>`;
 }
 
 function _hostileCardHtml(group, idx, players, badge = null)
@@ -1917,6 +2089,7 @@ function _hostileCardHtml(group, idx, players, badge = null)
     const instances = group.instances ?? [];
     const count = instances.length;
     const killedCount = instances.filter(instance => instance.killed !== false).length;
+    const leftCount = instances.filter(instance => instance.left).length;
     const allKilled = count > 0 && killedCount === count;
     const noneKilled = killedCount === 0;
     // Scanned = an accessible scan journal exists, or the actor is force-scanned; the mock group.scanned is ignored.
@@ -1951,11 +2124,13 @@ function _hostileCardHtml(group, idx, players, badge = null)
             ${templates.map(t => `<span class="battelog-hcard-tag template">${_escape(t)}</span>`).join('')}
         `;
 
-    const statusHtml = noneKilled ? `
+    const notKilledHtml = leftCount ? _hostileLeftHtml(instances, leftCount) : `
         <div class="battelog-hcard-notkilled">
             <i class="fas fa-person-running"></i> NOT DESTROYED
         </div>
-    ` : `
+    `;
+
+    const statusHtml = noneKilled ? notKilledHtml : `
         <div class="battelog-hcard-killers has-tip">
             <span class="battelog-hcard-killers-label">
                 <span class="battelog-hcard-killers-icon battelog-icon-mask battelog-icon-destroyed"></span> ${_escape(localize('LA.recap.panel.destroyedBy'))}
@@ -1965,6 +2140,7 @@ function _hostileCardHtml(group, idx, players, badge = null)
     `;
 
     const scanTipHtml = scanned ? _hostileScanTipHtml(group) : '';
+
     const actionHtml = scanJournal ? `
         <button type="button" class="battelog-hcard-scan-btn ${scanTipHtml ? 'has-tip' : ''}" data-journal-uuid="${scanJournal.uuid}">
             <i class="fas fa-satellite-dish"></i> Show Scan Data
@@ -1986,16 +2162,18 @@ function _hostileCardHtml(group, idx, players, badge = null)
         : isDanger
             ? `<div class="battelog-hcard-marker top has-tip"><i class="fas fa-triangle-exclamation"></i> TOP THREAT${_hcardBadgeTipHtml('TOP THREAT', 'Group of 2+ identical units with the highest combined damage, Nemesis excluded.')}</div>`
             : '';
+
     const metaHtml = `<span class="battelog-hcard-meta">SIZE <b>${_escape(size)}</b></span>`;
     const cardClass = `battelog-hcard stagger is-side-${_escape(group.side ?? 'hostile')} ${allKilled ? 'is-killed' : 'is-active'} ${scanned ? '' : 'is-unscanned'} ${isDanger ? 'is-danger' : ''} ${isNemesis ? 'is-nemesis' : ''} ${group.team?.color ? 'on-team' : ''}`;
     const cardStyle = `--i:${idx};${group.team?.color ? ` --team:${_escape(group.team.color)};` : ''}`;
+
     const frontHtml = `
             ${badgeHtml}
             <div class="battelog-hcard-portrait">
                 ${flipTag}
                 <img class="battelog-hcard-portrait-img" src="${_escape(img)}" alt="" onerror="this.style.display='none'"/>
                 ${allKilled ? '<div class="battelog-pcol-portrait-tape"><span class="tape a"></span></div>' : ''}
-                ${count > 1 ? _hostileCountBadgeHtml(count, killedCount) : ''}
+                ${count > 1 ? _hostileCountBadgeHtml(count, killedCount, leftCount) : ''}
             </div>
             <div class="battelog-hcard-main">
                 <div class="battelog-hcard-nameline">
@@ -2026,6 +2204,7 @@ function _hostileCardHtml(group, idx, players, badge = null)
                 </div>
             </div>
     `;
+
     if (!pilotSide)
         return `<div class="${cardClass}" style="${cardStyle}">${frontHtml}</div>`;
     return `
@@ -2043,6 +2222,7 @@ function _hostilePilotFaceHtml(side, scanned)
     const statusHtml = side.killed
         ? '<div class="battelog-hcard-killers"><span class="battelog-hcard-killers-label"><span class="battelog-hcard-killers-icon battelog-icon-mask battelog-icon-destroyed"></span> KILLED</span></div>'
         : '<div class="battelog-hcard-notkilled"><i class="fas fa-person-running"></i> NOT DESTROYED</div>';
+
     const dmgHtml = `
             <div class="battelog-hcard-dmg">
                 <div class="battelog-hcard-dmg-cell dealt">
@@ -2062,6 +2242,7 @@ function _hostilePilotFaceHtml(side, scanned)
                     <span class="battelog-hcard-dmg-lbl">DMG TAKEN</span>
                 </div>
             </div>`;
+
     return `
             <div class="battelog-hcard-portrait">
                 <img class="battelog-hcard-portrait-img" src="${_escape(side.img)}" alt="" onerror="this.style.display='none'"/>
@@ -2105,15 +2286,18 @@ function _encounterTabHtml(encounter, players)
 function _encounterFilters(encounter)
 {
     const filters = [];
+
     for (const [side, dispoConfig] of Object.entries(DISPO_MAP))
     {
         const entries = encounter.filter(entry => (entry.side ?? 'hostile') === side);
         const teams = new Map();
+
         for (const entry of entries)
         {
             if (entry.team && !teams.has(entry.team.id))
                 teams.set(entry.team.id, entry.team);
         }
+
         for (const team of [...teams.values()].sort((a, b) => (a.order ?? 0) - (b.order ?? 0)))
         {
             filters.push({
@@ -2125,6 +2309,7 @@ function _encounterFilters(encounter)
                 count: entries.filter(entry => entry.team?.id === team.id).length,
             });
         }
+
         filters.push({
             key: side,
             side,
@@ -2134,12 +2319,14 @@ function _encounterFilters(encounter)
             count: entries.filter(entry => !entry.team).length,
         });
     }
+
     return encounter.some(entry => entry.team) ? filters.filter(filter => filter.count > 0) : filters;
 }
 
 function _encounterFilterHtml(filters, activeKey)
 {
     const teamMode = filters.some(filter => filter.teamId);
+
     const btns = filters.map((filter, idx) =>
     {
         const sep = teamMode && idx > 0 && filters[idx - 1].side !== filter.side ? '<span class="battelog-encounter-filter-sep"></span>' : '';
@@ -2156,6 +2343,7 @@ function _encounterFilterHtml(filters, activeKey)
             </button>
         `;
     }).join('');
+
     return `<div class="battelog-encounter-filter">${btns}</div>`;
 }
 
@@ -2181,15 +2369,18 @@ function _encounterInnerHtml(encounter, players, dispo)
     // NEMESIS + TOP THREAT: hostile view only.
     let nemesisGroup = null;
     let dangerGroup = null;
+
     if (isHostileView)
     {
         let nemesisInstance = null;
         let nemesisMax = 0;
+
         for (const group of _groupHostiles(encounter.filter(entry => (entry.side ?? 'hostile') === 'hostile')))
         {
             for (const inst of group.instances ?? [])
             {
                 const dmg = inst.dmgDealt ?? 0;
+
                 if (dmg > nemesisMax)
                 {
                     nemesisMax = dmg;
@@ -2197,18 +2388,24 @@ function _encounterInnerHtml(encounter, players, dispo)
                 }
             }
         }
+
         const nemesisParent = nemesisInstance ? groups.find(group => (group.instances ?? []).includes(nemesisInstance)) : null;
+
         if (nemesisParent)
         {
             nemesisGroup = { ...nemesisParent, instances: [nemesisInstance] };
             nemesisParent.instances = nemesisParent.instances.filter(instance => instance !== nemesisInstance);
         }
+
         let dangerMax = 0;
+
         for (const group of groups)
         {
             if ((group.instances?.length ?? 0) < 2)
                 continue;
+
             const gTotal = (group.instances ?? []).reduce((sum, inst) => sum + (inst.dmgDealt ?? 0), 0);
+
             if (gTotal > dangerMax)
             {
                 dangerMax = gTotal;
@@ -2216,32 +2413,40 @@ function _encounterInnerHtml(encounter, players, dispo)
             }
         }
     }
+
     const remainingGroups = groups.filter(group => (group.instances?.length ?? 0) > 0);
 
     const scanCache = new Map();
+
     const isScanned = (group) =>
     {
         if (!scanCache.has(group))
             scanCache.set(group, !!_scanJournalFor(group.actorId) || _isActorForceScanned(group.actorId));
         return scanCache.get(group);
     };
+
     const sortedRemaining = remainingGroups.slice().sort((a, b) =>
     {
         if (a === dangerGroup)
             return -1;
         if (b === dangerGroup)
             return 1;
+
         const tierDiff = (b.tier ?? 0) - (a.tier ?? 0);
         if (tierDiff !== 0)
             return tierDiff;
+
         const aScan = isScanned(a) ? 0 : 1;
         const bScan = isScanned(b) ? 0 : 1;
+
         if (aScan !== bScan)
             return aScan - bScan;
         return String(a.name ?? '').localeCompare(String(b.name ?? ''));
     });
+
     const orderedGroups = nemesisGroup ? [nemesisGroup, ...sortedRemaining] : sortedRemaining;
     const badgeFor = (group) => group === nemesisGroup ? 'nemesis' : (group === dangerGroup ? 'danger' : null);
+
     const cardsHtml = orderedGroups
         .map((group, idx) => _hostileCardHtml(group, idx, players, badgeFor(group)))
         .join('');
@@ -2294,6 +2499,7 @@ const TELEMETRY_METRICS = [
 
 // Turn-resolution mode: each turn is a chart column instead of each round. Dense fights fall back to rounds.
 const TELEMETRY_MAX_TURN_COLUMNS = 60;
+
 function _telemetryTurnAxis(battle)
 {
     const turnAxis = battle.turnAxis ?? [];
@@ -2337,11 +2543,13 @@ function _telemetryInk(color)
 {
     if (!/^#[0-9a-f]{6}$/i.test(String(color)))
         return color;
+
     const toLinear = (offset) =>
     {
         const unit = parseInt(String(color).slice(offset, offset + 2), 16) / 255;
         return unit <= 0.04045 ? unit / 12.92 : Math.pow((unit + 0.055) / 1.055, 2.4);
     };
+
     const red = toLinear(1);
     const green = toLinear(3);
     const blue = toLinear(5);
@@ -2354,12 +2562,14 @@ function _telemetryInk(color)
     const outL = Math.pow(lightness + 0.3963377774 * okA + 0.2158037573 * okB, 3);
     const outM = Math.pow(lightness - 0.1055613458 * okA - 0.0638541728 * okB, 3);
     const outS = Math.pow(lightness - 0.0894841775 * okA - 1.2914855480 * okB, 3);
+
     const toHex = (linear) =>
     {
         const clamped = Math.max(0, Math.min(1, linear));
         const gamma = clamped <= 0.0031308 ? 12.92 * clamped : 1.055 * Math.pow(clamped, 1 / 2.4) - 0.055;
         return Math.round(255 * gamma).toString(16).padStart(2, '0');
     };
+
     return '#' + [
         4.0767416621 * outL - 3.3077115913 * outM + 0.2309699292 * outS,
         -1.2684380046 * outL + 2.6097574011 * outM - 0.3413193965 * outS,
@@ -2372,6 +2582,7 @@ function _telemetryHoverSvg(payload, svg)
     const items = Array.isArray(payload?.items) ? payload.items : [];
     if (items.length === 0)
         return '';
+
     const dataset = svg?.dataset ?? {};
     const w  = Number(dataset.chartW)  || TELEMETRY_CHART.w;
     const pl = Number(dataset.chartPl) || TELEMETRY_CHART.pl;
@@ -2387,6 +2598,7 @@ function _telemetryHoverSvg(payload, svg)
     tx = Math.max(pl, Math.min(tx, w - pr - tw));
     const above = payload.y - th - 12 > pt;
     const ty = above ? payload.y - th - 12 : payload.y + 12;
+
     const rows = items.map((it, k) =>
     {
         const ry = ty + headH + k * rowH;
@@ -2396,6 +2608,7 @@ function _telemetryHoverSvg(payload, svg)
             <text x="${tx + tw - 9}" y="${ry + 7}" text-anchor="end" fill="${it.color}" font-family="var(--bl-mono)" font-size="10" font-weight="700">${_escape(String(it.value))}</text>
         `;
     }).join('');
+
     return `
         <circle cx="${payload.x}" cy="${payload.y}" r="5" fill="${payload.color}" stroke="#fdfdfd" stroke-width="2" pointer-events="none"/>
         <rect x="${tx}" y="${ty}" width="${tw}" height="${th}" rx="3" fill="rgba(13,13,13,0.98)" stroke="#666" stroke-width="1" pointer-events="none"/>
@@ -2428,16 +2641,20 @@ function _telemetryInnerHtml(battle, view, highlight, showTotal, chartSize = nul
 {
     const metric = _telemetryMetric(view);
     const rounds = battle.mission?.rounds ?? battle.rounds?.length ?? 0;
+
     const metricButtons = TELEMETRY_METRICS.map(metric => `
         <button type="button" class="battelog-telemetry-metric ${metric.key === view ? 'on' : ''}" data-metric="${metric.key}">
             ${_metricIconHtml(metric)}
             <span class="battelog-telemetry-metric-label">${_escape(localize(metric.label))}</span>
         </button>
     `).join('');
+
     const turns = battle.mission?.turns ?? null;
+
     const noteText = highlight
         ? 'ISOLATED · click again to reset'
         : `click a name to isolate · ${rounds} ROUNDS${turns ? ` · ${turns} TURNS` : ''}`;
+
     return `
         <div class="battelog-telemetry-metrics">${metricButtons}</div>
         <div class="battelog-telemetry-panel">
@@ -2459,17 +2676,21 @@ function _telemetrySvgHtml(battle, metric, highlight, showTotal, chartSize = nul
 
     const roundCount = rawRounds.length;
     const turnAxis = _telemetryTurnAxis(battle);
+
     const turnMode = !!turnAxis && players.length > 0
         && players.every(player => (player[metric.turnField]?.length ?? 0) === turnAxis.length);
+
     // Column 0 is the combat-start state: full HP, zero heat/damage/kills.
     const columnCount = (turnMode ? turnAxis.length : roundCount) + 1;
     const rounds = [0, ...Array.from({ length: roundCount }, (_, i) => rawRounds[i] ?? (i + 1))];
+
     const columns = turnMode
         ? [{ label: 'R0', tip: '0' }, ...turnAxis.map((slot, slotIdx) => ({
             label: slotIdx === 0 || turnAxis[slotIdx - 1].round !== slot.round ? `R${slot.round}` : '',
             tip: `${slot.round} · T${slot.turn + 1}`,
         }))]
         : rounds.map(roundNo => ({ label: `R${roundNo}`, tip: String(roundNo) }));
+
     const dataFor = player => (turnMode ? player[metric.turnField] : player[metric.field]) ?? [];
     const splitAFor = player => (turnMode ? player.killLineTurns : player.killLine) ?? [];
     const splitBFor = player => (turnMode ? player.assistLineTurns : player.assistLine) ?? [];
@@ -2485,6 +2706,7 @@ function _telemetrySvgHtml(battle, metric, highlight, showTotal, chartSize = nul
     const isKills = metric.key === 'kills';
     const cum = arr => cumulative ? _telemetryCum(arr) : arr;
     const startValue = player => metric.startField ? (player[metric.startField] ?? 0) : 0;
+
     const playerSeries = players.map(player => ({
         key: player.id,
         label: String(player.callsign ?? '').toUpperCase(),
@@ -2493,11 +2715,13 @@ function _telemetrySvgHtml(battle, metric, highlight, showTotal, chartSize = nul
         splitA: isKills ? [0, ...cum(splitAFor(player))] : null,
         splitB: isKills ? [0, ...cum(splitBFor(player))] : null,
     }));
+
     const dataCols = Array.from({ length: columnCount - 1 }, (_, colIdx) => colIdx);
     const totalRaw = dataCols.map(colIdx => players.reduce((acc, player) => acc + (dataFor(player)[colIdx] ?? 0), 0));
     const totalStart = players.reduce((acc, player) => acc + startValue(player), 0);
     const totalSplitA = isKills ? dataCols.map(colIdx => players.reduce((acc, player) => acc + (splitAFor(player)[colIdx] ?? 0), 0)) : null;
     const totalSplitB = isKills ? dataCols.map(colIdx => players.reduce((acc, player) => acc + (splitBFor(player)[colIdx] ?? 0), 0)) : null;
+
     const totalSeries = {
         key: 'total',
         label: localize('LA.recap.total'),
@@ -2508,6 +2732,7 @@ function _telemetrySvgHtml(battle, metric, highlight, showTotal, chartSize = nul
         dashed: true,
         thick: true,
     };
+
     const series = showTotal ? [...playerSeries, totalSeries] : playerSeries;
     const visible = highlight ? series.filter(ser => ser.key === highlight) : series;
     const rawMax = Math.max(1, ...visible.flatMap(entry => entry.data));
@@ -2526,11 +2751,13 @@ function _telemetrySvgHtml(battle, metric, highlight, showTotal, chartSize = nul
         <line x1="${pl}" x2="${gridRight}" y1="${yOf(tick)}" y2="${yOf(tick)}" class="battelog-telemetry-grid" ${tick === yMin && !truncated ? '' : 'stroke-dasharray="2 3"'} />
         <text x="${pl - 7}" y="${yOf(tick) + 3}" text-anchor="end" class="battelog-telemetry-axis-text">${tick}</text>
     `).join('');
+
     const axisBreak = truncated ? `
         <line x1="${pl}" x2="${gridRight}" y1="${pt + innerH}" y2="${pt + innerH}" class="battelog-telemetry-grid" />
         <text x="${pl - 7}" y="${pt + innerH + 3}" text-anchor="end" class="battelog-telemetry-axis-text">0</text>
         <line x1="${pl - 5}" x2="${pl + 5}" y1="${baseY + 12}" y2="${baseY + 6}" class="battelog-telemetry-grid" stroke-width="1.3" />
         <line x1="${pl - 5}" x2="${pl + 5}" y1="${baseY + 15}" y2="${baseY + 9}" class="battelog-telemetry-grid" stroke-width="1.3" />` : '';
+
     const gridX = columns.map((col, colIdx) => `
         <line x1="${xOf(colIdx)}" x2="${xOf(colIdx)}" y1="${pt}" y2="${pt + innerH}" class="battelog-telemetry-grid dim" ${col.label ? 'stroke-dasharray="2 4"' : 'stroke-dasharray="1 6" opacity="0.35" stroke-width="0.7"'}/>
         ${col.label ? `<text x="${xOf(colIdx)}" y="${h - 10}" text-anchor="middle" class="battelog-telemetry-tick-text">${col.label}</text>` : ''}
@@ -2545,15 +2772,19 @@ function _telemetrySvgHtml(battle, metric, highlight, showTotal, chartSize = nul
     {
         if (pts.length < 2)
             return pts.length === 1 ? `M ${pts[0][0]} ${pts[0][1]}` : '';
+
         const dx = [];
         const slope = [];
+
         for (let idx = 0; idx < pts.length - 1; idx++)
         {
             const run = pts[idx + 1][0] - pts[idx][0];
             dx.push(run);
             slope.push(run !== 0 ? (pts[idx + 1][1] - pts[idx][1]) / run : 0);
         }
+
         const tangent = [slope[0]];
+
         for (let idx = 1; idx < pts.length - 1; idx++)
         {
             if (slope[idx - 1] * slope[idx] <= 0)
@@ -2565,14 +2796,17 @@ function _telemetrySvgHtml(battle, metric, highlight, showTotal, chartSize = nul
                 tangent.push((wLeft + wRight) / (wLeft / slope[idx - 1] + wRight / slope[idx]));
             }
         }
+
         tangent.push(slope.at(-1));
         const fmt = (value) => Math.round(value * 100) / 100;
         let pathD = `M ${fmt(pts[0][0])} ${fmt(pts[0][1])}`;
+
         for (let idx = 0; idx < pts.length - 1; idx++)
         {
             const step = dx[idx] / 3;
             pathD += ` C ${fmt(pts[idx][0] + step)} ${fmt(pts[idx][1] + tangent[idx] * step)}, ${fmt(pts[idx + 1][0] - step)} ${fmt(pts[idx + 1][1] - tangent[idx + 1] * step)}, ${fmt(pts[idx + 1][0])} ${fmt(pts[idx + 1][1])}`;
         }
+
         return pathD;
     };
 
@@ -2594,6 +2828,7 @@ function _telemetrySvgHtml(battle, metric, highlight, showTotal, chartSize = nul
         const lineDuration = 0.6;
         const dotDuration = 0.1;
         const dotSpacing = points.length > 1 ? lineDuration / (points.length - 1) : 0;
+
         const dots = points.map((point, colIdx) =>
         {
             const arrivalTime = lineStartDelay + colIdx * dotSpacing;
@@ -2604,6 +2839,7 @@ function _telemetrySvgHtml(battle, metric, highlight, showTotal, chartSize = nul
             const dotStroke = ser.thick ? (minor ? 1.4 : 2.4) : (minor ? 1 : 1.8);
             return `<circle cx="${point[0]}" cy="${point[1]}" r="${radius}" class="battelog-telemetry-dot" stroke="${lineColor}" stroke-width="${dotStroke}" pointer-events="none" style="animation-delay:${delay}s" />`;
         }).join('');
+
         return `
             <g style="opacity:${groupOpacity};">
                 ${areaPoly}
@@ -2626,17 +2862,21 @@ function _telemetrySvgHtml(battle, metric, highlight, showTotal, chartSize = nul
             dim: !!highlight && ser.key !== highlight,
         };
     }).sort((first, second) => first.y - second.y);
+
     for (let labelIdx = 1; labelIdx < endLabels.length; labelIdx++)
     {
         if (endLabels[labelIdx].y - endLabels[labelIdx - 1].y < 13)
             endLabels[labelIdx].y = endLabels[labelIdx - 1].y + 13;
     }
+
     let labelFloor = h - 6;
+
     for (let labelIdx = endLabels.length - 1; labelIdx >= 0; labelIdx--)
     {
         endLabels[labelIdx].y = Math.min(endLabels[labelIdx].y, labelFloor);
         labelFloor = endLabels[labelIdx].y - 13;
     }
+
     const endLabelSvg = endLabels.map(label => `
         <polyline points="${label.x + 4},${label.anchorY} ${label.x + 12},${label.anchorY} ${label.x + 22},${label.y}" fill="none" stroke="${label.color}" stroke-width="1.4" stroke-dasharray="2 2" opacity="${label.dim ? 0.25 : 0.8}" pointer-events="none"/>
         <text x="${label.x + 26}" y="${label.y + 4}" class="battelog-telemetry-endlabel" fill="${label.color}" opacity="${label.dim ? 0.25 : 1}" pointer-events="none">${_escape(label.text)}</text>
@@ -2646,6 +2886,7 @@ function _telemetrySvgHtml(battle, metric, highlight, showTotal, chartSize = nul
     {
         if (highlight && highlight !== ser.key)
             return [];
+
         const jitter = jitterFor(seriesIdx);
         return ser.data.map((value, i) =>
         {
@@ -2656,6 +2897,7 @@ function _telemetrySvgHtml(battle, metric, highlight, showTotal, chartSize = nul
                     value: entry.splitA ? `${entry.splitA[i] ?? 0}K · ${entry.splitB[i] ?? 0}A = ${entry.data[i]}` : entry.data[i],
                     color: entry.dashed ? '#f2f2f2' : entry.color,
                 }));
+
             const payload = encodeURIComponent(JSON.stringify({ round: columns[i]?.tip ?? String(i), items: bucket, x: xOf(i), y: yOf(value) + jitter, color: ser.color }));
             return `<circle class="battelog-telemetry-hit" cx="${xOf(i)}" cy="${yOf(value) + jitter}" r="11" fill="transparent" data-hover="${payload}"/>`;
         });
@@ -2688,6 +2930,7 @@ function _telemetryLegendHtml(battle, metric, highlight, showTotal)
     {
         const roundValues = player[metric.field] ?? [];
         let sub;
+
         if (isHp && player.pilotOnly)
             sub = `${player.hpEnd ?? 0}/${player.hpMax ?? 0}`;
         else if (isHp)
@@ -2698,6 +2941,7 @@ function _telemetryLegendHtml(battle, metric, highlight, showTotal)
             sub = `${player.kills ?? 0}K · ${player.assists ?? 0}A`;
         else
             sub = `${roundValues.reduce((a, b) => a + b, 0)} DMG`;
+
         const active = highlight === player.id;
         const dim = highlight && !active;
         return `
@@ -2712,6 +2956,7 @@ function _telemetryLegendHtml(battle, metric, highlight, showTotal)
     }).join('');
 
     let totalLabel;
+
     if (isHp)
         totalLabel = String(players.reduce((total, player) => total + (player.effectiveHpEnd ?? 0), 0));
     else if (isHeat)
@@ -2727,7 +2972,9 @@ function _telemetryLegendHtml(battle, metric, highlight, showTotal)
         const totalRaw = rounds.map((_, i) => players.reduce((sum, player) => sum + (player[metric.field]?.[i] ?? 0), 0));
         totalLabel = `${totalRaw.reduce((a, b) => a + b, 0)} DMG`;
     }
+
     const totalSub = showTotal ? totalLabel : `OFF · ${totalLabel}`;
+
     const totalBtn = `
         <button type="button" class="battelog-telemetry-legend-total ${showTotal ? 'is-active' : ''}" data-series-id="total">
             <span class="battelog-telemetry-legend-swatch dashed"></span>
@@ -2737,5 +2984,6 @@ function _telemetryLegendHtml(battle, metric, highlight, showTotal)
             </div>
         </button>
     `;
+
     return items + totalBtn;
 }

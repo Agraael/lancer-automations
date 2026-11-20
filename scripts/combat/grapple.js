@@ -1,5 +1,7 @@
 import * as actionFX from '../fx/actionFX.js';
 import { getLAFlag } from '../tools/flag-utils.js';
+import { grappleState } from './grapple-state.js';
+import { getMinGridDistance } from './grid-helpers.js';
 
 // IMMOBILIZED uses flagged-effects; ENGAGED is managed by overwatch.js, not here.
 
@@ -10,17 +12,13 @@ import { localize, localizeFormat } from '../tools/string-utils.js';
 // Lets the deleteActiveEffect hook (Layer 3) tell its own removals from user-manual ones.
 let _laInternalGuard = 0;
 
-function getGrappleState(token)
-{
-    if (!token)
-        return {};
-    return getLAFlag(token.document,'grappleState') || {};
-}
+const getGrappleState = grappleState;
 
 async function setGrappleState(token, state)
 {
     if (!token)
         return;
+
     const api = game.modules.get(MODULE_ID)?.api;
     await api?.setTokenFlag?.(token.document, MODULE_ID, 'grappleState', state);
 }
@@ -29,6 +27,7 @@ async function clearGrappleState(token)
 {
     if (!token)
         return;
+
     const api = game.modules.get(MODULE_ID)?.api;
     await api?.unsetTokenFlag?.(token.document, MODULE_ID, 'grappleState');
 }
@@ -38,12 +37,61 @@ function getTokenSize(token)
     return token?.actor?.system?.size || 1;
 }
 
-function getGrapplerCombinedSize(grappledToken)
+function grappleGroup(token)
 {
-    const state = getGrappleState(grappledToken);
-    if (!state.grapplerIds?.length)
-        return 0;
-    return state.grapplerIds.reduce((sum, id) => sum + getTokenSize(canvas.tokens.get(id)), 0);
+    const holders = new Set();
+    const held = new Set();
+    const seen = new Set();
+    const queue = [token];
+
+    while (queue.length)
+    {
+        const current = queue.pop();
+        if (!current || seen.has(current.id))
+            continue;
+        seen.add(current.id);
+
+        const state = getGrappleState(current);
+        if (state.grapplerIds?.length)
+            held.add(current.id);
+        if (state.grappledIds?.length)
+            holders.add(current.id);
+
+        for (const [ids, side] of [[state.grapplerIds, holders], [state.grappledIds, held]])
+        {
+            for (const id of ids ?? [])
+            {
+                const other = canvas.tokens.get(id);
+                if (!other)
+                    continue;
+                side.add(id);
+                queue.push(other);
+            }
+        }
+    }
+
+    return { holders: [...holders], held: [...held] };
+}
+
+const sideSize = ids => ids.reduce((sum, id) => sum + getTokenSize(canvas.tokens.get(id)), 0);
+
+function isEqualSizeGrapple(token)
+{
+    const group = grappleGroup(token);
+    return group.held.length > 0 && sideSize(group.holders) === sideSize(group.held);
+}
+
+function isAdjacent(token, other, position = null)
+{
+    return getMinGridDistance(token, other, position) <= 1;
+}
+
+async function postGrappleChat(token, text)
+{
+    await ChatMessage.create(/** @type {any} */ ({
+        speaker: ChatMessage.getSpeaker({ token: token.document }),
+        content: `<div class="la-grapple-chat">${text}</div>`,
+    }));
 }
 
 function isImmobilizedByGrapple(token)
@@ -51,9 +99,15 @@ function isImmobilizedByGrapple(token)
     // Status is the user-visible truth; if it was manually cleared, drop the block even if state flag is stale.
     if (!token?.actor?.statuses?.has('immobilized'))
         return false;
+    return grappleImmobilizes(token);
+}
+
+function grappleImmobilizes(token)
+{
     const state = getGrappleState(token);
     if (state.grapplerIds?.length > 0 && state.immobilizedSide === "grappled")
         return true;
+
     if (state.grappledIds?.length > 0)
     {
         for (const id of state.grappledIds)
@@ -63,51 +117,61 @@ function isImmobilizedByGrapple(token)
                 return true;
         }
     }
+
+    return false;
+}
+
+function grappleStatusExpected(token, statusId)
+{
+    const state = getGrappleState(token);
+    if (statusId === 'grappled')
+        return state.grapplerIds?.length > 0;
+    if (statusId === 'grappling')
+        return state.grappledIds?.length > 0;
+    if (statusId === 'immobilized')
+        return grappleImmobilizes(token);
     return false;
 }
 
 async function updateImmobilized(api, grappledToken, isInit = false)
 {
     _laInternalGuard++;
+
     try
     {
         const state = getGrappleState(grappledToken);
         if (!state.grapplerIds?.length)
             return;
 
-        const grapplerSize = getGrapplerCombinedSize(grappledToken);
-        const grappledSize = getTokenSize(grappledToken);
-        const grapplerTokens = state.grapplerIds.map(id => canvas.tokens.get(id)).filter(Boolean);
+        const group = grappleGroup(grappledToken);
+        const holderSize = sideSize(group.holders);
+        const heldSize = sideSize(group.held);
+        const heldTokens = group.held.map(id => canvas.tokens.get(id)).filter(Boolean);
+        const holderTokens = group.holders.map(id => canvas.tokens.get(id)).filter(Boolean);
 
         let newImmobilizedSide;
-        if (grapplerSize > grappledSize)
+        if (holderSize > heldSize)
             newImmobilizedSide = "grappled";
-        else if (grappledSize > grapplerSize)
+        else if (heldSize > holderSize)
             newImmobilizedSide = "grapplers";
         else
             // Equal size: init defaults grappled = immobilized; HULL contest preserves the winner.
-            newImmobilizedSide = isInit ? "grappled" : state.immobilizedSide;
+            newImmobilizedSide = isInit ? "grappled" : (state.immobilizedSide ?? "grappled");
 
-        await setGrappleState(grappledToken, { ...state, immobilizedSide: newImmobilizedSide });
+        for (const held of heldTokens)
+        {
+            const heldState = getGrappleState(held);
+            if (heldState.immobilizedSide !== newImmobilizedSide)
+                await setGrappleState(held, { ...heldState, immobilizedSide: newImmobilizedSide });
+        }
 
-        if (newImmobilizedSide === "grappled")
-        {
-            await api.applyEffectsToTokens({
-                tokens: [grappledToken],
-                effectNames: ['immobilized'],
-                note: 'Grapple',
-            }, { grappleSource: true });
-            await api.removeEffectsByNameFromTokens({ tokens: grapplerTokens, effectNames: ['immobilized'], extraFlags: { grappleSource: true } });
-        }
-        else if (newImmobilizedSide === "grapplers")
-        {
-            await api.applyEffectsToTokens({
-                tokens: grapplerTokens,
-                effectNames: ['immobilized'],
-                note: 'Grapple',
-            }, { grappleSource: true });
-            await api.removeEffectsByNameFromTokens({ tokens: [grappledToken], effectNames: ['immobilized'], extraFlags: { grappleSource: true } });
-        }
+        const [stuck, loose] = newImmobilizedSide === "grappled" ? [heldTokens, holderTokens] : [holderTokens, heldTokens];
+        await api.applyEffectsToTokens({
+            tokens: stuck,
+            effectNames: ['immobilized'],
+            note: 'Grapple',
+        }, { grappleSource: true });
+        await api.removeEffectsByNameFromTokens({ tokens: loose.filter(token => !grappleImmobilizes(token)), effectNames: ['immobilized'], extraFlags: { grappleSource: true } });
     }
     finally
     {
@@ -115,9 +179,67 @@ async function updateImmobilized(api, grappledToken, isInit = false)
     }
 }
 
+async function refreshHolderGroup(api, holder)
+{
+    const firstHeld = (getGrappleState(holder).grappledIds ?? []).map(id => canvas.tokens.get(id)).find(Boolean);
+    if (firstHeld)
+        await updateImmobilized(api, firstHeld);
+}
+
+async function endApartGrapples(api, tokens, planned = new Map())
+{
+    const pairs = new Map();
+    for (const token of tokens)
+    {
+        const state = getGrappleState(token);
+        for (const id of state.grappledIds ?? [])
+            pairs.set(`${token.id}:${id}`, [token.id, id]);
+        for (const id of state.grapplerIds ?? [])
+            pairs.set(`${id}:${token.id}`, [id, token.id]);
+    }
+
+    for (const [holderId, heldId] of pairs.values())
+    {
+        const holder = canvas.tokens.get(holderId);
+        const held = canvas.tokens.get(heldId);
+        if (!holder || !held || !getGrappleState(held).grapplerIds?.includes(holderId))
+            continue;
+        const [moved, other] = planned.has(heldId) ? [held, holder] : [holder, held];
+        if (isAdjacent(moved, other, planned.get(moved.id) ?? null))
+            continue;
+        await releaseGrappler(api, holder, held);
+        await postGrappleChat(holder, localizeFormat('LA.grapple.chat.apart', { holder: holder.name, held: held.name }));
+    }
+}
+
+function dragsGrapple(token)
+{
+    const state = getGrappleState(token);
+
+    if (state.grappledIds?.length > 0)
+    {
+        return state.grappledIds.some(id =>
+        {
+            const held = canvas.tokens.get(id);
+            // Only drag if the other side actually still has immobilized; guards against stale flag.
+            return held?.actor?.statuses?.has('immobilized')
+                && getGrappleState(held).immobilizedSide === "grappled";
+        });
+    }
+
+    if (state.grapplerIds?.length > 0)
+    {
+        return token?.actor?.statuses?.has('immobilized')
+            && state.immobilizedSide === "grapplers";
+    }
+
+    return false;
+}
+
 async function establishGrapples(api, grappler, grappledTokens)
 {
     _laInternalGuard++;
+
     try
     {
         const grapplerState = getGrappleState(grappler);
@@ -150,8 +272,9 @@ async function establishGrapples(api, grappler, grappledTokens)
             await updateImmobilized(api, grappledToken, wasFresh);
         }
 
-        const merged = Array.from(new Set([...existingIds, ...grappledTokens.map(t => t.id)]));
+        const merged = Array.from(new Set([...existingIds, ...grappledTokens.map(target => target.id)]));
         await setGrappleState(grappler, { grappledIds: merged });
+        await refreshHolderGroup(api, grappler);
 
         if (merged.length > 0)
         {
@@ -172,6 +295,7 @@ async function establishGrapples(api, grappler, grappledTokens)
 async function releaseGrappler(api, grappler, grappledToken)
 {
     _laInternalGuard++;
+
     try
     {
         const grappledState = getGrappleState(grappledToken);
@@ -182,22 +306,10 @@ async function releaseGrappler(api, grappler, grappledToken)
         else
         {
             await setGrappleState(grappledToken, { grapplerIds: newGrapplerIds, immobilizedSide: grappledState.immobilizedSide });
+            await unlinkGrappled(api, grappler, grappledToken);
             await updateImmobilized(api, grappledToken);
         }
-
-        const grapplerState = getGrappleState(grappler);
-        const newGrappledIds = (grapplerState.grappledIds || []).filter(id => id !== grappledToken.id);
-        if (newGrappledIds.length === 0)
-        {
-            await clearGrappleState(grappler);
-            await api.removeEffectsByNameFromTokens({
-                tokens: [grappler],
-                effectNames: ['grappling', 'immobilized'],
-                extraFlags: { grappleSource: true }
-            });
-        }
-        else
-            await setGrappleState(grappler, { grappledIds: newGrappledIds });
+        await refreshHolderGroup(api, grappler);
     }
     finally
     {
@@ -205,27 +317,53 @@ async function releaseGrappler(api, grappler, grappledToken)
     }
 }
 
+async function unlinkGrappled(api, grappler, grappledToken)
+{
+    const remaining = (getGrappleState(grappler).grappledIds || []).filter(id => id !== grappledToken.id);
+
+    if (remaining.length === 0)
+    {
+        await clearGrappleState(grappler);
+        await api.removeEffectsByNameFromTokens({
+            tokens: [grappler],
+            effectNames: ['grappling', 'immobilized'],
+            extraFlags: { grappleSource: true }
+        });
+        return;
+    }
+
+    await setGrappleState(grappler, { grappledIds: remaining });
+    if (!grappleImmobilizes(grappler))
+        await api.removeEffectsByNameFromTokens({ tokens: [grappler], effectNames: ['immobilized'], extraFlags: { grappleSource: true } });
+}
+
 async function cleanupGrappleReferences(api, deletedTokenId)
 {
     _laInternalGuard++;
+
     try
     {
         const sceneTokens = canvas?.scene?.tokens;
         if (!sceneTokens)
             return;
+
         for (const tokenDoc of sceneTokens)
         {
             if (tokenDoc.id === deletedTokenId)
                 continue;
+
             const token = canvas.tokens.get(tokenDoc.id);
             if (!token)
                 continue;
+
             const state = getLAFlag(tokenDoc,'grappleState');
             if (!state)
                 continue;
+
             if (state.grapplerIds?.includes(deletedTokenId))
             {
                 const newIds = state.grapplerIds.filter(id => id !== deletedTokenId);
+
                 if (newIds.length === 0)
                     await cancelGrappleForToken(api, token);
                 else
@@ -234,21 +372,9 @@ async function cleanupGrappleReferences(api, deletedTokenId)
                     await updateImmobilized(api, token);
                 }
             }
+
             if (state.grappledIds?.includes(deletedTokenId))
-            {
-                const newIds = state.grappledIds.filter(id => id !== deletedTokenId);
-                if (newIds.length === 0)
-                {
-                    await clearGrappleState(token);
-                    await api.removeEffectsByNameFromTokens({
-                        tokens: [token],
-                        effectNames: ['grappling', 'immobilized'],
-                        extraFlags: { grappleSource: true }
-                    });
-                }
-                else
-                    await setGrappleState(token, { grappledIds: newIds });
-            }
+                await unlinkGrappled(api, token, { id: deletedTokenId });
         }
     }
     finally
@@ -260,6 +386,7 @@ async function cleanupGrappleReferences(api, deletedTokenId)
 async function cancelGrappleForToken(api, token)
 {
     _laInternalGuard++;
+
     try
     {
         const state = getGrappleState(token);
@@ -272,28 +399,24 @@ async function cancelGrappleForToken(api, token)
                 if (grappledToken)
                     await releaseGrappler(api, token, grappledToken);
             }
+
             await clearGrappleState(token); // ensure cleared even if some targets were missing
         }
         else if (state.grapplerIds?.length > 0)
         {
             const grapplerTokens = state.grapplerIds.map(id => canvas.tokens.get(id)).filter(Boolean);
 
+            await clearGrappleState(token);
             await api.removeEffectsByNameFromTokens({
                 tokens: [token],
                 effectNames: ['grappled', 'immobilized'],
                 extraFlags: { grappleSource: true }
             });
-            if (grapplerTokens.length > 0)
+            for (const grappler of grapplerTokens)
             {
-                await api.removeEffectsByNameFromTokens({
-                    tokens: grapplerTokens,
-                    effectNames: ['grappling', 'immobilized'],
-                    extraFlags: { grappleSource: true }
-                });
+                await unlinkGrappled(api, grappler, token);
+                await refreshHolderGroup(api, grappler);
             }
-
-            for (const t of [token, ...grapplerTokens])
-                await clearGrappleState(t);
         }
     }
     finally
@@ -305,7 +428,7 @@ async function cancelGrappleForToken(api, token)
 Hooks.on('lancer-automations.ready', (api) =>
 {
 
-    api.registerDefaultGeneralReactions({
+    api.registerDefaultGeneralAutomations({
 
         "Grapple": {
             category: "General",
@@ -314,7 +437,7 @@ Hooks.on('lancer-automations.ready', (api) =>
                 {
                     triggers: ["onActivation"],
                     onlyOnSourceMatch: true,
-                    comments: "Choice card: Grapple / End / Break Free",
+                    comments: "Melee attack, the grapple starts on a hit",
                     triggerSelf: true,
                     triggerOther: false,
                     autoActivate: true,
@@ -325,59 +448,11 @@ Hooks.on('lancer-automations.ready', (api) =>
                     outOfCombat: true,
                     activationCode: async function(triggerType, triggerData, reactorToken)
                     {
-                        const state = getGrappleState(reactorToken);
-                        const isGrappling = (state.grappledIds?.length ?? 0) > 0;
-                        const isGrappled = (state.grapplerIds?.length ?? 0) > 0;
-
-                        const choices = [
-                            {
-                                text: localize('LA.grapple.grappleMeleeAttack'),
-                                icon: "cci cci-reticule",
-                                callback: async () =>
-                                {
-                                    await actionFX.queueActionFx(() => actionFX.playGrappleFX(reactorToken), reactorToken, 'grapple');
-                                    await api.executeBasicAttack(reactorToken.actor, {
-                                        title: "Grapple",
-                                        attack_type: "Melee"
-                                    }, { tapeRecorded: true, rollTypes: ['grapple'] });
-                                }
-                            },
-                            {
-                                text: localize('LA.grapple.endGrappleFreeAction'),
-                                icon: "fas fa-unlink",
-                                disabled: !isGrappling,
-                                disabledReason: localize('LA.grapple.notGrapplingAnyone'),
-                                callback: async () =>
-                                {
-                                    await api.executeSimpleActivation(reactorToken.actor, {
-                                        title: "End Grapple",
-                                        action: { name: "End Grapple", activation: "Free" },
-                                        detail: localize('LA.grapple.endYourGrappleAsAFree')
-                                    });
-                                }
-                            },
-                            {
-                                text: localize('LA.grapple.breakFreeQuickAction'),
-                                icon: "cci cci-structure",
-                                disabled: !isGrappled,
-                                disabledReason: localize('LA.grapple.notBeingGrappled'),
-                                callback: async () =>
-                                {
-                                    await api.executeSimpleActivation(reactorToken.actor, {
-                                        title: "Break Free",
-                                        action: { name: "Break Free", activation: "Quick" },
-                                        detail: localize('LA.grapple.attemptToBreakFreeFromA')
-                                    });
-                                }
-                            }
-                        ];
-
-                        await api.startChoiceCard({
-                            mode: "or",
-                            title: localize('LA.dialogTitle.grappleCaps'),
-                            description: localize('LA.grapple.chooseAGrappleAction'),
-                            choices
-                        });
+                        await actionFX.queueActionFx(() => actionFX.playGrappleFX(reactorToken), reactorToken, 'grapple');
+                        await api.executeBasicAttack(reactorToken.actor, {
+                            title: "Grapple",
+                            attack_type: "Melee"
+                        }, { tapeRecorded: true, rollTypes: ['grapple'], noDamage: true });
                     }
                 },
 
@@ -397,6 +472,7 @@ Hooks.on('lancer-automations.ready', (api) =>
                     {
                         const targets = triggerData.targets?.map(t => t.target) || [];
                         const validTargets = [];
+
                         for (const target of targets)
                         {
                             if (api.checkEffectImmunities(target.actor, 'grappled', null, null, { ownerTokenId: target.id, otherToken: reactorToken }).length > 0)
@@ -404,14 +480,17 @@ Hooks.on('lancer-automations.ready', (api) =>
                             else
                                 validTargets.push(target);
                         }
-                        if (validTargets.length > 0)
-                            await establishGrapples(api, reactorToken, validTargets);
+
+                        if (!validTargets.length)
+                            return;
+                        await establishGrapples(api, reactorToken, validTargets);
+                        await postGrappleChat(reactorToken, localizeFormat('LA.grapple.chat.start', { name: reactorToken.name, targets: validTargets.map(target => target.name).join(', ') }));
                     }
                 },
 
                 {
                     triggers: ["onMove"],
-                    comments: "Drag immobilized side on move",
+                    comments: "Drag the immobilized side, or end the grapple when apart",
                     triggerSelf: true,
                     triggerOther: false,
                     autoActivate: true,
@@ -422,27 +501,17 @@ Hooks.on('lancer-automations.ready', (api) =>
                     outOfCombat: true,
                     evaluate: function(triggerType, triggerData, reactorToken)
                     {
-                        const movedToken = triggerData.triggeringToken;
-                        const state = getGrappleState(movedToken);
-                        if (state.grappledIds?.length > 0)
-                        {
-                            return state.grappledIds.some(id =>
-                            {
-                                const t = canvas.tokens.get(id);
-                                // Only drag if the other side actually still has immobilized; guards against stale flag.
-                                return t?.actor?.statuses?.has('immobilized')
-                                    && getGrappleState(t).immobilizedSide === "grappled";
-                            });
-                        }
-                        if (state.grapplerIds?.length > 0)
-                        {
-                            return movedToken?.actor?.statuses?.has('immobilized')
-                                && state.immobilizedSide === "grapplers";
-                        }
-                        return false;
+                        const state = getGrappleState(reactorToken);
+                        return !!(state.grapplerIds?.length || state.grappledIds?.length);
                     },
                     activationCode: async function(triggerType, triggerData, reactorToken)
                     {
+                        if (!dragsGrapple(reactorToken))
+                        {
+                            await endApartGrapples(api, [reactorToken]);
+                            return;
+                        }
+
                         const state = getGrappleState(reactorToken);
                         let tokensToMove = [];
 
@@ -450,7 +519,7 @@ Hooks.on('lancer-automations.ready', (api) =>
                         {
                             tokensToMove = state.grappledIds
                                 .map(id => canvas.tokens.get(id))
-                                .filter(t => t && getGrappleState(t).immobilizedSide === "grappled");
+                                .filter(held => held && getGrappleState(held).immobilizedSide === "grappled");
                         }
                         else if (state.grapplerIds?.length > 0)
                             tokensToMove = state.grapplerIds.map(id => canvas.tokens.get(id)).filter(Boolean);
@@ -458,12 +527,20 @@ Hooks.on('lancer-automations.ready', (api) =>
                         if (!tokensToMove.length)
                             return;
 
-                        await api.knockBackToken(tokensToMove, -1, {
+                        const shiftX = (triggerData.endPos?.x ?? 0) - (triggerData.startPos?.x ?? 0);
+                        const shiftY = (triggerData.endPos?.y ?? 0) - (triggerData.startPos?.y ?? 0);
+                        const presets = Object.fromEntries(tokensToMove.map(held => [held.id, { x: held.document.x + shiftX, y: held.document.y + shiftY }]));
+
+                        const moves = await api.knockBackToken(tokensToMove, -1, {
                             title: localize('LA.dialogTitle.grappleFollowMovement'),
-                            description: localizeFormat('LA.grapple.placeToFollow', { tokens: tokensToMove.map(t => t.name).join(', '), name: reactorToken.name }),
+                            description: localizeFormat('LA.grapple.placeToFollow', { tokens: tokensToMove.map(held => held.name).join(', '), name: reactorToken.name }),
                             triggeringToken: reactorToken,
-                            actionName: "Grapple"
+                            actionName: "Grapple",
+                            presets,
+                            stayAdjacentTo: reactorToken,
                         });
+                        const planned = new Map((moves ?? []).map(move => [move.tokenId, move.updateData]));
+                        await endApartGrapples(api, [reactorToken, ...tokensToMove], planned);
                     }
                 },
 
@@ -485,9 +562,7 @@ Hooks.on('lancer-automations.ready', (api) =>
                     },
                     activationCode: async function(triggerType, triggerData, reactorToken)
                     {
-                        await triggerData.cancelTriggeredMove(
-                            `${reactorToken.name} is IMMOBILIZED by a grapple and cannot move voluntarily.`
-                        );
+                        await triggerData.cancelTriggeredMove(localizeFormat('LA.grapple.cannotMove', { name: reactorToken.name }));
                     }
                 },
 
@@ -506,6 +581,7 @@ Hooks.on('lancer-automations.ready', (api) =>
                     {
                         if (triggerData.actionName === "Grapple")
                             return false;
+
                         const state = getGrappleState(reactorToken);
                         if (!state.grapplerIds?.length && !state.grappledIds?.length)
                             return false;
@@ -556,8 +632,7 @@ Hooks.on('lancer-automations.ready', (api) =>
                             return false;
                         if (!getLAFlag(triggerData.effect,'grappleSource'))
                             return false;
-                        const state = getGrappleState(reactorToken);
-                        return !!(state.grapplerIds?.length || state.grappledIds?.length);
+                        return grappleStatusExpected(reactorToken, triggerData.statusId);
                     },
                     activationCode: async function(triggerType, triggerData, reactorToken)
                     {
@@ -578,113 +653,45 @@ Hooks.on('lancer-automations.ready', (api) =>
                     outOfCombat: false,
                     evaluate: function(triggerType, triggerData, reactorToken)
                     {
-                        const state = getGrappleState(reactorToken);
-
-                        if (state.grapplerIds?.length > 0)
-                        {
-                            const grapplerSize = getGrapplerCombinedSize(reactorToken);
-                            const grappledSize = getTokenSize(reactorToken);
-                            return grapplerSize === grappledSize && isImmobilizedByGrapple(reactorToken);
-                        }
-
-                        if (state.grappledIds?.length > 0)
-                        {
-                            return state.grappledIds.some(id =>
-                            {
-                                const grappledToken = canvas.tokens.get(id);
-                                if (!grappledToken)
-                                    return false;
-                                const grapplerSize = getGrapplerCombinedSize(grappledToken);
-                                const grappledSize = getTokenSize(grappledToken);
-                                return grapplerSize === grappledSize && isImmobilizedByGrapple(reactorToken);
-                            });
-                        }
-
-                        return false;
+                        return isEqualSizeGrapple(reactorToken) && isImmobilizedByGrapple(reactorToken);
                     },
                     activationCode: async function(triggerType, triggerData, reactorToken)
                     {
+                        const group = grappleGroup(reactorToken);
                         const state = getGrappleState(reactorToken);
-                        const contests = [];
+                        const reactorHeld = group.held.includes(reactorToken.id);
+                        // Multi-grappler equal-size: first grappler represents the side.
+                        const opponent = canvas.tokens.get(reactorHeld ? state.grapplerIds?.[0] : state.grappledIds?.[0]);
+                        const firstHeld = canvas.tokens.get(group.held[0]);
 
-                        if (state.grapplerIds?.length > 0)
-                        {
-                            const grapplerSize = getGrapplerCombinedSize(reactorToken);
-                            const grappledSize = getTokenSize(reactorToken);
-                            if (grapplerSize === grappledSize && isImmobilizedByGrapple(reactorToken))
-                                contests.push({ grappledToken: reactorToken, reactorSide: "grappled" });
-                        }
-                        else if (state.grappledIds?.length > 0)
-                        {
-                            for (const id of state.grappledIds)
-                            {
-                                const grappledToken = canvas.tokens.get(id);
-                                if (!grappledToken)
-                                    continue;
-                                const grapplerSize = getGrapplerCombinedSize(grappledToken);
-                                const grappledSize = getTokenSize(grappledToken);
-                                if (grapplerSize === grappledSize && isImmobilizedByGrapple(reactorToken))
-                                    contests.push({ grappledToken, reactorSide: "grapplers" });
-                            }
-                        }
+                        if (!opponent || !firstHeld)
+                            return;
 
-                        for (const { grappledToken, reactorSide } of contests)
-                        {
-                            await api.startChoiceCard({
-                                mode: "or",
-                                title: localize('LA.dialogTitle.grappleContest'),
-                                description: localizeFormat('LA.grapple.contestPrompt', { name: reactorToken.name }),
-                                choices: [
-                                    {
-                                        text: localize('LA.grapple.contestGrappleHullCheck'),
-                                        icon: "cci cci-structure",
-                                        callback: async () =>
-                                        {
-                                            // Multi-grappler equal-size: first grappler represents the side.
-                                            const otherToken = reactorSide === "grappled"
-                                                ? canvas.tokens.get(getGrappleState(reactorToken).grapplerIds[0])
-                                                : grappledToken;
-                                            if (!otherToken)
-                                                return;
+                        const result = await api.openHaseContestCard({
+                            tokenA: reactorToken,
+                            skillA: "HULL",
+                            tokenB: opponent,
+                            skillB: "HULL",
+                            title: localize('LA.dialogTitle.grappleContestHull'),
+                            cardTitle: localize('LA.dialogTitle.grappleContest'),
+                            description: localizeFormat('LA.grapple.contestPrompt', { name: reactorToken.name }),
+                            cancelText: localize('LA.grapple.skipContest'),
+                            sendToOwner: true,
+                            sourceAction: "Grapple",
+                        });
 
-                                            const result = await api.openHaseContestCard({
-                                                tokenA: reactorToken,
-                                                skillA: "HULL",
-                                                tokenB: otherToken,
-                                                skillB: "HULL",
-                                                title: localize('LA.dialogTitle.grappleContestHull'),
-                                                sendToOwner: true,
-                                                sourceAction: "Grapple",
-                                            });
-                                            if (!result?.completed)
-                                                return;
+                        if (!result?.completed)
+                            return;
 
-                                            const reactorWon = result.winner === reactorToken.actor;
-                                            const grappledState = getGrappleState(grappledToken);
-                                            const losingSide = reactorWon
-                                                ? (reactorSide === "grappled" ? "grapplers" : "grappled")
-                                                : reactorSide;
+                        const reactorWon = result.winner === reactorToken.actor;
+                        const reactorSide = reactorHeld ? "grappled" : "grapplers";
+                        const losingSide = reactorWon ? (reactorHeld ? "grapplers" : "grappled") : reactorSide;
 
-                                            await setGrappleState(grappledToken, { ...grappledState, immobilizedSide: losingSide });
-                                            await updateImmobilized(api, grappledToken);
-
-                                            const losingLabel = losingSide === "grapplers" ? "Grapplers are" : "Grappled token is";
-                                            ui.notifications.info(
-                                                reactorWon
-                                                    ? `${reactorToken.name} wins the contest! ${losingLabel} now IMMOBILIZED.`
-                                                    : `${reactorToken.name} loses the contest. ${losingLabel} now IMMOBILIZED.`
-                                            );
-                                        }
-                                    },
-                                    {
-                                        text: localize('LA.grapple.skipContest'),
-                                        icon: "fas fa-times",
-                                        callback: async () =>
-                                        {}
-                                    }
-                                ]
-                            });
-                        }
+                        await setGrappleState(firstHeld, { ...getGrappleState(firstHeld), immobilizedSide: losingSide });
+                        await updateImmobilized(api, firstHeld);
+                        await postGrappleChat(reactorToken, reactorWon
+                            ? localizeFormat('LA.grapple.chat.contestWon', { name: reactorToken.name, other: opponent.name })
+                            : localizeFormat('LA.grapple.chat.contestLost', { name: reactorToken.name, other: opponent.name }));
                     }
                 }
 
@@ -706,7 +713,10 @@ Hooks.on('lancer-automations.ready', (api) =>
             outOfCombat: true,
             activationCode: async function(triggerType, triggerData, reactorToken)
             {
+                const names = (getGrappleState(reactorToken).grappledIds ?? []).map(id => canvas.tokens.get(id)?.name).filter(Boolean);
                 await cancelGrappleForToken(api, reactorToken);
+                if (names.length)
+                    await postGrappleChat(reactorToken, localizeFormat('LA.grapple.chat.end', { name: reactorToken.name, targets: names.join(', ') }));
             }
         },
 
@@ -726,6 +736,7 @@ Hooks.on('lancer-automations.ready', (api) =>
             activationCode: async function(triggerType, triggerData, reactorToken)
             {
                 const state = getGrappleState(reactorToken);
+
                 if (!state.grapplerIds?.length)
                 {
                     ui.notifications.warn(localizeFormat('LA.notify.notGrappled', { name: reactorToken.name }));
@@ -733,12 +744,14 @@ Hooks.on('lancer-automations.ready', (api) =>
                 }
 
                 const grapplerTokens = state.grapplerIds.map(id => canvas.tokens.get(id)).filter(Boolean);
+
                 if (grapplerTokens.length === 0)
                 {
                     await cancelGrappleForToken(api, reactorToken); return;
                 }
 
                 let chosenGrappler;
+
                 if (grapplerTokens.length === 1)
                     chosenGrappler = grapplerTokens[0];
                 else
@@ -754,6 +767,7 @@ Hooks.on('lancer-automations.ready', (api) =>
                             {}
                         }))
                     });
+
                     if (result?.choiceIdx == null)
                         return;
                     chosenGrappler = grapplerTokens[result.choiceIdx];
@@ -765,21 +779,22 @@ Hooks.on('lancer-automations.ready', (api) =>
                     tokenB: chosenGrappler,
                     skillB: "HULL",
                     title: localize('LA.dialogTitle.breakFreeHull'),
+                    cardTitle: localize('LA.dialogTitle.breakFreeCaps'),
                     sendToOwner: true,
                     sourceAction: "Break Free",
                 });
+
                 if (!result?.completed)
                     return;
 
                 if (result.winner === reactorToken.actor)
                 {
                     await releaseGrappler(api, chosenGrappler, reactorToken);
-                    ui.notifications.info(localizeFormat('LA.notify.breaksFree', { name: reactorToken.name, grappler: chosenGrappler.name }));
+                    await postGrappleChat(reactorToken, localizeFormat('LA.grapple.chat.breakFree', { name: reactorToken.name, grappler: chosenGrappler.name }));
                 }
                 else
                 {
-                    // Tie goes to grappler (winner === null on tie).
-                    ui.notifications.info(localizeFormat('LA.notify.failsToBreakFree', { name: reactorToken.name, grappler: chosenGrappler.name }));
+                    await postGrappleChat(reactorToken, localizeFormat('LA.grapple.chat.breakFreeFail', { name: reactorToken.name, grappler: chosenGrappler.name }));
                 }
             }
         }

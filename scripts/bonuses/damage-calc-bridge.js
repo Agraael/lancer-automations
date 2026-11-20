@@ -1,7 +1,8 @@
 import { consumeEffectCharge } from "./flagged-effects.js";
 import { MODULE_ID } from "../tools/constants.js";
 import { broadcastFloatTokenText } from "../tools/float-text.js";
-import { consumeResistanceUse, consumeVulnerabilityUse, getVulnerabilityBonuses, checkDamageResistances, checkDamageVulnerabilities } from "./genericBonuses.js";
+import { consumeResistanceUse, consumeVulnerabilityUse, getResistanceBonuses, getVulnerabilityBonuses, checkDamageResistances, checkDamageVulnerabilities, judgedBonuses } from "./genericBonuses.js";
+import { resolveLeftoverVariable } from "./variable-type.js";
 
 // Resistance effects consumed on damage burn at apply time, after the halving they granted.
 const _deferredResistanceConsumption = new Map();
@@ -11,13 +12,16 @@ export function receiveDeferredResistanceConsumption({ actorUuid, effectId, clea
 {
     if (!actorUuid)
         return;
+
     if (clear)
     {
         _deferredResistanceConsumption.delete(actorUuid);
         return;
     }
+
     if (!effectId)
         return;
+
     const pending = _deferredResistanceConsumption.get(actorUuid) ?? new Set();
     pending.add(effectId);
     _deferredResistanceConsumption.set(actorUuid, pending);
@@ -47,14 +51,17 @@ async function _consumeDeferredResistanceEffects(actor, damage, options)
     });
     if (options?.paracausal || actor.system?.statuses?.shredded)
         return;
+
     for (const effectId of pending)
     {
         const effect = actor.effects.get(effectId);
         if (!effect)
             continue;
+
         const coveredTypes = (effect.changes ?? [])
             .filter(change => change.key?.startsWith('system.resistances.'))
             .map(change => change.key.split('.').pop());
+
         const landed = coveredTypes.some(type => Number(damage?.[type.charAt(0).toUpperCase() + type.slice(1)]) > 0);
         if (landed)
             await consumeEffectCharge(effect);
@@ -65,16 +72,21 @@ function _scaleVulnerableDamage(actor, damage, options, vulnerabilityIds, aoe)
 {
     if (!damage || getVulnerabilityBonuses(actor).length === 0)
         return [];
+
     const keyOf = (type) => type.charAt(0).toUpperCase() + type.slice(1);
+
     if (!actor.hasHeatcap?.() && Number(damage.Heat) > 0)
     {
         damage.Energy = (Number(damage.Energy) || 0) + Number(damage.Heat);
         damage.Heat = 0;
     }
+
     const vulnerable = ['kinetic', 'energy', 'explosive', 'variable', 'burn', 'heat']
         .filter(type => Number(damage[keyOf(type)]) > 0 && checkDamageVulnerabilities(actor, type, vulnerabilityIds, aoe).length > 0);
+
     if (vulnerable.length === 0)
         return [];
+
     const multiple = [0.5, 1, 2].includes(options?.multiple) ? options.multiple : 1;
     const exposed = !!actor.system?.statuses?.exposed;
     const armored = ['kinetic', 'energy', 'explosive', 'variable'];
@@ -84,22 +96,26 @@ function _scaleVulnerableDamage(actor, damage, options, vulnerabilityIds, aoe)
     let armor = mitigated && !options?.ap ? (Number(actor.system?.armor) || 0) : 0;
     const armorTaken = {};
     const armorOrder = [...armored.filter(armoredType => !resisted(armoredType)), ...armored.filter(armoredType => resisted(armoredType))];
+
     for (const type of armorOrder)
     {
         armorTaken[type] = Math.min(armor, (Number(damage[keyOf(type)]) || 0) * scaleOf(type));
         armor -= armorTaken[type];
     }
+
     for (const type of vulnerable)
     {
         const landed = Number(damage[keyOf(type)]) * scaleOf(type);
         damage[keyOf(type)] = (2 * landed - (armorTaken[type] ?? 0)) / scaleOf(type);
     }
+
     return vulnerable;
 }
 
 // Bridges bonus-based resistances into damageCalc, which only reads system.resistances.
 let _pendingApplyHalvedActorUuid = null;
 let _pendingResistanceVerdict = null;
+
 export function initDamageCalcWrapper()
 {
     if (typeof libWrapper === 'undefined')
@@ -116,12 +132,16 @@ export function initDamageCalcWrapper()
         const chatMessageElement = button.closest('.chat-message.message');
         const damageData = game.messages?.get(chatMessageElement?.dataset.messageId)?.flags?.lancer?.damageData;
         const targetUuid = button.closest('.lancer-damage-button-group')?.dataset?.target;
+
         if (!damageData || !targetUuid)
             return;
+
         const targetResult = damageData.targetDamageResults?.find(entry => entry.target === targetUuid);
         const actorUuid = /** @type {any} */ (fromUuidSync(targetUuid))?.actor?.uuid ?? null;
+
         if (targetResult?.half_damage)
             _pendingApplyHalvedActorUuid = actorUuid;
+
         if (actorUuid && (Array.isArray(targetResult?.laResistance) || Array.isArray(targetResult?.laVulnerability)))
         {
             _pendingResistanceVerdict = {
@@ -136,9 +156,11 @@ export function initDamageCalcWrapper()
     libWrapper.register(MODULE_ID,'CONFIG.Actor.documentClass.prototype.damageCalc',
         async function (wrapped, damage, options)
         {
+            resolveLeftoverVariable(this, damage);
             const alreadyHalved = _pendingApplyHalvedActorUuid !== null && _pendingApplyHalvedActorUuid === this.uuid;
             if (alreadyHalved)
                 _pendingApplyHalvedActorUuid = null;
+
             // No verdict means no damage card decided this, so filtered bonuses stay permissive.
             const verdict = _pendingResistanceVerdict?.actorUuid === this.uuid ? _pendingResistanceVerdict : null;
             _pendingResistanceVerdict = null;
@@ -146,6 +168,7 @@ export function initDamageCalcWrapper()
             const aoe = verdict?.aoe === true;
             const resistances = this.system?.resistances;
             const bridged = [];
+
             if (resistances && !alreadyHalved)
             {
                 for (const type of ['kinetic', 'energy', 'explosive', 'variable', 'burn', 'heat'])
@@ -157,20 +180,26 @@ export function initDamageCalcWrapper()
                     }
                 }
             }
+
             // damageCalc mutates the damage record, so snapshot which bridged types actually landed first.
             const mitigationBlocked = options?.paracausal || this.system?.statuses?.shredded;
+
             const spentOn = mitigationBlocked
                 ? []
                 : bridged.filter(type => Number(damage?.[type.charAt(0).toUpperCase() + type.slice(1)]) > 0);
+
             const resistedTypes = mitigationBlocked
                 ? []
                 : ['kinetic', 'energy', 'explosive', 'variable', 'burn', 'heat']
                     .filter(type => resistances?.[type] && Number(damage?.[type.charAt(0).toUpperCase() + type.slice(1)]) > 0);
+
             const anyDamageRolled = ['Kinetic', 'Energy', 'Explosive', 'Variable', 'Burn', 'Heat']
                 .some(type => Number(damage?.[type]) > 0);
+
             const showResisted = !mitigationBlocked && (resistedTypes.length > 0 || (options?.multiple === 0.5 && anyDamageRolled));
             let hpLanded;
             let vulnerableTypes = [];
+
             try
             {
                 vulnerableTypes = _scaleVulnerableDamage(this, damage, options, verdict?.vulnerabilityIds ?? null, aoe);
@@ -181,10 +210,11 @@ export function initDamageCalcWrapper()
                 for (const type of bridged)
                     resistances[type] = false;
             }
+
             if (spentOn.length)
-                await consumeResistanceUse(this, null, { damageTypes: spentOn, aoe });
+                await consumeResistanceUse(this, null, { damageTypes: spentOn, aoe, bonuses: judgedBonuses(getResistanceBonuses(this), allowedIds) });
             if (vulnerableTypes.length)
-                await consumeVulnerabilityUse(this, null, { damageTypes: vulnerableTypes, aoe });
+                await consumeVulnerabilityUse(this, null, { damageTypes: vulnerableTypes, aoe, bonuses: judgedBonuses(getVulnerabilityBonuses(this), verdict?.vulnerabilityIds ?? null) });
             await _consumeDeferredResistanceEffects(this, damage, options);
             const floatToken = this.getActiveTokens?.()?.[0];
             if (showResisted && floatToken)

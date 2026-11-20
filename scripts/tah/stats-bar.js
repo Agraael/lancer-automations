@@ -2,8 +2,11 @@
 
 import { playUiSound } from './sound.js';
 import { MODULE_ID } from '../tools/constants.js';
+import { signedNumber } from '../tools/string-utils.js';
 import { combatantFor } from './action-tape.js';
-import { corePowerState, corePowerDisplay, isDangerZoneHeat, shortOverchargeTerm } from '../utils/lancer-token.js';
+import { movesOnItsOwn } from '../interactive/deployable-owner.js';
+import { corePowerState, corePowerDisplay, isDangerZoneHeat, shortOverchargeTerm, hasReaction } from '../utils/lancer-token.js';
+import { ownReactionCounts } from '../combat/per-frequency-tags.js';
 import { REPAIR_COLOR_CSS, haseValueColor, overchargeColor, mixColor, cssHex, hpColorCss, heatColorCss, dangerHeatColorCss, pilotStressColorCss } from '../tools/color-utils.js';
 import { ensureHaseChipStyle, statPipsHtml } from '../tools/hase-chip.js';
 import { reactionCounts } from '../combat/action-extras.js';
@@ -17,6 +20,15 @@ export function resetStatsExpanded()
 {
     clearTimeout(_statsOpenTimer);
     _statsExpanded = false;
+}
+
+/** @returns {{left: number, total: number, text: string}|null} A deployable's own Reaction action, null without one. */
+function deployableReactionCounts(actor)
+{
+    const counts = ownReactionCounts(actor);
+    if (!counts)
+        return null;
+    return { ...counts, text: counts.total > 1 ? `${counts.left}/${counts.total}` : String(counts.left) };
 }
 
 /**
@@ -54,7 +66,7 @@ export function buildStatsHtml(actor, token = null)
     const burn        = sys.burn ?? 0;
     const infection   = sys.infection ?? 0;
     const oc          = sys.overcharge ?? 0;
-    const reactions   = reactionCounts(actor);
+    const reactions   = hasReaction(actor) ? reactionCounts(actor) : deployableReactionCounts(actor);
 
     const hpColor = hpColorCss(hp.value, hp.max);
     const heatColor = heatColorCss(heat.value, heat.max);
@@ -67,18 +79,22 @@ export function buildStatsHtml(actor, token = null)
     const SEP = `<span class="la-stats-sep">│</span>`;
     const EMPTY = '<span></span>';
     const glyph = (/** @type {string} */ cls) => `<i class="${cls}"></i>`;
+
     const cell = (/** @type {string} */ title, /** @type {string} */ color, /** @type {string} */ glyphHtml, /** @type {string|number} */ value, { extra = '', ghost = '' } = {}) =>
     {
         const val = `<span class="la-stats-val">${value}</span>`;
         const slot = ghost ? `<span class="la-stats-slot" data-ghost="${ghost}">${val}</span>` : val;
         return `<span class="la-stats-cell${extra ? ` ${extra}` : ''}" title="${title}" style="color:${color};"><span class="la-stats-glyph">${glyphHtml}</span>${slot}</span>`;
     };
+
     const group = (/** @type {string} */ inner) => `<span class="la-stats-group">${inner}</span>`;
     const overshieldHtml = overshield > 0 ? `${SEP}${cell('Overshield', '#60a5fa', glyph('mdi mdi-hexagon-multiple-outline'), overshield)}` : '';
+
     const heatCell = () =>
     {
         const text = `${heat.value}/${heat.max}`;
         const ghost = `${heat.max}/${heat.max}`;
+
         if (!isDangerZoneHeat(heat.value, heat.max))
             return cell('Heat', heatColor, glyph('cci cci-heat'), text, { extra: 'la-stats-heat', ghost });
         if (heat.value >= heat.max)
@@ -87,9 +103,10 @@ export function buildStatsHtml(actor, token = null)
     };
 
     // Movement display
-    const inCombat = !!combatantFor(token);
+    const inCombat = !!combatantFor(token) || movesOnItsOwn(token);
     const movGlyph = glyph('mdi mdi-arrow-right-bold-hexagon-outline');
     let movCell;
+
     if (inCombat && token)
     {
         const api = /** @type {any} */ (game.modules.get(MODULE_ID))?.api;
@@ -97,6 +114,7 @@ export function buildStatsHtml(actor, token = null)
         const regularCost = mh?.intentional?.regularCost ?? 0;
         const cap = api?.getMovementCap?.(token);
         let movColor;
+
         if (cap <= 0)
             movColor = '#aaa';
         else if (regularCost <= cap)
@@ -120,15 +138,19 @@ export function buildStatsHtml(actor, token = null)
     const S_STAT = 'font-size:0.95em;';
     const S_ICON = 'width:1.3em;height:1.3em;vertical-align:middle;background:none;border:none;';
     const statIcon = (/** @type {string} */ src, /** @type {string} */ title) => `<img src="${src}" title="${title}" style="${S_ICON}">`;
+
     const statCell = (/** @type {string} */ iconSrc, /** @type {string} */ title, /** @type {string} */ valueHtml) =>
         `<span style="display:inline-flex;align-items:center;gap:3px;white-space:nowrap;">${statIcon(iconSrc, title)}${valueHtml}</span>`;
+
     const coreCell = core.hasCore
         ? `<span title="Core Power" style="display:inline-flex;align-items:center;gap:2px;color:${coreShown.color};">${statIcon('systems/lancer/assets/icons/white/corepower.svg', 'Core Power')}${coreShown.label}</span>`
         : '';
 
     const haseCell = (/** @type {string} */ letter, /** @type {string} */ title, /** @type {number|null|undefined} */ value, chipClass = '') =>
-        `<span title="${title}" style="white-space:nowrap;display:inline-flex;align-items:center;gap:4px;"><i class="la-hase-chip${chipClass}">${letter}</i><span style="color:${haseValueColor(value ?? 0)};">${(value ?? 0) >= 0 ? '+' : ''}${value ?? 0}</span></span>`;
+        `<span title="${title}" style="white-space:nowrap;display:inline-flex;align-items:center;gap:4px;"><i class="la-hase-chip${chipClass}">${letter}</i><span style="color:${haseValueColor(value ?? 0)};">${signedNumber(value)}</span></span>`;
+
     const hasHase = [sys.hull, sys.agi, sys.sys, sys.eng].some(value => value != null);
+
     const haseHtml = hasHase
         ? `<div style="width:1px;background:#444;align-self:stretch;margin:0 6px;flex-shrink:0;"></div>` +
           `<div style="display:grid;grid-template-columns:repeat(2,auto);column-gap:8px;row-gap:2px;align-items:center;justify-items:start;align-self:center;${S_STAT}">` +
@@ -143,19 +165,23 @@ export function buildStatsHtml(actor, token = null)
     // Two rows sharing grid columns so values align; │ separators are their own cells.
     const topRow = [];
     const bottomRow = [];
+
     if (hasStructure || hasStress)
     {
         topRow.push(hasStructure ? statPipsHtml('cci-structure', strVal, strMax, '#e8d060') : EMPTY, hasStructure ? SEP : EMPTY);
         bottomRow.push(hasStress ? statPipsHtml('cci-reactor', stressVal, stressMax, '#e07830') : EMPTY, hasStress ? SEP : EMPTY);
     }
+
     const hpCritical = hp.max > 0 && hp.value * 10 <= hp.max;
     topRow.push(group(`${cell('HP', hpColor, glyph('mdi mdi-heart'), `${hp.value}/${hp.max}`, { extra: hpCritical ? 'la-stats-critical' : '', ghost: `${hp.max}/${hp.max}` })}${overshieldHtml}`));
     bottomRow.push(hasHeat
         ? heatCell()
         : (hasPilotStress ? cell('Stress', pilotStressColor, glyph('mdi mdi-brain'), `${pilotStressVal}/${pilotStressMax}`) : EMPTY));
+
     const topExtras = [];
     if (hasRepairs)
         topExtras.push(cell('Repairs', repairs > 0 ? REPAIR_COLOR_CSS : '#aaa', glyph('cci cci-repair'), repairsMax > 0 ? `${repairs}/${repairsMax}` : repairs, repairsMax > 0 ? { ghost: `${repairsMax}/${repairsMax}` } : {}));
+
     const bottomExtras = [];
     if (hasBondXp)
         bottomExtras.push(cell('Bond XP', bondXpVal > 0 ? '#00b8d4' : '#888', glyph('mdi mdi-head-cog-outline'), `${bondXpVal}/${bondXpMax}`));
@@ -171,7 +197,11 @@ export function buildStatsHtml(actor, token = null)
         bottomRow.push(bottomExtras[index] ? SEP : EMPTY, bottomExtras[index] ?? EMPTY);
     });
     topRow.push(SEP, movCell);
-    bottomRow.push(SEP, cell('Reaction', reactions.left ? '#a855f7' : '#aaa', glyph('cci cci-reaction'), reactions.text, { extra: 'la-stats-reaction', ghost: reactions.total > 1 ? `${reactions.total}/${reactions.total}` : '' }));
+    if (reactions)
+        bottomRow.push(SEP, cell('Reaction', reactions.left ? '#a855f7' : '#aaa', glyph('cci cci-reaction'), reactions.text, { extra: 'la-stats-reaction', ghost: reactions.total > 1 ? `${reactions.total}/${reactions.total}` : '' }));
+    else
+        bottomRow.push(EMPTY, EMPTY);
+
     if (burn > 0 || infection > 0)
     {
         topRow.push(burn > 0 ? SEP : EMPTY, burn > 0 ? cell('Burn', '#d74242', glyph('cci cci-burn'), burn) : EMPTY);
@@ -193,7 +223,7 @@ export function buildStatsHtml(actor, token = null)
         `${core.hasCore ? (sys.grit != null
             ? haseCell('G', 'Grit', sys.grit, ' la-grit')
             : '<span></span>') : ''}` +
-        `${statCell('systems/lancer/assets/icons/white/tech_quick.svg', 'Tech Attack', `<span title="Tech Attack" style="color:#aaa;">${techAttack >= 0 ? '+' : ''}${techAttack}</span>`)}` +
+        `${statCell('systems/lancer/assets/icons/white/tech_quick.svg', 'Tech Attack', `<span title="Tech Attack" style="color:#aaa;">${signedNumber(techAttack)}</span>`)}` +
         `${statCell('systems/lancer/assets/icons/white/save.svg', 'Save', `<span title="Save" style="color:#aaa;">${save}</span>`)}` +
         `${statCell('systems/lancer/assets/icons/white/sensor.svg', 'Sensors', `<span title="Sensors" style="color:#aaa;">${sensorRange}</span>`)}` +
         `${coreCell}` +
@@ -215,12 +245,15 @@ export function buildStatsEl(actor, token = null)
     const el = $(buildStatsHtml(actor, token));
     const detail = el.find('.la-stats-detail');
     const toggle = el.find('.la-stats-toggle');
+
     if (_statsExpanded)
         detail.css({ display: 'flex', overflow: 'hidden' });
     else
         detail.css({ display: 'none', overflow: 'hidden' });
+
     // duration follows content width, so a wider panel still finishes its slide
     const slideMs = (/** @type {number} */ targetWidth) => Math.min(320, Math.max(150, Math.round(targetWidth * 0.9)));
+
     const openDetail = () =>
     {
         if (_statsExpanded)
@@ -235,6 +268,7 @@ export function buildStatsEl(actor, token = null)
         });
         toggle.find('span').text('◀');
     };
+
     const closeDetail = () =>
     {
         if (!_statsExpanded)
@@ -246,6 +280,7 @@ export function buildStatsEl(actor, token = null)
         });
         toggle.find('span').text('▶');
     };
+
     el.on('mouseenter', () =>
     {
         clearTimeout(_statsOpenTimer);

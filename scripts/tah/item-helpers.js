@@ -50,6 +50,8 @@ export function activationTheme(/** @type {string|null|undefined} */ activation)
         return 'tech';
     if (normalized === 'quick' || normalized === 'quick_action' || normalized === 'full' || normalized === 'full_action')
         return 'action';
+    if (normalized === 'activation')
+        return 'default';
     return 'weapon';
 }
 
@@ -60,6 +62,7 @@ function resolveActionScope(item, action, subKey = null)
         return { sub: null, key: null };
     if (subKey)
         return { sub: action, key: subKey };
+
     const key = actionSubKey(item, action);
     if (key)
         return { sub: action, key };
@@ -96,6 +99,7 @@ export function getItemStatus(itemOrAction, extraAction = null, { subKey = null,
         else
             parts.push('<span class="is-ready">⬢</span>');
     };
+
     const pushCharged = (charged) =>
     {
         if (charged === false)
@@ -105,9 +109,11 @@ export function getItemStatus(itemOrAction, extraAction = null, { subKey = null,
         else
             parts.push(rechargeIcon(true));
     };
+
     const pushUses = (usesField) =>
     {
         let current = 0, max = 0;
+
         if (usesField != null)
         {
             if (typeof usesField === 'number')
@@ -117,6 +123,7 @@ export function getItemStatus(itemOrAction, extraAction = null, { subKey = null,
                 current = usesField.value ?? 0; max = usesField.max ?? 0;
             }
         }
+
         if (current <= 0)
         {
             unavailable = true; badgeTone = 'bad';
@@ -127,6 +134,7 @@ export function getItemStatus(itemOrAction, extraAction = null, { subKey = null,
     };
 
     const perFreqOn = isPerFrequencyEnabled();
+
     const pushPerFreq = (max, used, iconReady, iconConsumed) =>
     {
         const ready = max - Math.min(max, used);
@@ -136,12 +144,15 @@ export function getItemStatus(itemOrAction, extraAction = null, { subKey = null,
         }
         else if (ready < max && badgeTone !== 'bad')
             badgeTone = 'warn';
+
         const pips = [];
+
         for (let i = 0; i < max; i++)
         {
             const isReady = i < ready;
             pips.push(`<span class="mdi ${isReady ? `${iconReady} is-ready` : `${iconConsumed} is-off`}"></span>`);
         }
+
         parts.push(pips.join(''));
     };
 
@@ -151,6 +162,7 @@ export function getItemStatus(itemOrAction, extraAction = null, { subKey = null,
         pushCharged(sys.charged);
     if (itemTags.some(tag => tag.lid === 'tg_limited'))
         pushUses(sys.uses);
+
     if (perFreqOn)
     {
         const scoped = isItem ? resolveActionScope(itemOrAction, extraAction, subKey) : { sub: extraAction ?? sys, key: null };
@@ -161,6 +173,7 @@ export function getItemStatus(itemOrAction, extraAction = null, { subKey = null,
         const perTurn = Math.max(Number(itemTags.find(tag => tag.lid === 'tg_turn')?.val ?? 0), freqSub ? getPerTurnLimitFromSub(freqSub, freqCtx) : getPerTurnLimit(itemOrAction));
         let perScene = 0;
         let perMission = 0;
+
         if (freqSub)
         {
             perScene = getPerSceneLimitFromSub(freqSub, freqCtx);
@@ -171,6 +184,7 @@ export function getItemStatus(itemOrAction, extraAction = null, { subKey = null,
             perScene = getPerSceneLimit(itemOrAction);
             perMission = getPerMissionLimit(itemOrAction);
         }
+
         const freqUsed = (field) =>
         {
             if (freqKey && isItem)
@@ -179,7 +193,9 @@ export function getItemStatus(itemOrAction, extraAction = null, { subKey = null,
                 return getSubUsed(holder, actorActionSubKey(sys), field);
             return Number(sys[field]?.value ?? 0);
         };
+
         const limits = { uses_per_round: perRound, uses_per_turn: perTurn, uses_per_scene: perScene, uses_per_mission: perMission };
+
         for (const spec of FREQ_SPECS)
         {
             if (limits[spec.field] > 0)
@@ -233,8 +249,10 @@ export function applyStripeStyle(row, stripe)
     row.addClass('la-hud-striped');
     if (stripe.light)
         row.addClass('la-hud-spent');
+
     // Keep leading icon visible on dark stripes: flip whatever invert state laHudRenderIcon left.
     const leadingIcon = row.find('img.la-hud-icon').first();
+
     if (leadingIcon.length && stripe.light)
         leadingIcon.css({ opacity: '0.6' });
     else if (leadingIcon.length)
@@ -256,6 +274,7 @@ export function slideInCol(col, { duration = 140, guard = true, silent = false }
         col.stop(true).css({ opacity: '', marginLeft: '', pointerEvents: '' }).show();
         return;
     }
+
     col.stop(true).css({ opacity: 0, marginLeft: -10, ...(guard ? { pointerEvents: 'none' } : {}) }).show().animate({ opacity: 1, marginLeft: 0 }, duration, function()
     {
         if (guard)
@@ -280,6 +299,7 @@ export function laHudRenderIcon(icon, size = HUD_ICON_SIZE)
 {
     if (!icon)
         return '';
+
     if (icon.endsWith('.svg'))
     {
         const isWhite = isWhiteIcon(icon);
@@ -289,6 +309,7 @@ export function laHudRenderIcon(icon, size = HUD_ICON_SIZE)
         const pad = icon.includes('modules/lancer-automations/') ? 'padding:0.8px;box-sizing:border-box;' : '';
         return `<img class="${cls}" src="${escapeHtml(icon)}" style="width:${size}px;height:${size}px;${pad}filter:${filter};margin-right:5px;vertical-align:middle;flex-shrink:0;border:none;outline:none;">`;
     }
+
     return `<i class="${escapeHtml(icon)} la-hud-icon" style="font-size:${size}px;margin-right:5px;vertical-align:middle;flex-shrink:0;"></i>`;
 }
 
@@ -297,6 +318,7 @@ export function laHudStripeStyle(item)
 {
     if (item.stripeStyle)
         return item.stripeStyle;
+
     if (item.softDisabled)
     {
         return document.documentElement.classList.contains('la-dark')
@@ -315,6 +337,7 @@ export function laHudStripeStyle(item)
                 hoverColor: '#ddd'
             };
     }
+
     if (item.statusKind === 'destroyed')
     {
         return {
@@ -325,6 +348,7 @@ export function laHudStripeStyle(item)
             hoverColor: '#f0c8c8'
         };
     }
+
     if (item.statusKind === 'cascading')
     {
         return {
@@ -335,6 +359,7 @@ export function laHudStripeStyle(item)
             hoverColor: '#ecdcff'
         };
     }
+
     if (item.statusKind === 'unavailable')
     {
         return {
@@ -345,6 +370,7 @@ export function laHudStripeStyle(item)
             hoverColor: '#f0d8b8'
         };
     }
+
     if (item.statusKind === 'spent')
     {
         return {
@@ -362,6 +388,7 @@ export function laHudStripeStyle(item)
             }
         };
     }
+
     return null;
 }
 
@@ -373,19 +400,24 @@ export function weaponSizeLevel(weapon)
     const sys = weapon?.system;
     if (!sys)
         return null;
+
     const direct = String(sys.size ?? sys.type ?? '').toLowerCase().trim();
     if (direct in WEAPON_SIZE_LEVEL)
         return WEAPON_SIZE_LEVEL[direct];
+
     const npcType = String(sys.weapon_type ?? '').toLowerCase().trim();
+
     for (const key of ['superheavy', 'heavy', 'main', 'auxiliary', 'aux'])
     {
         if (npcType.startsWith(key))
             return WEAPON_SIZE_LEVEL[key];
     }
+
     return null;
 }
 
 const LA_WEAPON_ICONS = 'modules/lancer-automations/icons/weapon';
+
 const WEAPON_TYPE_ICON = {
     cqb: `${LA_WEAPON_ICONS}/CQB_White.svg`,
     cannon: `${LA_WEAPON_ICONS}/Canon_V2_White.svg`,
@@ -403,13 +435,16 @@ export function weaponTypeIcon(weapon)
     const sys = weapon?.system;
     if (!sys)
         return WEAPON_TYPE_ICON_FALLBACK;
+
     const profile = sys.active_profile ?? sys.profiles?.[sys.selected_profile_index ?? 0];
     const words = `${profile?.type ?? ''} ${sys.weapon_type ?? ''}`.toLowerCase().split(/[^a-z]+/);
+
     for (const word of words)
     {
         if (Object.hasOwn(WEAPON_TYPE_ICON, word))
             return WEAPON_TYPE_ICON[word];
     }
+
     return WEAPON_TYPE_ICON_FALLBACK;
 }
 
@@ -418,17 +453,20 @@ export function laHudSizeMark(level)
 {
     if (level == null)
         return '';
+
     const length = 3.4;
     const gap = 2;
     const thickness = 2;
     const total = length * 4 + gap * 3;
     let bars = '';
+
     for (let step = 0; step < 4; step++)
     {
         const dim = step <= level ? '' : ' opacity="0.25"';
         const offset = total - (step + 1) * length - step * gap;
         bars += `<rect x="0" y="${offset.toFixed(2)}" width="${thickness}" height="${length}" fill="currentColor"${dim}/>`;
     }
+
     return `<svg class="la-hud-size-mark" width="${thickness}" height="${total.toFixed(2)}" viewBox="0 0 ${thickness} ${total.toFixed(2)}" fill="none" aria-hidden="true">${bars}</svg>`;
 }
 
@@ -462,14 +500,17 @@ export function laHudItemChildren(item, opts = {})
     const profiles = sys.profiles ?? [];
     const activeIdx = sys.selected_profile_index ?? 0;
     const activeProfileActions = profiles[activeIdx]?.actions ?? [];
+
     const taggedActions = [
         ...getItemActions(item).map(action => ({ action, source: item })),
         ...activeProfileActions.map(action => ({ action, source: item })),
         ...getItemActions(modItem).map(action => ({ action, source: modItem })),
     ];
+
     // Dedupe by (name, activation, source).
     const _seenActions = new Set();
     const _dedupedActions = [];
+
     for (const entry of taggedActions)
     {
         const key = `${entry.source?.id ?? '?'}|${entry.action?.name ?? ''}|${entry.action?.activation ?? ''}`;
@@ -478,6 +519,7 @@ export function laHudItemChildren(item, opts = {})
         _seenActions.add(key);
         _dedupedActions.push(entry);
     }
+
     taggedActions.length = 0;
     taggedActions.push(..._dedupedActions);
     const items = [...defaultActions];
@@ -488,6 +530,7 @@ export function laHudItemChildren(item, opts = {})
         taggedActions.forEach(({ action, source }) =>
         {
             const status = getItemStatus(source, action);
+
             const entry = {
                 label: action.name,
                 action,
@@ -497,14 +540,17 @@ export function laHudItemChildren(item, opts = {})
                 statusKind: statusKindOf(status),
                 onClick: onActivate ? () => onActivate(action, source) : null,
             };
+
             entry.onRightClick = actionPopup ? actionPopup(action, source) : (row) =>
             {
                 const bodyHtml = laRenderActionDetail(action, { sourceName: source?.name });
                 const subtitle = action.activation ?? '';
                 const popup = laDetailPopup('la-hud-popup la-hud-action-popup', action.name, subtitle, bodyHtml, activationTheme(action.activation));
+
                 if (showPopup)
                     showPopup(popup, row);
             };
+
             items.push(entry);
         });
     }
@@ -597,8 +643,10 @@ async function patchExtraActionEntry(doc, actionName, patch)
 {
     const list = getLAFlag(doc, 'extraActions') || [];
     const idx = list.findIndex(entry => entry.name === actionName);
+
     if (idx < 0)
         return;
+
     const next = list.slice();
     next[idx] = { ...next[idx], ...patch };
     await setLAFlag(doc, 'extraActions', next);
@@ -618,6 +666,7 @@ function appendResourcePips(wrap, state, { hasLoading, hasRecharge, hasLimited, 
         });
         wrap.append($(htmlToElement(`<div style="display:flex;align-items:center;gap:6px;"></div>`)).append(htmlToElement(`<span style="${PIP_LABEL_STYLE}">Loading${suffix}</span>`), pip));
     }
+
     if (hasRecharge)
     {
         const charged = state.charged !== false;
@@ -630,14 +679,19 @@ function appendResourcePips(wrap, state, { hasLoading, hasRecharge, hasLimited, 
         });
         wrap.append($(htmlToElement(`<div style="display:flex;align-items:center;gap:6px;"></div>`)).append(htmlToElement(`<span style="${PIP_LABEL_STYLE}">Charged${suffix}</span>`), pip));
     }
+
     if (!hasLimited || state.uses == null)
         return;
+
     const isObj = typeof state.uses !== 'number';
     const current = isObj ? (state.uses.value ?? 0) : state.uses;
     const max = isObj ? (state.uses.max ?? 0) : state.uses;
+
     if (!(max > 0))
         return;
+
     const usesRow = $(htmlToElement(`<div style="display:flex;align-items:center;gap:3px;flex-wrap:wrap;"></div>`)).append(htmlToElement(`<span style="${PIP_LABEL_STYLE}">Uses${suffix}</span>`));
+
     for (let pipIdx = 1; pipIdx <= max; pipIdx++)
     {
         const pip = $(htmlToElement(`<span style="${PIP_STYLE}color:${pipIdx <= current ? '#3a9e6e' : '#444'};">${pipIdx <= current ? '⬢' : '⬡'}</span>`));
@@ -650,6 +704,7 @@ function appendResourcePips(wrap, state, { hasLoading, hasRecharge, hasLimited, 
         });
         usesRow.append(pip);
     }
+
     wrap.append(usesRow);
 }
 
@@ -666,14 +721,18 @@ export function appendItemPips(item, popup, depthCallbacks)
     const action = depthCallbacks?.action;
     const subData = depthCallbacks?.subData;
     const isActorExtra = item?.documentName === 'Actor' && action?._addedViaExtrasUI === true;
+
     const scoped = subData || isActorExtra || item?.documentName !== 'Item'
         ? { sub: subData ?? action ?? null, key: depthCallbacks?.subKey ?? null }
         : resolveActionScope(item, action, depthCallbacks?.subKey ?? null);
+
     const subKey = scoped.key;
     const sys = item?.system;
+
     const allTags = isActorExtra
         ? (action?.tags ?? [])
         : itemAllTags(sys);
+
     const hasLoading  = allTags.some(tag => tag.lid === 'tg_loading');
     const hasRecharge = allTags.some(tag => tag.lid === 'tg_recharge');
     const hasLimited  = allTags.some(tag => tag.lid === 'tg_limited');
@@ -682,17 +741,22 @@ export function appendItemPips(item, popup, depthCallbacks)
     const subCtx = item?.documentName === 'Item' && subKey ? { item, key: subKey } : null;
     const perRoundMax = perFreqOn ? Math.max(Number(allTags.find(tag => tag.lid === 'tg_round')?.val ?? 0), subEntry ? getPerRoundLimitFromSub(subEntry, subCtx) : getPerRoundLimit(item)) : 0;
     const perTurnMax = perFreqOn ? Math.max(Number(allTags.find(tag => tag.lid === 'tg_turn')?.val ?? 0), subEntry ? getPerTurnLimitFromSub(subEntry, subCtx) : getPerTurnLimit(item)) : 0;
+
     const perSceneMax = !perFreqOn || isActorExtra ? 0
         : subEntry ? getPerSceneLimitFromSub(subEntry, subCtx)
             : (item?.type === 'frame' ? 0 : getPerSceneLimit(item));
+
     const perMissionMax = !perFreqOn || isActorExtra ? 0
         : subEntry ? getPerMissionLimitFromSub(subEntry, subCtx)
             : (item?.type === 'frame' ? 0 : getPerMissionLimit(item));
+
     const hasExtraRecharge = !!action?.recharge && !isActorExtra;
+
     const isCoreActive = !!action && item?.type === 'frame' && (
         action?.name === item.system?.core_system?.active_name
         || action?.name === item.system?.core_system?.name
     );
+
     if (!hasLoading && !hasRecharge && !hasLimited && !hasExtraRecharge && !perRoundMax && !perTurnMax && !perSceneMax && !perMissionMax && !isCoreActive)
         return;
 
@@ -708,6 +772,7 @@ export function appendItemPips(item, popup, depthCallbacks)
             return readExtraActionEntry(item, action);
         return item.system;
     };
+
     const patchState = async (patch) =>
     {
         if (subKey)
@@ -715,6 +780,7 @@ export function appendItemPips(item, popup, depthCallbacks)
             await patchSubUses(item, subKey, patch);
             return;
         }
+
         if (isActorExtra)
             await patchExtraActionEntry(item, action.name, patch);
         else
@@ -732,9 +798,11 @@ export function appendItemPips(item, popup, depthCallbacks)
         const state = readState();
         appendResourcePips(pipsWrap, state, { hasLoading, hasRecharge, hasLimited, patch: patchState, rebuild });
         const inCombat = !!game.combat?.started;
+
         const renderFreqRow = (label, max, used, fieldKey, iconReady, iconConsumed, dim) =>
         {
             const usesRow = $(htmlToElement(`<div style="display:flex;align-items:center;gap:3px;flex-wrap:wrap;${dim ? 'opacity:0.5;' : ''}"></div>`)).append(htmlToElement(`<span style="${PIP_LABEL_STYLE}">${label}</span>`));
+
             for (let pipIdx = 1; pipIdx <= max; pipIdx++)
             {
                 const consumed = pipIdx <= used;
@@ -747,8 +815,10 @@ export function appendItemPips(item, popup, depthCallbacks)
                 });
                 usesRow.append(pip);
             }
+
             pipsWrap.append(usesRow);
         };
+
         if (perRoundMax > 0)
             renderFreqRow('Per round', perRoundMax, Number(state.uses_per_round?.value ?? 0), 'uses_per_round', 'mdi-restart', 'mdi-restart-off', !inCombat);
         if (perTurnMax > 0)
@@ -757,6 +827,7 @@ export function appendItemPips(item, popup, depthCallbacks)
             renderFreqRow('Per encounter', perSceneMax, Number(state.uses_per_scene?.value ?? 0), 'uses_per_scene', 'mdi-cog', 'mdi-cog-off', false);
         if (perMissionMax > 0)
             renderFreqRow('Per mission', perMissionMax, Number(state.uses_per_mission?.value ?? 0), 'uses_per_mission', 'mdi-flag', 'mdi-flag-off', false);
+
         if (isCoreActive)
         {
             const actor = item.parent ?? item.actor;
@@ -775,18 +846,22 @@ export function appendItemPips(item, popup, depthCallbacks)
             pipsWrap.append(row);
         }
     };
+
     rebuild();
 
     // Item-attached extras-UI action: a second pip row whose tags are disjoint from the item's (deduped at add-time), state living on the flag entry by name.
     const isItemDoc = item?.documentName === 'Item';
+
     if (isItemDoc && action?._addedViaExtrasUI && Array.isArray(action.tags) && action.tags.length)
     {
         const actionHasLoading  = action.tags.some(tag => tag.lid === 'tg_loading');
         const actionHasRecharge = action.tags.some(tag => tag.lid === 'tg_recharge');
         const actionHasLimited  = action.tags.some(tag => tag.lid === 'tg_limited');
+
         if (actionHasLoading || actionHasRecharge || actionHasLimited)
         {
             const actionWrap = prependPipWrap(popup, 'la-ea-pips');
+
             const rebuildAction = () =>
             {
                 actionWrap.empty();
@@ -799,15 +874,18 @@ export function appendItemPips(item, popup, depthCallbacks)
                     suffix: '*',
                 });
             };
+
             rebuildAction();
         }
     }
 
     // Extra-action recharge pip (action-level, not item-level), same "Charged" label and ▣/□ style as native tg_recharge items.
     const extraAction = depthCallbacks?.action;
+
     if (extraAction?.recharge && item && !extraAction._addedViaExtrasUI)
     {
         const extraActionWrap = pipsWrap;
+
         const rebuildExtraAction = () =>
         {
             const extraActionEntry = (getLAFlag(item,'extraActions') || []).find(entry => entry.name === extraAction.name);
@@ -821,17 +899,20 @@ export function appendItemPips(item, popup, depthCallbacks)
                 playUiSound('toggle');
                 const actions = getLAFlag(item,'extraActions') || [];
                 const match = actions.find(entry => entry.name === extraAction.name);
+
                 if (match)
                 {
                     match.charged = !match.charged;
                     await setLAFlag(item,'extraActions', actions);
                     extraAction.charged = match.charged;
                 }
+
                 rebuildExtraAction();
             });
             row.append(pip);
             extraActionWrap.append(row);
         };
+
         rebuildExtraAction();
     }
 }
@@ -842,15 +923,18 @@ export function appendBondPowerPips(bond, powerIdx, popup)
     const power = /** @type {any} */ (bond)?.system?.powers?.[powerIdx];
     if (!power?.uses || !(power.uses.max > 0))
         return;
+
     const bondPipStyle = 'cursor:pointer;font-size:1.15em;line-height:1;padding:0 2px;';
     const wrap = prependPipWrap(popup);
     const pipHolder = $(document.createElement('div'));
     wrap.append(pipHolder);
     const max = power.uses.max;
+
     const rebuild = (/** @type {number} */ value) =>
     {
         pipHolder.empty();
         const row = $(htmlToElement(`<div style="display:flex;align-items:center;gap:3px;flex-wrap:wrap;"></div>`)).append(htmlToElement(`<span style="${PIP_LABEL_STYLE}">${escapeHtml(power.frequency || 'Uses')}</span>`));
+
         for (let slot = 1; slot <= max; slot++)
         {
             const filled = slot <= value;
@@ -865,8 +949,10 @@ export function appendBondPowerPips(bond, powerIdx, popup)
             });
             row.append(pip);
         }
+
         pipHolder.append(row);
     };
+
     rebuild(power.uses.value ?? 0);
 }
 
@@ -875,16 +961,19 @@ export function appendReservePips(group, popup)
 {
     if (!Array.isArray(group) || !group.length || !group[0]?.system?.consumable)
         return;
+
     const total = group.length;
     const wrap = prependPipWrap(popup);
     wrap.append(autoConsumeRow(group[0]));
     const pipHolder = $(document.createElement('div'));
     wrap.append(pipHolder);
+
     const rebuild = () =>
     {
         pipHolder.empty();
         const available = group.filter(copy => !copy.system?.used).length;
         const row = $(htmlToElement(`<div style="display:flex;align-items:center;gap:3px;flex-wrap:wrap;"></div>`)).append(htmlToElement(`<span style="${PIP_LABEL_STYLE}">Uses</span>`));
+
         for (let slot = 1; slot <= total; slot++)
         {
             const pipIdx = slot;
@@ -899,8 +988,10 @@ export function appendReservePips(group, popup)
             });
             row.append(pip);
         }
+
         pipHolder.append(row);
     };
+
     rebuild();
 }
 
@@ -909,5 +1000,6 @@ async function _setReserveAvailable(group, available)
     const updates = group
         .map((copy, idx) => (!!copy.system?.used === (idx >= available)) ? null : copy.update({ 'system.used': idx >= available }))
         .filter(Boolean);
+
     await Promise.all(updates);
 }

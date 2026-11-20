@@ -23,20 +23,241 @@ body.crlngn-ui.crlngn-scene-nav #la-carousel {
 }
 
 #la-carousel .lac-buttons {
-    --control-size: calc(var(--lac-size) * 0.38);
     pointer-events: all;
     display: flex;
     flex-direction: column;
     justify-content: flex-start;
     align-items: center;
-    gap: calc(var(--lac-size) * 0.057);
+    gap: calc(var(--lac-size) * 0.042);
     padding: calc(var(--lac-size) * 0.19) 0;
     opacity: 0;
     transition: opacity 0.2s ease-in-out;
 }
 
 #la-carousel .lac-buttons button.ui-control {
-    font-size: calc(var(--lac-size) * 0.19);
+    --control-size: calc(var(--lac-size) * 0.28);
+    padding: 0;
+    font-size: calc(var(--lac-size) * 0.14);
+}
+
+#la-carousel .lac-slot.is-leaving .lac-art::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: rgba(10, 8, 12, 0.25);
+    backdrop-filter: saturate(0.35) brightness(0.8);
+    pointer-events: none;
+}
+
+#la-carousel .lac-leave-chip {
+    position: absolute;
+    top: 3px;
+    right: calc(var(--lac-cut) - 1px);
+    z-index: 1;
+    display: grid;
+    place-items: center;
+    width: calc(var(--lac-size) * 0.25);
+    height: calc(var(--lac-size) * 0.25);
+    border: 1px solid rgba(0, 0, 0, 0.7);
+    border-radius: 50%;
+    background: var(--lac-signal);
+    transition: opacity 0.2s ease-in-out;
+}
+
+#la-carousel .lac-leave-chip img {
+    width: 70%;
+    height: 70%;
+    border: 0;
+    filter: brightness(0);
+}
+
+#la-carousel .lac-slot:hover .lac-leave-chip {
+    opacity: 0;
+}
+
+#la-carousel .lac-rf-wrap {
+    position: relative;
+    display: inline-flex;
+}
+
+#la-carousel .lac-buttons button.ui-control[aria-pressed="true"] {
+    border-color: var(--lac-signal);
+    color: #fff;
+    background: color-mix(in srgb, var(--lac-signal), #0b0a13 55%);
+    box-shadow: 0 0 6px var(--lac-signal);
+}
+
+#la-carousel .lac-slot.lac-rf-in .lac-art {
+    background: radial-gradient(circle at 50% 55%, color-mix(in srgb, var(--team), transparent 88%), #0c0b10 72%);
+}
+
+#la-carousel .lac-slot.lac-rf-in.is-due {
+    filter: drop-shadow(0 0 4px var(--lac-signal)) drop-shadow(0 0 2px var(--lac-signal));
+}
+
+#la-carousel .lac-rf-art {
+    position: absolute;
+    inset: 0;
+    background-size: cover;
+    background-position: top;
+    filter: grayscale(1) contrast(1.05) brightness(0.85);
+    opacity: 0.5;
+}
+
+#la-carousel .lac-rf-q {
+    position: absolute;
+    left: 50%;
+    top: 44%;
+    transform: translate(-50%, -50%);
+    font-size: calc(var(--lac-size) * 0.36);
+    color: var(--team);
+    opacity: 0.85;
+}
+
+#la-carousel .lac-rf-tint {
+    position: absolute;
+    inset: 0;
+    background: var(--team);
+    mix-blend-mode: color;
+    opacity: 0.5;
+    pointer-events: none;
+}
+
+#la-carousel .lac-rf-scan {
+    position: absolute;
+    inset: 0;
+    background: repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.07) 0 1px, transparent 1px 3px), rgba(6, 5, 9, 0.38);
+    animation: lac-rf-holo 2.6s steps(1) infinite;
+    pointer-events: none;
+}
+
+@keyframes lac-rf-holo {
+    0%, 100% { opacity: 1; }
+    47% { opacity: 0.35; }
+    49% { opacity: 1; }
+    73% { opacity: 0.6; }
+    74% { opacity: 1; }
+}
+
+#la-carousel .lac-rf-clock svg {
+    width: 1em;
+    height: 1em;
+    margin-right: 2px;
+    vertical-align: -0.15em;
+}
+
+#la-carousel .lac-rf-clock path {
+    fill: none;
+    stroke-width: 2.6;
+}
+
+#la-carousel .lac-rf-in .lac-rounds.lac-rf-due {
+    padding: 0 3px;
+    border-radius: 2px;
+    background: var(--lac-signal);
+    color: #111;
+}
+
+#la-carousel .lac-rf-vis {
+    position: absolute;
+    top: 3px;
+    right: 3px;
+    z-index: 2;
+    display: grid;
+    place-items: center;
+    width: calc(var(--lac-size) * 0.25);
+    height: calc(var(--lac-size) * 0.25);
+    border: 1px solid rgba(0, 0, 0, 0.7);
+    border-radius: 50%;
+    background: #3b3f4a;
+    color: #fff;
+    font-size: calc(var(--lac-size) * 0.133);
+}
+
+#la-carousel .lac-rf-edit {
+    position: absolute;
+    top: calc(var(--lac-size) * 0.35);
+    right: 3px;
+    z-index: 2;
+    display: grid;
+    place-items: center;
+    width: calc(var(--lac-size) * 0.25);
+    height: calc(var(--lac-size) * 0.25);
+    border-radius: 50%;
+    background: var(--lac-signal);
+    color: #111;
+    font-size: calc(var(--lac-size) * 0.125);
+}
+
+#la-carousel .lac-rf-team {
+    position: absolute;
+    top: 3px;
+    right: calc(var(--lac-size) * 0.3);
+    z-index: 2;
+    display: grid;
+    place-items: center;
+    width: calc(var(--lac-size) * 0.25);
+    height: calc(var(--lac-size) * 0.25);
+    border: 1px solid rgba(0, 0, 0, 0.7);
+    border-radius: 50%;
+    background: #5d636c;
+    color: #fff;
+    font-size: calc(var(--lac-size) * 0.133);
+}
+
+#la-carousel .lac-rf-team svg.la-flag-q {
+    width: calc(var(--lac-size) * 0.18);
+    height: calc(var(--lac-size) * 0.18);
+    vertical-align: 0;
+}
+
+#la-carousel .lac-rf-vis.is-secret {
+    background: #5b2a8a;
+}
+
+#la-carousel .lac-rf-vis.is-full {
+    background: #1f6b4a;
+}
+
+#la-carousel .lac-rf-step {
+    position: absolute;
+    left: 3px;
+    bottom: calc(var(--lac-size) * 0.36);
+    z-index: 2;
+    display: none;
+    gap: 2px;
+}
+
+#la-carousel .lac-slot.lac-rf-in:hover .lac-rf-step {
+    display: flex;
+}
+
+#la-carousel .lac-rf-step b {
+    display: grid;
+    place-items: center;
+    width: calc(var(--lac-size) * 0.267);
+    height: calc(var(--lac-size) * 0.267);
+    border: 1px solid #555;
+    border-radius: 3px;
+    background: rgba(10, 8, 12, 0.85);
+    color: #eee;
+    font: 700 calc(var(--lac-size) * 0.183) / 1 var(--lac-mono);
+    cursor: pointer;
+}
+
+#la-carousel .lac-rf-count {
+    position: absolute;
+    top: calc(var(--lac-size) * -0.083);
+    right: calc(var(--lac-size) * -0.083);
+    min-width: calc(var(--lac-size) * 0.25);
+    height: calc(var(--lac-size) * 0.25);
+    padding: 0 3px;
+    border-radius: calc(var(--lac-size) * 0.125);
+    background: var(--lac-signal);
+    color: #111;
+    font: 700 calc(var(--lac-size) * 0.167) / calc(var(--lac-size) * 0.25) var(--lac-mono);
+    text-align: center;
+    pointer-events: none;
 }
 
 #la-carousel .lac-buttons:empty {
@@ -45,6 +266,19 @@ body.crlngn-ui.crlngn-scene-nav #la-carousel {
 
 #la-carousel:hover .lac-buttons {
     opacity: 1;
+}
+
+#la-carousel.is-folded .lac-cards,
+#la-carousel.is-folded .lac-edge,
+#la-carousel.is-folded.is-empty .lac-empty,
+#la-carousel.is-folded .lac-buttons.right,
+#la-carousel.is-folded .lac-buttons > :not([data-combat-action="fold"]) {
+    display: none;
+}
+
+#la-carousel.is-folded .lac-buttons {
+    opacity: 1;
+    padding: 2px 0 0;
 }
 
 #la-carousel .lac-main {
@@ -557,6 +791,132 @@ body.crlngn-ui.crlngn-scene-nav #la-carousel {
     font: 600 calc(var(--lac-size) * 0.1) / 1 var(--lac-mono);
 }
 
+#la-carousel .lac-deps {
+    display: flex;
+    gap: 3px;
+    padding: 1px 0 0 1px;
+    transform: translateY(calc(-1 * var(--lac-bar-h, 0px)));
+    transition: transform 0.12s ease-out;
+}
+
+#la-carousel .lac-slot.is-active > .lac-deps,
+#la-carousel .lac-slot:hover > .lac-deps,
+#la-carousel .lac-slot.is-hovered > .lac-deps,
+#la-carousel .lac-slot.is-controlled > .lac-deps,
+#la-carousel .lac-slot.is-targeted > .lac-deps,
+#la-carousel .lac-slot.bar-peek > .lac-deps,
+#la-carousel.alt-peek .lac-slot.alt-ok > .lac-deps {
+    transform: none;
+    transition-duration: 0.18s;
+}
+
+#la-carousel .lac-strip.no-win-anim .lac-deps {
+    transition: none;
+}
+
+#la-carousel .lac-slot.is-spent > .lac-deps,
+#la-carousel .lac-slot.is-hidden > .lac-deps {
+    filter: brightness(0.5) saturate(0.6);
+}
+
+#la-carousel .lac-dep {
+    --d: calc(var(--lac-size) * 0.3);
+    position: relative;
+    flex: 0 0 var(--d);
+    width: var(--d);
+    height: var(--d);
+    background: color-mix(in srgb, var(--team), transparent 45%);
+    clip-path: polygon(0 0, calc(100% - 4px) 0, 100% 4px, 100% 100%, 4px 100%, 0 calc(100% - 4px));
+    cursor: pointer;
+    pointer-events: all;
+    transition: transform 0.12s ease-out;
+}
+
+#la-carousel .lac-dep > .lac-dep-art {
+    position: absolute;
+    inset: 1px;
+    background: #2a2a2a center / 160% no-repeat;
+    clip-path: polygon(0 0, calc(100% - 3px) 0, 100% 3px, 100% 100%, 3px 100%, 0 calc(100% - 3px));
+}
+
+#la-carousel .lac-dep:hover {
+    z-index: 3;
+    transform: scale(1.25);
+}
+
+#la-carousel .lac-dep.is-used > .lac-dep-art {
+    filter: brightness(0.5) saturate(0.6);
+}
+
+#la-carousel .lac-dep.is-down > .lac-dep-art {
+    filter: grayscale(1) brightness(0.45);
+}
+
+#la-carousel .lac-dep.is-hidden {
+    opacity: 0.5;
+}
+
+#la-carousel .lac-dep > .fa-skull {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    font-size: calc(var(--d) * 0.45);
+    color: #d8d8d8;
+}
+
+#la-carousel .lac-dep-n {
+    position: absolute;
+    top: 1px;
+    right: 2px;
+    font: 700 calc(var(--lac-size) * 0.12) / 1 var(--lac-mono);
+    color: #fff;
+    text-shadow: 0 0 2px #000, 0 0 2px #000;
+}
+
+#la-carousel .lac-dep-hp {
+    position: absolute;
+    right: 2px;
+    bottom: 2px;
+    left: 2px;
+    height: 2px;
+    background: #2b2b2b;
+    opacity: 0;
+    transition: opacity 0.12s ease-out;
+}
+
+#la-carousel .lac-dep-hp > i {
+    display: block;
+    height: 100%;
+    background: #66cc66;
+}
+
+#la-carousel .lac-slot.is-active .lac-dep-hp,
+#la-carousel .lac-slot:hover .lac-dep-hp,
+#la-carousel .lac-slot.is-hovered .lac-dep-hp,
+#la-carousel .lac-slot.is-controlled .lac-dep-hp,
+#la-carousel .lac-slot.is-targeted .lac-dep-hp,
+#la-carousel .lac-slot.bar-peek .lac-dep-hp,
+#la-carousel.alt-peek .lac-slot.alt-ok .lac-dep-hp {
+    opacity: 1;
+}
+
+#la-carousel .lac-dep-more {
+    display: grid;
+    place-items: center;
+    font: 700 calc(var(--lac-size) * 0.13) / 1 var(--lac-mono);
+    color: #ddd;
+}
+
+#la-carousel .lac-dep-more::before {
+    content: "";
+    position: absolute;
+    inset: 1px;
+    z-index: -1;
+    background: #1c1c1c;
+    clip-path: inherit;
+}
+
 #la-carousel .lac-bar {
     display: flex;
     flex-direction: column;
@@ -617,6 +977,7 @@ body.crlngn-ui.crlngn-scene-nav #la-carousel {
 
 #la-carousel .lac-segs i {
     flex: 1 1 0;
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.6);
 }
 
 #la-carousel .lac-line {

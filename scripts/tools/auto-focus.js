@@ -5,6 +5,7 @@ import { getLAFlags } from './flag-utils.js';
 const SOCKET_CHANNEL = 'module.lancer-automations';
 const DEFAULT_PAN_DURATION_MS = 1000;
 const ACTIVATION_DEBOUNCE_MS = 300;
+
 const SETTING_BY_KIND = {
     cards: 'autoFocusCards',
     attack: 'autoFocusAttack',
@@ -12,6 +13,7 @@ const SETTING_BY_KIND = {
     check: 'autoFocusCheck',
     activation: 'autoFocusActivation'
 };
+
 const lastActivationFocus = new Map();
 
 function isFocusEnabled(focusKind)
@@ -46,20 +48,48 @@ function entryTokens(entries)
     return (entries ?? []).map(entry => entry?.target?.object ?? entry?.target).filter(Boolean);
 }
 
+function fitCardView(placeables, avoidRect)
+{
+    const left = document.getElementById('scene-controls')?.getBoundingClientRect().right ?? 0;
+    const right = avoidRect?.left > left ? avoidRect.left : window.innerWidth;
+    const width = right - left;
+    const height = window.innerHeight;
+    const margin = canvas.grid.size * 1.5;
+    const xs = placeables.map(placeable => placeable.center.x);
+    const ys = placeables.map(placeable => placeable.center.y);
+    const spanX = Math.max(...xs) - Math.min(...xs) + margin * 2;
+    const spanY = Math.max(...ys) - Math.min(...ys) + margin * 2;
+    const scale = Math.min(canvas.stage.scale.x, width / spanX, height / spanY);
+    const midX = (Math.max(...xs) + Math.min(...xs)) / 2;
+    const midY = (Math.max(...ys) + Math.min(...ys)) / 2;
+    return { x: midX + (window.innerWidth / 2 - (left + width / 2)) / scale, y: midY, scale };
+}
+
 // Pan only, never control.
-export function focusTokens(focusKind, tokens)
+export function focusTokens(focusKind, tokens, { avoidRect = null } = {})
 {
     if (!isFocusEnabled(focusKind) || !canvas?.ready)
         return;
+
     const placeables = [];
+    const seenOnly = focusKind === 'cards' && !game.user.isGM;
+
     for (const token of tokens ?? [])
     {
         const placeable = token?.id ? canvas.tokens.get(token.id) : null;
-        if (placeable && !placeables.includes(placeable))
+        if (placeable && !placeables.includes(placeable) && (!seenOnly || placeable.visible))
             placeables.push(placeable);
     }
+
     if (placeables.length === 0)
         return;
+
+    if (focusKind === 'cards' && placeables.length > 1)
+    {
+        canvas.animatePan({ ...fitCardView(placeables, avoidRect), duration: panDurationMs() });
+        return;
+    }
+
     const centerX = placeables.reduce((sum, placeable) => sum + placeable.center.x, 0) / placeables.length;
     const centerY = placeables.reduce((sum, placeable) => sum + placeable.center.y, 0) / placeables.length;
     canvas.animatePan({ x: centerX, y: centerY, duration: panDurationMs() });
@@ -77,6 +107,7 @@ export function broadcastFocus(focusKind, tokens)
         return;
     if (!canvas.tokens.get(tokens?.[0]?.id)?.controlled)
         focusTokens(focusKind, tokens);
+
     const tokenIds = [...new Set((tokens ?? []).map(token => token?.id).filter(Boolean))];
     if (tokenIds.length === 0)
         return;
@@ -110,6 +141,7 @@ function isActionFocusEnabled(actionKey)
 {
     if (!actionKey)
         return true;
+
     try
     {
         return getModuleSetting(`autoFocusAction.${FOCUS_CATEGORY_BY_FX[actionKey] ?? 'activation'}`) !== false;
@@ -125,6 +157,7 @@ function focusActivationToken(token, actionKey = null)
 {
     if (!token?.id || !isActionFocusEnabled(actionKey))
         return;
+
     const now = Date.now();
     if ((lastActivationFocus.get(token.id) ?? 0) > now - ACTIVATION_DEBOUNCE_MS)
         return;
@@ -151,9 +184,11 @@ export function registerCardFocusFlags()
         {
             const { focusKind, tokens } = resolveFocus(state);
             const tokenIds = [...new Set(tokens.map(token => token?.id).filter(Boolean))];
+
             const hookId = tokenIds.length > 0
                 ? Hooks.on('preCreateChatMessage', message => message.updateSource({ 'flags.lancer-automations.focus': { kind: focusKind, tokenIds } }))
                 : null;
+
             try
             {
                 return await originalStep(state, options);

@@ -26,14 +26,17 @@ export async function getPendingUpdate(moduleId)
 
             const apiUrl = `https://api.github.com/repos/${owner}/${repo}/releases`;
             const apiResponse = await fetch(apiUrl);
+
             if (apiResponse.ok)
             {
                 const allReleases = await apiResponse.json();
+
                 const missed = allReleases.filter(r =>
                 {
                     const v = r.tag_name.replace(/^v/, "");
                     return foundry.utils.isNewerVersion(v, module.version);
                 });
+
                 if (missed.length > 0)
                 {
                     remoteVersion = missed[0].tag_name.replace(/^v/, "");
@@ -46,6 +49,7 @@ export async function getPendingUpdate(moduleId)
             {
                 const rawUrl = `https://raw.githubusercontent.com/${owner}/${repo}/main/module.json`;
                 const rawResponse = await fetch(rawUrl);
+
                 if (rawResponse.ok)
                 {
                     const remoteManifest = await rawResponse.json();
@@ -56,6 +60,7 @@ export async function getPendingUpdate(moduleId)
         else
         {
             const response = await fetch(manifestUrl);
+
             if (response.ok)
             {
                 const remoteManifest = await response.json();

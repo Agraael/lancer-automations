@@ -3,7 +3,7 @@
 import { isFCSActive, getFCSData, getFCSMode, setFCSForceBulk } from './fcs.js';
 import { getModuleSetting, getExternalSetting } from '../tools/settings-utils.js';
 import { localize, localizeFormat } from '../tools/string-utils.js';
-import { ReactionManager } from '../activations/reaction-manager.js';
+import { AutomationManager } from '../activations/automation-manager.js';
 import { isExecutorGM } from '../tools/misc-tools.js';
 
 import { MODULE_ID } from '../tools/constants.js';
@@ -36,6 +36,12 @@ export function isFreshWorld()
  */
 
 const _systemAutomation = (sub) => game.settings.get('lancer', 'automationOptions')?.[sub] !== false;
+
+const FOUNDRY_THEME_CHOICES = [
+    { value: '', label: 'SETTINGS.UI.FIELDS.colorScheme.choices.default' },
+    { value: 'dark', label: 'SETTINGS.UI.FIELDS.colorScheme.choices.dark' },
+    { value: 'light', label: 'SETTINGS.UI.FIELDS.colorScheme.choices.light' },
+];
 
 /** @type {{id:string,label:string,icon:string,blurb:string,note?:string,condition?:()=>boolean,questions:OnbQuestion[]}[]} */
 const GROUPS = [
@@ -230,8 +236,10 @@ const GROUPS = [
                 {
                     if (yes)
                         return { borderUnderSpriteOnHover: true, 'base-opacity': 0 };
+
                     const isSet = game.settings.get('token-factions', 'borderUnderSpriteOnHover') === true
                         && game.settings.get('token-factions', 'base-opacity') === 0;
+
                     return isSet ? { borderUnderSpriteOnHover: false, 'base-opacity': 0.5 } : {};
                 },
             },
@@ -269,6 +277,28 @@ const GROUPS = [
                 module: 'lancer',
                 keys: ['uiTheme'],
                 choices: ['gms', 'gmsDark', 'msmc', 'horus', 'ha', 'ssc', 'ipsn', 'gal'].map(value => ({ value, label: `lancer.uiTheme.${value}` })),
+            },
+            {
+                id: 'foundry-applications-theme',
+                label: 'LA.onboarding.foundry-applications-theme.label',
+                explain: 'LA.onboarding.foundry-applications-theme.explain',
+                kind: 'choice',
+                module: 'core',
+                keys: ['uiConfig'],
+                choices: FOUNDRY_THEME_CHOICES,
+                read: () => game.settings.get('core', 'uiConfig').colorScheme.applications,
+                apply: (value) => ({ uiConfig: { colorScheme: { applications: value } } }),
+            },
+            {
+                id: 'foundry-interface-theme',
+                label: 'LA.onboarding.foundry-interface-theme.label',
+                explain: 'LA.onboarding.foundry-interface-theme.explain',
+                kind: 'choice',
+                module: 'core',
+                keys: ['uiConfig'],
+                choices: FOUNDRY_THEME_CHOICES,
+                read: () => game.settings.get('core', 'uiConfig').colorScheme.interface,
+                apply: (value) => ({ uiConfig: { colorScheme: { interface: value } } }),
             },
             {
                 id: 'sys-pause-icon',
@@ -359,12 +389,6 @@ const GROUPS = [
                 label: 'LA.onboarding.knockback-flow.label',
                 explain: 'LA.onboarding.knockback-flow.explain',
                 keys: ['enableKnockbackFlow'],
-            },
-            {
-                id: 'throw-flow',
-                label: 'LA.onboarding.throw-flow.label',
-                explain: 'LA.onboarding.throw-flow.explain',
-                keys: ['enableThrowFlow'],
             },
             {
                 id: 'auto-struct-followup',
@@ -487,9 +511,8 @@ const GROUPS = [
     {
         id: 'movement-beta',
         label: 'LA.onboarding.movement-beta.label',
-        icon: 'fas fa-flask',
+        icon: 'fas fa-hand',
         blurb: 'LA.onboarding.movement-beta.blurb',
-        note: 'LA.onboarding.movement-beta.note',
         questions: [
             {
                 id: 'overwatch-style',
@@ -504,10 +527,10 @@ const GROUPS = [
                 ],
                 readCurrent: () =>
                 {
-                    const reactions = ReactionManager.getGeneralReactions()['Overwatch']?.reactions;
-                    if (reactions?.[1]?.enabled)
+                    const automations = AutomationManager.getGeneralAutomations()['Overwatch']?.reactions;
+                    if (automations?.[1]?.enabled)
                         return 'v2';
-                    if (reactions?.[0]?.enabled)
+                    if (automations?.[0]?.enabled)
                         return 'v1';
                     return 'off';
                 },
@@ -730,7 +753,6 @@ const GROUPS = [
                 label: 'LA.onboarding.lasossis-items.label',
                 explain: 'LA.onboarding.lasossis-items.explain',
                 keys: ['enableLaSossisItems'],
-                link: { path: 'modules/lancer-automations/extra/LaSossis_Npc_Deployables.lcp', label: 'LA.onboarding.lasossis-items.link' },
             },
             {
                 id: 'scan-source',
@@ -839,7 +861,6 @@ const RECOMMENDED = {
     'range-preview-attack-card': true,
     'display-tools-to-others': true,
     'knockback-flow': true,
-    'throw-flow': true,
     'builtin-ruler': true,
     'count-3d-distance': true,
     'climb-waypoints': true,
@@ -900,7 +921,6 @@ const ESSENTIAL_IDS = new Set([
     'attack-targeting',
     'target-info',
     'knockback-flow',
-    'throw-flow',
     'builtin-ruler',
     'tactical-distance',
     'pathfind-drag',
@@ -927,6 +947,7 @@ function _scope(question)
 {
     if (question.kind === 'sfx' || question.kind === 'reactions' || question.reaction)
         return 'world';
+
     const scopes = new Set((question.keys || []).map(key => _reg(key, _mod(question))?.scope));
     return scopes.size === 1 ? [...scopes][0] : 'mixed';
 }
@@ -949,10 +970,11 @@ function _currentValue(question)
         const cfg = getModuleSetting('statusFXConfig') ?? {};
         return cfg[question.sfxSub] !== undefined ? !!cfg[question.sfxSub] : true;
     }
+
     if (question.kind === 'reactions')
         return question.readCurrent();
     if (question.reaction)
-        return !!ReactionManager.getGeneralReactions()[question.reaction.name]?.reactions?.[question.reaction.index]?.enabled;
+        return !!AutomationManager.getGeneralAutomations()[question.reaction.name]?.reactions?.[question.reaction.index]?.enabled;
     if (question.read)
         return question.read();
     return getExternalSetting(_mod(question), question.keys?.[0], false);
@@ -970,12 +992,14 @@ function _patchFor(question, answer)
 {
     const arg = question.kind === 'choice' ? answer : (answer === true || answer === 'yes');
     let patch;
+
     if (question.apply)
         patch = question.apply(arg);
     else if (question.kind === 'choice')
         patch = { [question.keys[0]]: arg };
     else
         patch = Object.fromEntries(question.keys.map(key => [key, arg]));
+
     const out = new Map(Object.entries(patch).map(([key, value]) => [`${_mod(question)}.${key}`, value]));
     for (const [fullKey, value] of Object.entries(question.extra?.(arg) ?? {}))
         out.set(fullKey, value);
@@ -986,14 +1010,14 @@ function _queueChange(changes, fullKey, value)
 {
     const pending = changes.get(fullKey);
     const partial = foundry.utils.getType(value) === 'Object' && foundry.utils.getType(pending) === 'Object';
-    changes.set(fullKey, partial ? { ...pending, ...value } : value);
+    changes.set(fullKey, partial ? foundry.utils.mergeObject(pending, value, { inplace: false }) : value);
 }
 
 function _withCurrent(prev, value)
 {
     if (foundry.utils.getType(value) !== 'Object')
         return value;
-    return { ...(prev?.toObject?.() ?? prev ?? {}), ...value };
+    return foundry.utils.mergeObject(prev?.toObject?.() ?? prev ?? {}, value, { inplace: false });
 }
 
 function _sameSetting(prev, next)
@@ -1012,6 +1036,7 @@ async function _seedRecommended()
             continue;
         if (question.kind === 'sfx' || question.kind === 'reactions' || question.reaction)
             continue;
+
         for (const [fullKey, value] of _patchFor(question, answer))
         {
             const key = fullKey.slice(MODULE_ID.length + 1);
@@ -1026,15 +1051,20 @@ async function _applyGmClientDefaults()
 {
     const defaults = getModuleSetting(SETTING_GM_CLIENT_DEFAULTS);
     let needsReload = false;
+
     for (const { key: fullKey, value } of (Array.isArray(defaults) ? defaults : []))
     {
         const setting = game.settings.settings.get(fullKey);
         if (setting?.scope !== 'client' || globalThis.localStorage.getItem(fullKey) !== null)
             continue;
+
         const dot = fullKey.indexOf('.');
-        await game.settings.set(fullKey.slice(0, dot), fullKey.slice(dot + 1), value);
+        const mod = fullKey.slice(0, dot);
+        const key = fullKey.slice(dot + 1);
+        await game.settings.set(mod, key, _withCurrent(game.settings.get(mod, key), value));
         needsReload ||= !!setting.requiresReload;
     }
+
     if (needsReload)
         ui.notifications.info(localize('LA.notify.gmClientDefaultsApplied'));
 }
@@ -1047,6 +1077,7 @@ async function _hideSystemHotbarOnce()
         if (tracker?.showHotbar !== false)
             await game.settings.set('lancer', 'actionTracker', _withCurrent(tracker, { showHotbar: false }));
     }
+
     await game.settings.set(MODULE_ID, SETTING_HOTBAR_SYNCED, true);
 }
 
@@ -1054,16 +1085,19 @@ async function _hideSystemHotbarOnce()
 function _visibleQuestions()
 {
     const out = [];
+
     for (const group of GROUPS)
     {
         if (group.condition && !group.condition())
             continue;
+
         for (const question of group.questions)
         {
             if (!question.condition || question.condition())
                 out.push(question);
         }
     }
+
     return out;
 }
 
@@ -1098,31 +1132,35 @@ function _questionVM(question, fcs)
 function _valueLabel(questionEl, value)
 {
     const select = questionEl.querySelector('select');
+
     if (select)
     {
         const option = select.querySelector(`option[value="${value}"]`);
         return option ? option.textContent.trim() : value;
     }
+
     return localize(value === 'yes' ? 'LA.onboardingUi.yes' : 'LA.onboardingUi.no');
 }
 
 // Apply general-reaction enabled toggles: [{ name, index, enabled }] into the saved config.
-async function _applyReactionToggles(toggles)
+async function _applyAutomationToggles(toggles)
 {
-    const saved = getModuleSetting(ReactionManager.SETTING_GENERAL_REACTIONS) || {};
+    const saved = getModuleSetting(AutomationManager.SETTING_GENERAL_AUTOMATIONS) || {};
     const byName = {};
+
     for (const { name, index, enabled } of toggles)
     {
         const entry = byName[name] || { ...saved[name] };
-        const reactions = Array.isArray(entry.reactions) ? [...entry.reactions] : [];
-        while (reactions.length <= index)
-            reactions.push(null);
-        reactions[index] = { ...reactions[index], enabled };
-        entry.reactions = reactions;
+        const automations = Array.isArray(entry.reactions) ? [...entry.reactions] : [];
+        while (automations.length <= index)
+            automations.push(null);
+        automations[index] = { ...automations[index], enabled };
+        entry.reactions = automations;
         byName[name] = entry;
     }
+
     for (const [name, entry] of Object.entries(byName))
-        await ReactionManager.saveGeneralReaction(name, entry);
+        await AutomationManager.saveGeneralAutomation(name, entry);
 }
 
 export class SettingsOnboarding extends FormApplication
@@ -1161,18 +1199,23 @@ export class SettingsOnboarding extends FormApplication
         const fcs = getFCSData();
         const pages = [];
         pages.push({ type: 'intro', isIntro: true });
+
         for (const group of GROUPS)
         {
             if (group.condition && !group.condition())
                 continue;
+
             const questions = group.questions
                 .filter(question => !question.condition || question.condition())
                 .map(question => _questionVM(question, fcs));
+
             if (!questions.length)
                 continue;
+
             const advCount = questions.filter(question => question.advanced).length;
             pages.push({ type: 'group', isGroup: true, id: group.id, label: localize(group.label), icon: group.icon, blurb: localize(group.blurb), note: localize(group.note ?? ''), questions, advCount, moreLabel: localizeFormat('LA.onboardingUi.showAll', { count: advCount }) });
         }
+
         pages.push({ type: 'summary', isSummary: true });
 
         if (this._page >= pages.length)
@@ -1193,6 +1236,7 @@ export class SettingsOnboarding extends FormApplication
         super.activateListeners(html);
         const root = html[0] ?? html;
         this.bringToTop?.();
+
         const syncNeeds = () =>
         {
             root.querySelectorAll('.la-onb-q[data-needs]').forEach(row =>
@@ -1200,6 +1244,7 @@ export class SettingsOnboarding extends FormApplication
                 row.hidden = root.querySelector(`input[name="q.${row.dataset.needs}"]:checked`)?.value === 'no';
             });
         };
+
         root.addEventListener('change', syncNeeds);
         syncNeeds();
 
@@ -1212,6 +1257,7 @@ export class SettingsOnboarding extends FormApplication
             {
                 if (!button.dataset.showLabel)
                     button.dataset.showLabel = button.innerHTML;
+
                 const expanded = button.dataset.expanded === '1';
                 button.dataset.expanded = expanded ? '' : '1';
                 button.innerHTML = expanded ? button.dataset.showLabel : `<i class="fas fa-chevron-up"></i> ${localize('LA.onboardingUi.hideAdvanced')}`;
@@ -1238,6 +1284,7 @@ export class SettingsOnboarding extends FormApplication
         const pages = root.querySelectorAll('.la-onb-page');
         const clamped = Math.max(0, Math.min(target, pages.length - 1));
         this._page = clamped;
+
         if (this._quickPages && clamped === 0)
         {
             this._quickPages = null;
@@ -1253,6 +1300,7 @@ export class SettingsOnboarding extends FormApplication
                     button.innerHTML = button.dataset.showLabel;
             });
         }
+
         pages.forEach((page, index) =>
         {
             page.style.display = index === clamped ? '' : 'none';
@@ -1265,22 +1313,27 @@ export class SettingsOnboarding extends FormApplication
         const pages = root.querySelectorAll('.la-onb-page');
         const lastIndex = pages.length - 1;
         const step = root.querySelector('.la-onb-step');
+
         if (step)
         {
             step.textContent = this._quickPages
                 ? localizeFormat('LA.onboardingUi.stepOf', { current: this._quickPages.indexOf(this._page) + 1, total: this._quickPages.length })
                 : localizeFormat('LA.onboardingUi.stepOf', { current: this._page + 1, total: pages.length });
         }
+
         const back = root.querySelector('.la-onb-back');
         if (back)
             back.style.visibility = this._page === 0 ? 'hidden' : 'visible';
+
         const next = root.querySelector('.la-onb-next');
+
         if (next)
         {
             next.innerHTML = this._page >= lastIndex
                 ? `<i class="fas fa-check"></i> ${localize('LA.onboardingUi.applyAmpContinue')}`
                 : `${localize('LA.onboardingUi.next')} <i class="fas fa-arrow-right"></i>`;
         }
+
         if (this._page >= lastIndex)
             this._buildSummary(root);
     }
@@ -1290,6 +1343,7 @@ export class SettingsOnboarding extends FormApplication
         const list = root.querySelector('.la-onb-summary-list');
         if (!list)
             return;
+
         const rowStyle = 'padding:5px 0; border-bottom:1px solid color-mix(in srgb, var(--primary-color, #782e22) 12%, transparent);';
         const rows = [];
         const alsoOn = [];
@@ -1297,9 +1351,11 @@ export class SettingsOnboarding extends FormApplication
         {
             const original = questionEl.dataset.original;
             const select = questionEl.querySelector('select');
+
             const current = select
                 ? select.value
                 : questionEl.querySelector('input[type="radio"]:checked')?.value;
+
             if (current === undefined)
                 return;
             if (current !== original)
@@ -1307,12 +1363,15 @@ export class SettingsOnboarding extends FormApplication
             else if (!select && current === 'yes' && ESSENTIAL_IDS.has(questionEl.dataset.qid))
                 alsoOn.push(`<div style="${rowStyle}">${questionEl.dataset.label} &nbsp;<b>${_valueLabel(questionEl, current)}</b></div>`);
         });
+
         const changes = rows.length
             ? rows.join('')
             : `<p style="opacity:0.7;">${localize('LA.onboardingUi.noChanges')}</p>`;
+
         const onBlock = alsoOn.length
             ? `<h3 style="margin:14px 0 4px; font-size:0.95em; border-bottom:1px solid var(--la-edge);">${localize('LA.onboardingUi.alsoOn')}</h3>${alsoOn.join('')}`
             : '';
+
         list.innerHTML = changes + onBlock;
     }
 
@@ -1323,19 +1382,24 @@ export class SettingsOnboarding extends FormApplication
             const value = RECOMMENDED[question.id];
             if (value === undefined || QUICK_IDS.has(question.id))
                 continue;
+
             const questionEl = root.querySelector(`.la-onb-q[data-qid="${question.id}"]`);
             if (!questionEl)
                 continue;
+
             const select = questionEl.querySelector('select');
+
             if (select)
             {
                 select.value = String(value);
                 continue;
             }
+
             const radio = questionEl.querySelector(`input[type="radio"][value="${value ? 'yes' : 'no'}"]`);
             if (radio)
                 radio.checked = true;
         }
+
         const pages = [...root.querySelectorAll('.la-onb-page')];
         this._quickPages = [0];
         pages.forEach((page, index) =>
@@ -1359,9 +1423,11 @@ export class SettingsOnboarding extends FormApplication
     {
         if (!this._quickPages)
             return this._page + direction;
+
         const pos = this._quickPages.indexOf(this._page);
         if (pos < 0)
             return this._page + direction;
+
         const next = Math.max(0, Math.min(pos + direction, this._quickPages.length - 1));
         return this._quickPages[next];
     }
@@ -1378,7 +1444,7 @@ export class SettingsOnboarding extends FormApplication
         const changes = new Map();
         const sfxDelta = {};
         const forceEntries = [];
-        const reactionToggles = [];
+        const automationToggles = [];
 
         for (const question of _visibleQuestions())
         {
@@ -1391,9 +1457,9 @@ export class SettingsOnboarding extends FormApplication
                 if (question.kind === 'sfx')
                     sfxDelta[question.sfxSub] = raw === 'yes';
                 else if (question.kind === 'reactions')
-                    reactionToggles.push(...question.togglesFor(raw));
+                    automationToggles.push(...question.togglesFor(raw));
                 else if (question.reaction)
-                    reactionToggles.push({ name: question.reaction.name, index: question.reaction.index, enabled: raw === 'yes' });
+                    automationToggles.push({ name: question.reaction.name, index: question.reaction.index, enabled: raw === 'yes' });
                 else
                 {
                     for (const [fullKey, value] of _patchFor(question, raw))
@@ -1404,6 +1470,7 @@ export class SettingsOnboarding extends FormApplication
             if (fcs && _forceable(question))
             {
                 const want = formData[`fcs.${question.id}`] ? 'hard' : 'open';
+
                 for (const key of question.keys)
                 {
                     const full = `${MODULE_ID}.${key}`;
@@ -1414,20 +1481,25 @@ export class SettingsOnboarding extends FormApplication
         }
 
         const clientAnswers = {};
+
         for (const [fullKey, value] of changes)
         {
             const setting = game.settings.settings.get(fullKey);
+
             if (!setting)
             {
                 console.warn(`${MODULE_ID} | onboarding: unregistered key ${fullKey}`);
                 continue;
             }
+
             if (setting.scope === 'world' && !game.user?.isGM)
                 continue;
+
             const dot = fullKey.indexOf('.');
             const mod = fullKey.slice(0, dot);
             const key = fullKey.slice(dot + 1);
             let prev;
+
             try
             {
                 prev = game.settings.get(mod, key);
@@ -1436,16 +1508,18 @@ export class SettingsOnboarding extends FormApplication
             {
                 continue;
             }
+
             const next = _withCurrent(prev, value);
             if (_sameSetting(prev, next))
                 continue;
             if (setting.requiresReload)
                 this._needsReload = true;
+
             try
             {
                 await game.settings.set(mod, key, next);
                 if (setting.scope === 'client')
-                    clientAnswers[fullKey] = next;
+                    clientAnswers[fullKey] = value;
             }
             catch (err)
             {
@@ -1458,7 +1532,7 @@ export class SettingsOnboarding extends FormApplication
             const stored = Array.isArray(getModuleSetting(SETTING_GM_CLIENT_DEFAULTS)) ? getModuleSetting(SETTING_GM_CLIENT_DEFAULTS) : [];
             const merged = new Map(stored.map(entry => [entry.key, entry.value]));
             for (const [fullKey, value] of Object.entries(clientAnswers))
-                merged.set(fullKey, value);
+                merged.set(fullKey, _withCurrent(merged.get(fullKey), value));
             await game.settings.set(MODULE_ID, SETTING_GM_CLIENT_DEFAULTS, [...merged].map(([key, value]) => ({ key, value })));
         }
 
@@ -1468,6 +1542,7 @@ export class SettingsOnboarding extends FormApplication
             {
                 const existing = getModuleSetting('statusFXConfig') ?? {};
                 const merged = { ...existing, ...sfxDelta };
+
                 if (!foundry.utils.objectsEqual(existing, merged))
                 {
                     await game.settings.set(MODULE_ID, 'statusFXConfig', merged);
@@ -1493,11 +1568,11 @@ export class SettingsOnboarding extends FormApplication
             }
         }
 
-        if (reactionToggles.length && game.user?.isGM)
+        if (automationToggles.length && game.user?.isGM)
         {
             try
             {
-                await _applyReactionToggles(reactionToggles);
+                await _applyAutomationToggles(automationToggles);
             }
             catch (err)
             {
@@ -1512,9 +1587,11 @@ export class SettingsOnboarding extends FormApplication
     async close(options)
     {
         const closed = await super.close(options);
+
         if (this._needsReload)
         {
             this._needsReload = false;
+
             const reload = await Dialog.confirm({
                 title: localize('LA.dialogTitle.reloadRequired'),
                 content: `<p>${localize('LA.onboarding.reloadPrompt')}</p>`,
@@ -1522,12 +1599,14 @@ export class SettingsOnboarding extends FormApplication
                 no: () => false,
                 defaultYes: true,
             });
+
             if (reload)
             {
                 this._reloadPending = true;
                 foundry.utils.debouncedReload();
             }
         }
+
         this._resolveDone?.(this._applied);
         return closed;
     }
@@ -1567,12 +1646,14 @@ export function registerOnboardingBootstrap()
         if (isExecutorGM() && !getModuleSetting(SETTING_HOTBAR_SYNCED))
             _hideSystemHotbarOnce().catch(err => console.warn(`${MODULE_ID} | hiding the system hotbar failed`, err));
         _applyGmClientDefaults().catch(err => console.warn(`${MODULE_ID} | applying the GM's client answers failed`, err));
+
         for (const group of GROUPS)
         {
             for (const question of group.questions)
             {
                 if (question.kind === 'sfx' || question.kind === 'reactions')
                     continue;
+
                 for (const key of (question.keys || []))
                 {
                     if (!_reg(key, _mod(question)))
@@ -1588,6 +1669,7 @@ export async function maybeRunSettingsOnboarding()
 {
     if (!game.user?.isGM)
         return true;
+
     const app = new SettingsOnboarding();
     app.render(true);
     await app._done;

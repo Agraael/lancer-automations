@@ -57,6 +57,7 @@ export function getActionOverlay(target, actionName)
     const doc = _resolveDoc(target);
     if (!doc || !actionName)
         return null;
+
     const map = getLAFlag(doc,FLAG_KEY) || {};
     return map[_encodeKey(actionName)] ?? null;
 }
@@ -72,17 +73,21 @@ export function getActionOverlay(target, actionName)
 export async function setActionOverlay(target, actionName, overlay)
 {
     const doc = _resolveDoc(target);
+
     if (!doc || !actionName)
     {
         ui.notifications.error(localize('LA.notify.setActionOverlayArgs'));
         return null;
     }
+
     const map = getLAFlag(doc,FLAG_KEY) || {};
     const encoded = _encodeKey(actionName);
     let next = null;
+
     if (overlay !== null)
     {
         next = { ...map[encoded] };
+
         for (const [key, value] of Object.entries(overlay))
         {
             if (value == null || value === '' || (Array.isArray(value) && !value.length))
@@ -90,9 +95,11 @@ export async function setActionOverlay(target, actionName, overlay)
             else
                 next[key] = value;
         }
+
         if (Object.keys(next).length === 0)
             next = null;
     }
+
     // setFlag merges, so stale keys/fields must be dropped with the -= syntax first.
     if (map[encoded] !== undefined)
         await doc.update({ [`flags.${MODULE_ID}.${FLAG_KEY}.-=${encoded}`]: null });
@@ -125,16 +132,20 @@ export function resolveGrantedActionRange(actor, actionName, base = null)
     let override = null;
     let add = 0;
     let found = false;
+
     for (const item of /** @type {any} */ (actor)?.items ?? [])
     {
         if (item.system?.destroyed || item.system?.disabled)
             continue;
+
         const overlay = /** @type {any} */ (getActionOverlay(item, actionName));
+
         for (const entry of (overlay?.range ?? []))
         {
             found = true;
             const val = Number(entry?.val) || 0;
             const mode = entry?.mode ?? overlay.rangeMode ?? 'upgrade';
+
             if (mode === 'add')
                 add += val;
             else if (mode === 'override')
@@ -143,8 +154,10 @@ export function resolveGrantedActionRange(actor, actionName, base = null)
                 upgrade = Math.max(upgrade ?? 0, val);
         }
     }
+
     if (!found)
         return base;
+
     const start = override ?? Math.max(base ?? 0, upgrade ?? 0);
     return Math.max(0, start + add);
 }
@@ -160,6 +173,7 @@ export function applyActionOverlays(item, actions)
 {
     if (!item || !actions?.length)
         return actions ?? [];
+
     const map = getLAFlag(item,FLAG_KEY) || {};
     if (!Object.keys(map).length)
         return actions;

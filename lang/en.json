@@ -3,8 +3,11 @@
     "actionEconomy": {
       "addHint": "Right-click restores one, or adds one until the next turn.",
       "available": "Available",
+      "forbidden": "Forbidden",
+      "free": "Free Actions",
       "full": "Full Action",
       "move": "Move",
+      "overchargeQuick": "The red number is from Overcharge and can't help make a Full.",
       "protocol": "Protocol",
       "quick": "Quick Action",
       "reaction": "Reaction",
@@ -15,13 +18,13 @@
       "confirmDeleteFolder": "Are you sure you want to delete folder \"<strong>{name}</strong>\"?",
       "confirmDeleteScript": "Delete script \"<strong>{name}</strong>\"?",
       "content": {
-        "changesMadeToActivationsOrStartup": "<p>Changes made to activations or startup scripts require a reload to apply. Reload now?</p>",
-        "thisActivationHasUnsavedChanges": "<p style='padding:4px 2px;'>This activation has unsaved changes.</p>"
+        "changesMadeToActivationsOrStartup": "<p>Changes made to automations or startup scripts require a reload to apply. Reload now?</p>",
+        "thisActivationHasUnsavedChanges": "<p style='padding:4px 2px;'>This automation has unsaved changes.</p>"
       },
       "deleteAll": "Delete All",
       "folderNamePlaceholder": "Enter folder name...",
       "keepItems": "Keep Items",
-      "keepOrDeleteHint": "Choose whether to keep the activations inside the folder (unfiled) or delete them entirely.",
+      "keepOrDeleteHint": "Choose whether to keep the automations inside the folder (unfiled) or delete them entirely.",
       "newName": "New Name",
       "noSpecificAction": "No specific action",
       "resetEverything": "Reset Everything"
@@ -82,6 +85,7 @@
         "noValidEquipmentDirectHit": "No valid weapons or systems remain, this becomes a <strong>DIRECT HIT</strong>.",
         "stunnedNextTurn": "Stunned until the end of your next turn."
       },
+      "rollTearOff": "Roll {formula}",
       "selectSystem": "Select a system to destroy.",
       "selectWeapon": "Select a weapon to destroy.",
       "selectWeaponMount": "Select a weapon mount to destroy. All destructible weapons on the selected mount will be destroyed.",
@@ -94,9 +98,9 @@
         "powerFailure": "Your mech suffers catastrophic disruption to power regulation as it tries to divert energy to critical safety systems. Your mech is Slowed and Throttled until the end of your next turn."
       },
       "struct": {
-        "crushingHit": "Roll a <strong>HULL</strong> check. On a success, your mech is Dazed until the end of your next turn. On a Failure, your mech is immediately destroyed.",
+        "crushingHit": "Roll a <strong>HULL</strong> check. On a success, your mech is Dazed until the end of your next turn. On a failure, your mech is immediately destroyed.",
         "directHit": "Your mech is Impaired and Slowed until the end of your next turn.",
-        "directHitOneLeft": "You take the <strong>SYSTEM TRAUMA</strong> result from this table and must roll a <strong>HULL</strong> check. On a success, your mech is Impaired and Slowed until the end of your next turn. On a Failure, Your mech is Stunned until the end of your next turn. If there are no valid weapons or systems remaining, this result becomes a <strong>CRUSHING HIT</strong> instead.",
+        "directHitOneLeft": "You take the <strong>SYSTEM TRAUMA</strong> result from this table and must roll a <strong>HULL</strong> check. On a success, your mech is Impaired and Slowed until the end of your next turn. On a failure, your mech is Stunned until the end of your next turn. If there are no valid weapons or systems remaining, this result becomes a <strong>CRUSHING HIT</strong> instead.",
         "directHitTwoLeft": "Roll a <strong>HULL</strong> check. On a success, your mech is Impaired and Slowed until the end of your next turn. On a failure, you take the <strong>SYSTEM TRAUMA</strong> result from this table, and your mech is Impaired and Immobilized until the end of your next turn. If there are no valid systems or weapons remaining, this result becomes a <strong>CRUSHING HIT</strong> instead.",
         "glancingBlow": "Emergency systems kick in and stabilize your mech, but it's Impaired until the end of your next turn.",
         "systemTrauma": "Parts of your mech are torn off by the damage. Roll 1d6. On a 1–3, all weapons on one mount of your choice are destroyed; on a 4–6, a system of your choice is destroyed. LIMITED systems and weapons that are out of charges are not valid choices. If there are no valid choices remaining, it becomes the other result. If there are no valid systems or weapons remaining, this result becomes a <strong>DIRECT HIT</strong> instead."
@@ -107,10 +111,9 @@
       "systemTrauma": "System Trauma",
       "systemTraumaCaps": "SYSTEM TRAUMA",
       "tearOff": "TEAR OFF",
+      "tearOffRolled": "Rolled {total}: {kind}.",
       "tearOffSystemDesc": "On a 4–6, a system of your choice is destroyed",
       "tearOffWeaponDesc": "On a 1–3, all weapons on one mount of your choice are destroyed",
-      "traumaSystemTitle": "SYSTEM TRAUMA // SYSTEM DESTRUCTION",
-      "traumaWeaponTitle": "SYSTEM TRAUMA // WEAPON DESTRUCTION",
       "weaponDestruction": "Weapon Destruction",
       "weaponMount": "Weapon Mount",
       "weaponsAllIndestructible": "No weapons on <strong>{mount}</strong> could be destroyed as they are all indestructible.",
@@ -326,7 +329,15 @@
     },
     "bonus": {
       "grantedBy": "Granted by bonus: {name}",
-      "knockback": "Knockback"
+      "knockback": "Knockback",
+      "vulnerable": "Vulnerable",
+      "vulnerableHint": "Consume Vulnerable on a hit for +{die} {type} bonus damage.",
+      "vulnerableTargetHint": "{name}: consume Vulnerable for +{die} {type} bonus damage.",
+      "damageTypeCycle": "{type}. Click to change.",
+      "variable": "Variable",
+      "variableHint": "Pick the type of this attack's Variable damage. The damage rows, Reliable and Vulnerable follow it.",
+      "variableSetTitle": "SET DAMAGE TYPE",
+      "variableSetText": "{name} deals Variable damage, and its type is set once. Pick it now. The damage roll keeps it, and you can change it there."
     },
     "card": {
       "choice": "CHOICE",
@@ -356,6 +367,7 @@
         "expired": "Event {name} has expired.",
         "roundsLeft": "Rounds left: {rounds}"
       },
+      "fold": "Fold the carousel",
       "lane": {
         "events": "Events"
       },
@@ -366,7 +378,8 @@
       },
       "side": {
         "player": "Player"
-      }
+      },
+      "unfold": "Open the carousel"
     },
     "changedDefaults": {
       "apply": "Apply ticked",
@@ -375,9 +388,18 @@
       "title": "Default Settings Changed"
     },
     "choiceCard": {
+      "barrageNeedsSecond": "Barrage needs a second mount.",
+      "barrageOnly": "Superheavy weapons fire in a Barrage only.",
       "confirmCancelCard": "<p>Are you sure you want to cancel the <b>{title}</b> choice card for all recipients?</p>",
       "confirmCancelVote": "<p>Are you sure you want to cancel the <b>{title}</b> vote?</p>",
+      "mountBraces": "This mount braces the superheavy.",
+      "mountEmpty": "Empty",
+      "mountLocked": "Locked",
+      "mountSection": "{type} Mount",
+      "notUsableHere": "Not usable here.",
       "optionText": "Option Text",
+      "ordnanceNoOverwatch": "A mount with an Ordnance weapon cannot Overwatch.",
+      "outOfThreat": "Threat does not reach the mover.",
       "selectAThrowableWeaponToAttack": "Select a throwable weapon to attack with.",
       "selectUpToKind": "Select up to {count} {kind}.",
       "selectUpToSystems": "Select up to {count} system(s).",
@@ -386,14 +408,48 @@
       "voteTieBody": "<p>There is a tie between: {names}.</p><p>Pick the winner or cancel.</p>"
     },
     "clocks": {
+      "burden": "Burden",
+      "chatFilled": "{name} is complete.",
+      "chip": {
+        "all": "ALL",
+        "gm": "GM",
+        "hidden": "HIDDEN",
+        "players": "{count} PLAYERS"
+      },
+      "complete": "Complete",
+      "hideForMe": "Hide this clock for me",
       "noBond": "Burdens need a bond.",
       "none": "No clocks yet.",
+      "pilotClock": "Pilot clock",
+      "pinHint": "Pin to my screen",
+      "pinned": "Pinned",
+      "popup": {
+        "chosen": "Chosen players",
+        "clock": "Clock",
+        "color": "Color",
+        "groups": "Groups",
+        "show": "Show on screen"
+      },
+      "reset": "Reset to 0",
+      "showHidden": "Show the clocks you hid",
       "tab": {
         "burdens": "Burdens",
         "clocks": "Clocks"
       },
       "title": "Clocks &amp; Burdens",
-      "unnamed": "Unnamed"
+      "tone": {
+        "neutral": "Neutral",
+        "progress": "Progress",
+        "threat": "Threat"
+      },
+      "unnamed": "Unnamed",
+      "unpin": "Unpin",
+      "visibility": {
+        "all": "All players",
+        "gm": "GM only",
+        "hidden": "Hidden"
+      },
+      "worldClock": "World clock"
     },
     "common": {
       "acknowledge": "ACKNOWLEDGE",
@@ -434,7 +490,6 @@
       "searchEffects": "Search effects...",
       "send": "Send",
       "skip": "Skip",
-      "submit": "Submit",
       "value": "Value"
     },
     "compat": {
@@ -509,7 +564,6 @@
       "expandAll": "Expand all",
       "fcsLegend": "Lock: {open} open, {soft} soft, {hard} hard. Click to cycle.",
       "gmTag": "GM",
-      "kofiTitle": "Support on Ko-fi",
       "lancerAutomations": "LANCER AUTOMATIONS",
       "moduleConfiguration": "Module configuration",
       "moduleLinks": "Module links",
@@ -529,15 +583,20 @@
       "searchSettings": "Search settings",
       "settingsPages": "Settings pages",
       "startTour": "Start tour",
+      "supporters": "Support & Credits",
       "tabDocs": "Documentation for this page",
       "tagOnlyYou": "Only you",
       "tagReload": "Reload",
       "wizard": "Wizard"
     },
+    "contest": {
+      "tieToChallenger": "Tie at {total}, the challenger wins"
+    },
     "deployableArt": {
       "applied": "Default art applied to {count} deployable actor(s).",
       "applyPrompt": "Apply the default deployable art to existing deployable actors that still use a default image? Custom images are kept.",
       "applyTitle": "Default Deployable Art",
+      "nothingToUpdate": "No deployable actor to update.",
       "reverted": "Default icons restored on {count} deployable actor(s).",
       "revertPrompt": "Restore the default icons on deployable actors that still use the default deployable art? Custom images are kept."
     },
@@ -547,7 +606,7 @@
       "deploy": "Deploy",
       "deployTitle": "Deploy Actors",
       "deployTitleFor": "DEPLOY {name}",
-      "deployedAvailable": "{count} deployed item(s) available. Red highlights indicate deployables with Recall.",
+      "deployedAvailable": "{count} deployed item(s) available. Red ones have no Recall action.",
       "endItemActivationTitle": "END ITEM ACTIVATION",
       "extraDeployable": "EXTRA DEPLOYABLE",
       "linkDeployableTitle": "LINK DEPLOYABLE",
@@ -573,10 +632,8 @@
       "activateImmunity": "ACTIVATE IMMUNITY?",
       "activationManager": "Automation Manager",
       "activationManagerHelp": "Automation Manager Help",
-      "activationOpportunity": "Activation Opportunity: {trigger}",
       "addMacro": "Add Macro",
       "attackCanceled": "ATTACK CANCELED",
-      "barrageMountOrder": "BARRAGE MOUNT ORDER",
       "battleLogGm": "Battle Log · GM",
       "battleLogRecap": "Battle Log · Recap",
       "battleLogShareCard": "Battle Log · Share Card",
@@ -590,27 +647,25 @@
       "changeDataConsent": "Change Data Consent",
       "checkCanceled": "CHECK CANCELED",
       "choiceConfiguration": "Choice Configuration",
-      "chooseInvade": "Choose Invade",
       "clearTahFavorites": "Clear TAH Favorites",
       "clearTahMacros": "Clear TAH Macros",
-      "clocksFor": "Clocks & Burdens — {name}",
+      "clocksFor": "Clocks & Burdens: {name}",
       "createFolder": "Create Folder",
       "customPaintJob": "CUSTOM PAINT JOB",
       "damagePrevented": "DAMAGE PREVENTED",
-      "delayedAppearance": "Delayed Appearance",
       "deleteFolder": "Delete Folder",
       "deleteStartupScript": "Delete Startup Script",
-      "directHitNoEquipmentAvailable": "Direct Hit - No Equipment Available",
+      "directHitNoEquipmentAvailable": "Direct Hit: No Equipment Available",
       "dismountCaps": "DISMOUNT",
-      "dismountPlacePilot": "Dismount - Place Pilot",
+      "dismountPlacePilot": "Dismount: Place Pilot",
       "downtimeFiled": "Downtime Filed",
       "downtimeObjectiveAndActivity": "Downtime: Objective and Activity",
       "downtimePilotSelection": "Downtime: Pilot Selection",
       "downtimeSubmitted": "Downtime Submitted",
       "downtimeSummary": "Downtime: Summary",
-      "editActivation": "Edit Activation",
+      "editActivation": "Edit Automation",
       "effectManager": "Effect Manager",
-      "ejectPlacePilot": "Eject - Place Pilot",
+      "ejectPlacePilot": "Eject: Place Pilot",
       "emergencyRecovery": "Emergency Recovery",
       "exportConfiguration": "Export Configuration",
       "exportPack": "Export Pack",
@@ -624,10 +679,9 @@
       "forceCheckCaps": "FORCE CHECK",
       "fullRepair": "FULL REPAIR",
       "generateScan": "Generate Scan",
-      "grappleCaps": "GRAPPLE",
       "grappleContest": "GRAPPLE CONTEST",
       "grappleContestHull": "GRAPPLE CONTEST - HULL vs HULL",
-      "grappleFollowMovement": "GRAPPLE — Follow Movement",
+      "grappleFollowMovement": "GRAPPLE: Follow Movement",
       "haseContest": "HASE CONTEST",
       "heatModified": "HEAT MODIFIED",
       "hpModified": "HP MODIFIED",
@@ -637,14 +691,15 @@
       "jockeyCaps": "JOCKEY",
       "jockeyGritVsHull": "JOCKEY - GRIT vs HULL",
       "journalEntryRequest": "Journal Entry Request",
-      "keepWhich": "{name} — KEEP WHICH?",
+      "keepWhich": "{name}: KEEP WHICH?",
       "lancerAutomations": "Lancer Automations",
       "lancerAutomationsAboutLancerQol": "Lancer Automations: about Lancer QoL",
-      "lancerAutomationsApplySystemFixes": "Lancer Automations — Apply System Fixes",
-      "lancerAutomationsNewsReleases": "Lancer Automations - News & Releases",
-      "lancerAutomationsSyncActorsToPrototype": "Lancer Automations — Sync Actors to Prototype Token",
-      "lancerAutomationsSyncTokenHeights": "Lancer Automations — Sync Token Heights",
+      "lancerAutomationsApplySystemFixes": "Lancer Automations: Apply System Fixes",
+      "lancerAutomationsNewsReleases": "Lancer Automations: News & Releases",
+      "lancerAutomationsSyncActorsToPrototype": "Lancer Automations: Sync Actors to Prototype Token",
+      "lancerAutomationsSyncTokenHeights": "Lancer Automations: Sync Token Heights",
       "limitedHandling": "LIMITED HANDLING",
+      "lineBlocked": "LINE BLOCKED",
       "linkItemToExtraBar": "Link Item to Extra Bar",
       "linkNarrativeHud": "Link Narrative HUD",
       "linkScanDocument": "Link Scan Document: {name}",
@@ -655,33 +710,28 @@
       "mountCaps": "MOUNT",
       "movementHistoryFor": "Movement History: {name}",
       "movementRerouted": "MOVEMENT REROUTED",
-      "npcsArriving": "NPCs Arriving",
       "overchargeBoostMove": "OVERCHARGE & BOOST & MOVE",
       "overwatchAlert": "Overwatch Alert",
       "overwatchCaps": "OVERWATCH",
       "packTitle": "Pack: {name} ({author})",
-      "pickAlly": "PICK ALLY",
       "pickStatus": "Pick Status",
       "pickToken": "Pick Token",
       "presetExists": "Preset Exists",
       "reactorExplosion": "Reactor Explosion",
       "reactorExplosionCaps": "REACTOR EXPLOSION",
-      "reactorMeltdown": "Reactor Meltdown",
       "reactorMeltdownCountdown": "Reactor Meltdown Countdown",
       "reloadRequired": "Reload Required",
       "renameFolder": "Rename Folder",
-      "reservesFor": "Reserves — {name}",
+      "reservesFor": "Reserves: {name}",
       "resetModuleDefaults": "Reset Module Defaults",
       "resetReactionChecker": "Reset Lancer Reaction Checker",
       "rest": "Rest",
       "reviewImport": "Review Import",
       "savePreset": "Save Preset",
       "scanAction": "SCAN Action",
-      "scanSelectTarget": "SCAN — Select Target",
+      "scanSelectTarget": "SCAN: Select Target",
       "searchCaps": "SEARCH",
       "selectAction": "Select Action",
-      "skirmishWeaponOrder": "SKIRMISH WEAPON ORDER",
-      "stabilizeFor": "Stabilize - {name}",
       "startupScript": "Startup Script",
       "stressOverridden": "STRESS OUTCOME OVERRIDDEN",
       "stressPrevented": "STRESS PREVENTED",
@@ -689,9 +739,8 @@
       "structurePrevented": "STRUCTURE PREVENTED",
       "systemDestroyed": "System Destroyed",
       "systemScanOptions": "System Scan Options",
-      "systemTrauma": "System Trauma",
       "systemTraumaCaps": "SYSTEM TRAUMA",
-      "systemTraumaNoEquipmentAvailable": "System Trauma - No Equipment Available",
+      "systemTraumaNoEquipmentAvailable": "System Trauma: No Equipment Available",
       "tearOff": "TEAR OFF",
       "techAttackCanceled": "TECH ATTACK CANCELED",
       "teleportCaps": "TELEPORT",
@@ -700,12 +749,12 @@
       "unlinkScanDocument": "Unlink Scan Document: {name}",
       "unlockPower": "Unlock Power",
       "unsavedChanges": "Unsaved changes",
-      "useReroll": "{name} — USE REROLL?",
+      "useReroll": "{name}: USE REROLL?",
       "veterancy": "VETERANCY",
       "voteTie": "Vote Tie",
       "waitingOverwatch": "WAITING - {name} OVERWATCH",
-      "weaponOrder": "WEAPON ORDER",
-      "weaponsDestroyed": "Weapons Destroyed"
+      "weaponsDestroyed": "Weapons Destroyed",
+      "worldClocks": "World Clocks"
     },
     "disposition": {
       "friendly": "Friendly",
@@ -749,8 +798,10 @@
         "applyToCondition": "Apply-to Condition",
         "code": "Code",
         "condition": "Condition",
-        "consumptionEvaluate": "Consumption Evaluate"
+        "consumptionEvaluate": "Consumption Evaluate",
+        "grantedActions": "Granted Actions"
       },
+      "deleteSavedStatus": "Delete the selected saved status",
       "editTitle": "Edit {title}",
       "mode": {
         "add": "Add",
@@ -784,7 +835,7 @@
         "applyItemLids": "Only apply this bonus when using these specific items (by LID). Leave empty to apply to all weapons.",
         "applyToConditionImmunity": "Gates the immunity per incoming attack. target is the attacker, reactorToken is you.",
         "applyToConditionRoll": "Runs once per target. target is who you are rolling against, reactorToken is you.",
-        "applyToTargetter": "If checked, this bonus is applied by the target to the attacker. Useful for debuffing attackers.",
+        "applyToTargetter": "If checked, this bonus is applied by the target to the attacker.",
         "applyTokens": "Apply this bonus to specific token IDs. Use the selector to pick tokens from the map.",
         "conditionImmunity": "Gates the immunity. actor is the attacker, reactorToken is you. Also hides it from the roll HUD list.",
         "conditionRoll": "Gates the bonus for the whole roll. actor is you.",
@@ -802,6 +853,8 @@
         "onActivation": "On Activation",
         "onAttack": "On Attack",
         "onCheck": "On Check",
+        "onCombatEnd": "On Combat End",
+        "onCombatStart": "On Combat Start",
         "onDamage": "On Damage",
         "onDeploy": "On Deploy",
         "onEndActivation": "On End Activation",
@@ -827,17 +880,52 @@
         "onStatusRemoved": "On Status Removed",
         "onTechAttack": "On Tech Attack",
         "onTechHit": "On Tech Hit",
+        "onInvadeHit": "On Invade Hit",
         "onTurnEnd": "On Turn End",
         "onTurnStart": "On Turn Start"
       }
     },
     "extras": {
       "addAction": "Add Action",
+      "addDeployable": "Add Deployable",
+      "back": "Back",
+      "copyJson": "Copy JSON",
+      "custom": "custom",
       "detailOptional": "Detail (optional)",
+      "editDeployableTitle": "Edit Deployable",
+      "fillForm": "Fill form",
+      "newDeployable": "New deployable",
+      "newDeployableTitle": "New Deployable",
+      "pasteJson": "Paste LCP JSON",
+      "pastePlaceholder": "One LCP deployable object",
       "saveChanges": "Save Changes",
       "saveCombat": "Save Combat",
       "showInTokenBar": "Show in Token Bar",
+      "specActions": "Actions",
+      "specActivation": "Activation",
+      "specJsonInvalid": "Not valid JSON: {error}",
+      "specJsonNoName": "No name in this deployable.",
+      "specLidPlaceholder": "LID (empty: la_dep_ + name)",
+      "specNoActions": "No actions.",
+      "specStats": "Stats",
+      "specTags": "Tags (tg_unique, tg_limited:2)",
+      "specTier": "Tier",
       "uuidPlaceholder": "Actor.X.Item.Y (UUID)"
+    },
+    "fireChain": {
+      "barragePick": "Click weapons in firing order. Each mount keeps one bonus shot.",
+      "bonusPickHint": "Pick the weapon that deals the bonus damage. It fires first, the other fires without it.",
+      "bonusPickTitle": "BONUS DAMAGE",
+      "fire": "Fire",
+      "fireCount": "Fire {count} weapons",
+      "followNoBonus": "2nd · No bonus damage",
+      "lastShot": "Last shot",
+      "noBonus": "No bonus damage",
+      "skirmishPick": "Click the weapon to fire first. On a mount of two Aux weapons, it takes the bonus damage.",
+      "stop": "Stop",
+      "then": "Then {name}",
+      "thenAfterDamage": "Then {name}, after this damage",
+      "thenAfterReaction": "Then {name}, after the reaction"
     },
     "flow": {
       "critImmune": "Crit Immune",
@@ -846,21 +934,23 @@
       "immunityFrom": "From: {sources}",
       "immunityWash": "Immunity Cancelled",
       "missImmune": "Miss Immune",
-      "stunnedAutoFail": "<span style=\"color:#c0392b;font-weight:bold;\">AUTOMATIC FAILURE</span>: {name} is <b>Stunned</b> and automatically fails {stat} checks and saves.",
-      "thisWeaponCanBeThrown": "This weapon can be thrown."
+      "stunnedAutoFail": "<span style=\"color:#c0392b;font-weight:bold;\">AUTOMATIC FAILURE</span>: {name} is <b>Stunned</b> and automatically fails {stat} checks and saves."
     },
     "grapple": {
       "attemptToBreakFreeFromA": "Attempt to break free from a grapple with a contested HULL check.",
-      "breakFreeQuickAction": "Break Free (Quick Action)",
-      "chooseAGrappleAction": "Choose a grapple action:",
+      "cannotMove": "{name} is IMMOBILIZED by a grapple and cannot move voluntarily.",
+      "chat": {
+        "apart": "{holder} and {held} are no longer adjacent. The grapple ends.",
+        "breakFree": "{name} breaks free from {grappler}.",
+        "breakFreeFail": "{name} fails to break free from {grappler}.",
+        "contestLost": "{name} loses the grapple contest against {other}.",
+        "contestWon": "{name} wins the grapple contest against {other}.",
+        "end": "{name} ends the grapple on {targets}.",
+        "start": "{name} grapples {targets}."
+      },
       "chooseGrappler": "{name}: choose which grappler to contest.",
-      "contestGrappleHullCheck": "Contest Grapple (HULL Check)",
-      "contestPrompt": "{name}: Make a HULL check to determine who controls the grapple. On success your side counts as larger — the other side becomes IMMOBILIZED.",
-      "endGrappleFreeAction": "End Grapple (Free Action)",
+      "contestPrompt": "{name}: make a HULL check to see who controls the grapple. On a win your side counts as larger and the other side becomes IMMOBILIZED.",
       "endYourGrappleAsAFree": "End your grapple as a free action.",
-      "grappleMeleeAttack": "Grapple (Melee Attack)",
-      "notBeingGrappled": "You aren't being grappled.",
-      "notGrapplingAnyone": "You aren't grappling anyone.",
       "placeToFollow": "Place {tokens} to follow {name}.",
       "skipContest": "Skip Contest"
     },
@@ -878,6 +968,25 @@
       "cardTitle": "INFECTION",
       "cardTotal": "(Total: {total})",
       "rollTip": "Roll an infection check and generate heat damage"
+    },
+    "invade": {
+      "builtIn": "Built-in",
+      "choose": "Choose",
+      "confirm": "Invade {count} targets",
+      "extraAction": "Extra Action",
+      "hint": "Right-click an invade for details",
+      "hitMany": "{count} targets hit. Pick a target, then its invade.",
+      "hitOne": "{name} was hit. Choose the invade.",
+      "miss": "Miss",
+      "missed": "{names} missed.",
+      "noneChosen": "No invade chosen",
+      "offCore": "Core power not active",
+      "offDestroyed": "Destroyed",
+      "offDisabled": "Disabled",
+      "offUnavailable": "Not available",
+      "sameForAll": "Same for all",
+      "title": "INVADE",
+      "unknown": "Lancer did not check the hit. Choose the invade if it hit."
     },
     "keybindings": {
       "actionWheel": {
@@ -905,12 +1014,12 @@
         "name": "Toggle Card Targeting"
       },
       "debugMovement": {
-        "hint": "While held, the next move skips automation, history and animation.",
-        "name": "Debug Movement (hold)"
+        "hint": "Press during a drag to make that move a debug move: it skips automation, history and animation. Every drag starts with it off.",
+        "name": "Debug Movement (toggle)"
       },
       "freeMovement": {
-        "hint": "While held, the next move (drag-drop or from code) does not consume the movement cap and ignores terrain penalty, and an action clicked in the TAH spends no action. A weapon clicked in the TAH rolls a plain attack.",
-        "name": "Free Move / Action (hold)"
+        "hint": "Press during a drag to make that move free: it does not consume the movement cap and ignores terrain penalty. Every drag starts with it off. Outside a drag, while on, an action clicked in the TAH spends no action and a weapon clicked in the TAH rolls a plain attack.",
+        "name": "Free Move / Action (toggle)"
       },
       "movementWheel": {
         "hint": "Open a radial picker for the movement action. During a drag, Tab cycles it instead.",
@@ -950,20 +1059,32 @@
         "hint": "Switch the Measure Distance ruler between distance and line of sight. Needs Lancer Line of Sight on.",
         "name": "Sightline Ruler"
       },
+      "toggleElevationCost": {
+        "hint": "While dragging, turn the extra cost of climbing off or on for this drag. Each space climbed is still paid.",
+        "name": "Toggle Elevation Cost"
+      },
       "togglePathfinding": {
         "hint": "Toggle drag pathfinding for this session. Needs Pathfind Drag Movement on.",
         "name": "Toggle Pathfinding"
+      },
+      "toggleStraightLine": {
+        "hint": "While dragging, flip straight-line movement for this drag. On by default for Flying, Jump and the Straight Line status.",
+        "name": "Toggle Straight Line"
       }
     },
     "dragFeedback": {
       "debugOff": "Debug move off",
       "debugOn": "Debug move",
+      "elevationCostOff": "Elevation Cost off",
+      "elevationCostOn": "Elevation Cost on",
       "freeOff": "Free move off",
       "freeOn": "Free move",
       "ground": "Ground",
       "hold": "Hold",
       "pathfindOff": "Pathfinding off",
-      "pathfindOn": "Pathfinding on"
+      "pathfindOn": "Pathfinding on",
+      "straightOff": "Straight line off",
+      "straightOn": "Straight line"
     },
     "lancerModif": {
       "ammoName": "Ammo Name",
@@ -977,9 +1098,25 @@
       "markCascading": "Mark Cascading",
       "markNotCascading": "Mark Not Cascading"
     },
+    "leave": {
+      "due": "{count} leave this round. Untick one to keep it here.",
+      "edge": {
+        "east": "Leaves by the east edge",
+        "north": "Leaves by the north edge",
+        "south": "Leaves by the south edge",
+        "west": "Leaves by the west edge"
+      },
+      "hint": "Click a unit to leave or stay",
+      "leave": "LEAVE",
+      "leaveCount": "Leave {count}",
+      "notInEncounter": "Only units in the encounter can leave the battlefield.",
+      "stay": "STAY",
+      "stayAll": "Stay all",
+      "title": "Leaving the battlefield"
+    },
     "main": {
       "immunityPrompt": "<b>{name}</b> affected by <b>{status}</b>.<hr>Immunity from: <i>{sources}</i>. Activate?",
-      "lasossisSItemActivations": "LaSossis's item activations",
+      "lasossisSItemActivations": "LaSossis's item automations",
       "noAllowEffect": "No (Allow Effect)",
       "personalTweaks": "Personal tweaks",
       "yesResistEffect": "Yes (Resist Effect)"
@@ -1010,7 +1147,7 @@
         "hoverSelect": "Hover or select",
         "key": {
           "click": "Click",
-          "ctrlWheel": "Ctrl+Wheel",
+          "drag": "Drag",
           "esc": "Esc",
           "holdCtrl": "Hold Ctrl",
           "rightClick": "Right-click",
@@ -1034,7 +1171,7 @@
         "tilt": "tilt a line",
         "title": "Help and shortcuts",
         "tour": "Start the tour",
-        "turn": "turn a cone or line"
+        "turn": "aim a cone or line from where you press"
       },
       "increase": "Increase",
       "labels": "Tactical distance labels",
@@ -1084,20 +1221,23 @@
     "misc": {
       "confirmTheTokensCaughtInThe": "Confirm the tokens caught in the Burst 2. Close the card to cancel.",
       "meltdownDetail": "Reactor meltdown initiated. Explosion will occur at the end of turn {turn}. Your mech will be annihilated, dealing 4d6 Explosive Damage in a Burst 2 radius.",
-      "selectWhichMountToTriggerAux": "Select which mount to trigger. Aux weapons don't deal bonus damage.",
       "waitingForRoll": "Waiting for {name} to roll…"
     },
     "moduleTitle": "Lancer Automations",
     "movement": {
       "exceedsCapBoost": "Movement exceeds cap ({need}/{cap}). Boost adds +{boost}.",
+      "exceedsCapNoCover": "This move costs {need} and you have {cap}. Boost and Overcharge cannot cover the rest. Press <b>{key}</b> while dragging to move for free.",
+      "exceedsCapNoOffer": "This move costs {need} and you have {cap}. Take Boost first, or press <b>{key}</b> while dragging to move for free.",
       "exceedsCapOvercharge": "Movement exceeds cap+boost ({need}/{reach}). Overcharge grants an extra Boost (+{boost}).",
       "historyPrompt": "What would you like to do with the movement history?",
       "historyTitle": "Movement History",
+      "lineBlocked": "A hostile stands in the straight line.",
       "moveUpToYourSpeed": "Move up to your speed.",
       "resetAndRevertAll": "Reset & Revert All",
       "resetHistory": "Reset History",
       "revertLastMove": "Revert Last Move",
       "standingUpDetail": "Stands up, using their standard move (+{speed} speed). Removes Prone.",
+      "stopAtBlock": "Stop at block",
       "teleportPrompt": "Select destination within Range {range}. Costs {cost} movement."
     },
     "news": {
@@ -1106,10 +1246,13 @@
     "notify": {
       "actionLockedFiringAnyway": "{action} is locked on {name}. Firing anyway.",
       "actionNeedsAName": "Action needs a name.",
-      "activationCopiedToClipboard": "Activation copied to clipboard.",
-      "activationNameIsRequiredForGeneralActivations": "Activation Name is required for general activations",
-      "activeEffectChangesCouldNotBeParsed": "Active Effect Changes could not be parsed; left out of the snippet.",
+      "activationCopiedToClipboard": "Automation copied to clipboard.",
+      "allyNotAdjacent": "{name} is not adjacent.",
+      "activationNameIsRequiredForGeneralActivations": "Activation Name is required for general automations",
+      "activeEffectChangesCouldNotBeParsed": "Active Effect Changes could not be parsed. They were left out of the snippet.",
       "activeEffectChangesMustBeAnArray": "Active Effect Changes must be an array.",
+      "grantedActionsMustBeAnArray": "Granted Actions must be an array.",
+      "grantedActionsParseError": "Granted Actions parse error: {error}",
       "actorAndItemAreRequired": "Actor and item are required.",
       "addedProjectToPilot": "Added project \"{item}\" to {pilot}.",
       "addedToPilot": "Added \"{item}\" to {pilot}.",
@@ -1121,7 +1264,7 @@
       "alreadyHasEffectConflict": "{name} already has {effect} (Group/Bonus conflict)!",
       "altStructFlowConflict": "Lancer Automations (Alt Structure): flow conflict detected. The other module's changes will be overwritten. {details}. See console.",
       "altStructFlowNotRegistered": "Alt-struct flow \"{flow}\" not registered.",
-      "altStructModuleConflict": "Lancer Automations: Alt Structure feature is enabled but the standalone 'lancer-alt-structure' module is also active - integrated version will not load. Disable one of them.",
+      "altStructModuleConflict": "Lancer Automations: Alt Structure feature is enabled but the standalone 'lancer-alt-structure' module is also active, so the integrated version will not load. Disable one of them.",
       "anErrorOccurredWhilePackingMacrosCheck": "An error occurred while packing macros. Check the console for details.",
       "appliedDefaults": "Applied defaults to {count} token(s).",
       "appliedFixes": "Applied fixes to {count} item(s).{hint}",
@@ -1132,15 +1275,14 @@
       "battleLogCardCopiedToClipboard": "Battle Log card copied to clipboard.",
       "battleLogExportFailed": "Battle Log card export failed: {error}",
       "blastCenterOutOfRange": "Blast center out of range.",
-      "breaksFree": "{name} breaks free from {grappler}!",
       "burstTargetOutOfRange": "Burst target out of range.",
       "cancelledChoiceCard": "{name} cancelled the choice card.",
       "cannotResolveFlowBase": "Cannot resolve Flow base class for {flow}.",
       "cannotRevertNotOwner": "You do not own {name} and cannot revert their movement.",
       "clipboardCopyFailed": "Clipboard copy failed: {error}",
-      "clipboardDoesNotContainAValidActivation": "Clipboard does not contain a valid activation.",
+      "clipboardDoesNotContainAValidActivation": "Clipboard does not contain a valid automation.",
       "compendiumNotFound": "Compendium '{pack}' not found. Ensure you updated module.json and RESTARTED Foundry.",
-      "compiledFunctions": "Compiled {count} function(s) under dynamic/{base}/ - see devtools Sources.",
+      "compiledFunctions": "Compiled {count} function(s) under dynamic/{base}/. See devtools Sources.",
       "configButtonFailed": "\"{label}\" failed, see the console.",
       "configurationExportedSuccessfully": "Configuration exported successfully.",
       "copiedLid": "Copied LID: {lid}",
@@ -1158,10 +1300,12 @@
       "currentSceneDimensionsAreEmptySetWidth": "Current scene dimensions are empty. Set Width and Height first.",
       "customTriggerOnInit": "Custom trigger \"{name}\": names cannot start with \"onInit\".",
       "declinedChoice": "{name} declined the choice.",
+      "deletedCustomStatus": "Deleted \"{name}\" from custom statuses.",
       "deletedPreset": "Deleted preset \"{name}\".",
       "deployableCreateFailed": "Failed to create deployable actor for: {input}",
+      "deployableNeedsAName": "Deployable needs a name.",
       "deployableNotFound": "Deployable not found: {input}",
-      "deprecatedActivations": "{count} saved activation(s) use a deprecated pattern. See the console for details.",
+      "deprecatedActivations": "{count} saved automation(s) use a deprecated pattern. See the console for details.",
       "deprecatedApi": "An automation uses deprecated Lancer Automations code. {message} The console lists every use.",
       "destinationIsOutOfRange": "Destination is out of range.",
       "dismountNoPilot": "Dismount: no linked pilot found on {name}.",
@@ -1190,7 +1334,6 @@
       "failedToCreateTemplateHardCoverActor": "Failed to create Template Hard Cover actor.",
       "failedToCreateTemplateThrowActor": "Failed to create Template Throw actor.",
       "failedToLoadFromClipboardInvalidJson": "Failed to load from clipboard: invalid JSON.",
-      "failsToBreakFree": "{name} fails to break free from {grappler}.",
       "floatingNumbers": "Floating Numbers: {state}",
       "folderMissing": "{folder} does not exist and must be created manually.",
       "forceCheckNoTargetsSelected": "Force Check: no targets selected.",
@@ -1201,11 +1344,11 @@
       "iconIsRequiredToSaveAStatus": "Icon is required to save a status.",
       "ignoredDangerousTerrain": "{name} ignored dangerous terrain.",
       "immovableBlocked": "{name} is IMMOVABLE and cannot be moved.",
-      "immuneMissAndHit": "{name} is immune to miss and hit - these effects cancel each other",
+      "immuneMissAndHit": "{name} is immune to miss and hit: these effects cancel each other",
       "immuneToCrits": "{name} is immune to Critical Hits!",
-      "immuneToGrapple": "{name} is immune to grapple — grapple has no effect.",
+      "immuneToGrapple": "{name} is immune to grapple. Grapple has no effect.",
       "immuneToHits": "{name} is immune to Hits: attack misses!",
-      "immuneToMiss": "{name} is immune to miss - attack hits!",
+      "immuneToMiss": "{name} is immune to miss: the attack hits!",
       "importApplied": "Import applied.",
       "importApplyFailed": "Failed to apply import: {error}",
       "importFailed": "Import failed: {error}",
@@ -1227,6 +1370,7 @@
       "keyReservedByFoundry": "\"{key}\" is reserved by Foundry and cannot be bound.",
       "knockbackNotAway": "Not directly away from {name}.",
       "knockbackNotAwayFromPoint": "Not directly away from the point of origin.",
+      "knockbackOtherScene": "Knockback from {user} skipped: you are not viewing {scene}.",
       "labelledItemDisabled": "{label} {name} is disabled!",
       "lancerAutomationsMacroPackNotFound": "lancer-automations macro pack not found",
       "lancerAutomationsSetupApplied": "Lancer Automations setup applied.",
@@ -1246,6 +1390,7 @@
       "migrationCompleteReloadingIn1Second": "Migration complete. Reloading in 1 second...",
       "missingFlowTypeOrActorIdOn": "Missing flow type or actor ID on alt-struct button.",
       "movementBlockedBy": "Movement blocked by {name}.",
+      "mustStayAdjacent": "Pick a space next to {name}.",
       "movementHistoryCleared": "Movement history cleared for: {names}.",
       "nameIsRequired": "Name is required!",
       "nameIsRequiredToSaveAStatus": "Name is required to save a status.",
@@ -1273,6 +1418,7 @@
       "noJsonFilesFound": "No .json files found in {path}",
       "noLancerTokensOnThisScene": "No Lancer tokens on this scene.",
       "noMechForThisTokenPickA": "No mech for this token. Pick a mech token, or a pilot with an active mech.",
+      "mountUnloaded": "{name} is unloaded.",
       "noMountsOrWeapons": "No {kind} found.",
       "noMovementHistory": "{name} has no movement history to revert.",
       "nothingToRevert": "{name} has nothing to revert this turn.",
@@ -1292,7 +1438,7 @@
       "noUnloadedWeapons": "{name} has no unloaded weapons to reload!",
       "noUsesLeft": "{name} has no uses left.",
       "noUsesRemaining": "{name} has no uses remaining.",
-      "noUsesSet": "{name}: no Uses set - consumed on first use.",
+      "noUsesSet": "{name}: no Uses set, consumed on first use.",
       "noValidActorProvidedForRecharging": "No valid actor provided for recharging.",
       "noValidActorProvidedForReloading": "No valid actor provided for reloading.",
       "noValidDeployablesFound": "No valid deployables found.",
@@ -1319,6 +1465,8 @@
       "onlyTheGmCanSyncActorPortraits": "Only the GM can sync actor portraits.",
       "onlyTheGmCanSyncTokenHeights": "Only the GM can sync token heights.",
       "optedOutNoMoreDataWillBe": "Opted out. No more data will be sent.",
+      "ordnanceEngagedTarget": "{weapon}: Ordnance can't target {targets}, engaged with you. Firing anyway.",
+      "ordnanceWindowClosed": "{weapon}: Ordnance must fire before you move or act. Firing anyway.",
       "outOfCombatDuration": "Out of combat: {names} duration will not tick.",
       "outOfCombatEncounter": "No combat: {names} ends when the next combat on this scene ends.",
       "packsLocked": "Could not write to {packs}. Open the Compendium tab, right-click each pack, pick \"Toggle Edit Lock\", and re-run.",
@@ -1326,18 +1474,16 @@
       "perRoundLimit": "{name}: per-round limit reached.",
       "perTurnLimit": "{name}: per-turn limit reached.",
       "pickADestinationFirst": "Pick a destination first.",
-      "pickOneOptionFromEachGroup": "Pick one option from each group.",
       "pickedUp": "Picked up {name}.",
       "pleaseSelectAFileToImport": "Please select a file to import.",
       "pleaseSelectATargetTokenFirst": "Please select a target token first.",
       "pleaseSelectATargetTokenOnThe": "Please select a target token on the map, or fill in the 'Apply to tokens' field first, to pick an item from them.",
       "pleaseSelectATokenFirst": "Please select a token first.",
       "pleaseSelectAnItemOrDeployableFirst": "Please select an item or deployable first.",
-      "pleaseSelectAtLeastOneToken": "Please select at least one token!",
-      "portraitCouldNotBeEmbeddedRemoteImage": "Portrait could not be embedded (remote image); card exported without it.",
+      "portraitCouldNotBeEmbeddedRemoteImage": "Portrait could not be embedded (remote image). The card was exported without it.",
       "powerNoUsesLeft": "{name} has no uses left.",
       "prototypeSyncDone": "Prototypes: {protoUpdated} updated, {protoSkipped} skipped. Scene tokens: {sceneUpdated} updated, {sceneSkipped} skipped.",
-      "prototypeSyncFailedSeeConsole": "Prototype sync failed; see console.",
+      "prototypeSyncFailedSeeConsole": "Prototype sync failed. See the console.",
       "reactorMeltdownCancelled": "Reactor Meltdown cancelled.",
       "reactorMeltdownNoTurnCountProvided": "Reactor Meltdown: no turn count provided.",
       "readingLcpSourceData": "Reading LCP source data...",
@@ -1351,7 +1497,8 @@
       "savedCustomStatus": "Saved \"{name}\" to custom statuses.",
       "savedFile": "Saved {name}.",
       "savedPreset": "Saved preset \"{name}\".",
-      "scanJournalNoPermission": "{name} attempted to run SCAN to Journal but lacks proper permissions. Please correct and try again.",
+      "scanJournalNoPermission": "{name} attempted to run SCAN to Journal but lacks the permissions for it.",
+      "scanOtherScene": "Scan request from {user} skipped: you are not viewing {scene}.",
       "scanRegenerated": "Regenerated {updated}, missing {missing}, skipped {skipped}.",
       "scanRequestSent": "Scan request sent to GM for {count} target{plural}.",
       "scanRequestSentNoDot": "Scan request sent to GM for {count} target{plural}",
@@ -1360,9 +1507,9 @@
       "sceneDimensionsSet": "Scene dimensions set to {width} × {height}.",
       "scriptNameIsRequired": "Script name is required.",
       "searchFound": "{searcher} found {target}!",
-      "selectAConditionToClearFirst": "Select a condition to clear first.",
       "selectAPilotOrMechToken": "Select a pilot or mech token.",
       "selectAPresetToDeleteFirst": "Select a preset to delete first.",
+      "selectASavedStatusToDeleteFirst": "Select a saved status to delete first.",
       "selectExactly2TokensToMeasureDistance": "Select exactly 2 tokens to measure distance.",
       "selectedTokenMustBeAMechOr": "Selected token must be a mech or NPC!",
       "sentCardToUsers": "Sent card to {count} users.",
@@ -1370,9 +1517,9 @@
       "statusFxOverrideAuto": "auto-status is",
       "statusFxOverrideBoth": "auto-status and condition effects are",
       "statusFxOverrideFx": "condition effects are",
-      "statusFxOverrideHead": "Lancer Automations StatusFX is active — csm-lancer-qol's",
+      "statusFxOverrideHead": "Lancer Automations StatusFX is active: csm-lancer-qol's",
       "statusFxOverrideTail": "being overridden. Disable them in csm-lancer-qol settings to remove this warning.",
-      "syncFailedSeeConsole": "Sync failed; see console.",
+      "syncFailedSeeConsole": "Sync failed. See the console.",
       "syncedPortraits": "Synced {images} portrait{imagePlural} and {names} name{namePlural}, skipped {skipped}.",
       "synchronizingMacros": "Synchronizing {count} macros into {pack}...",
       "systemDestroyed": "System {name} is destroyed!",
@@ -1392,7 +1539,6 @@
       "theAddExtraTourNeedsAMech": "The Add Extra tour needs a mech on the scene.",
       "theVoteWasCancelled": "The vote was cancelled.",
       "thereMustBeAnActiveGmFor": "There must be an active GM for this to work.",
-      "thisItemCannotBeDestroyed": "This item cannot be destroyed.",
       "threatDebugSize": "Debug: Token Size {width}x{height}, Max Threat: {threat}",
       "threatDebugVisualizationCurrentlyOnlySupportsHex": "Threat debug visualization currently only supports hex grids",
       "throwableUnavailable": "All throwable weapons for {name} are unavailable.",
@@ -1400,7 +1546,6 @@
       "tokenHasFallen": "Token has fallen {amount} space{total}",
       "tokenIsAlreadyOnTheGround": "Token is already on the ground",
       "tokenVisionUpdated": "Token vision updated.",
-      "tokensWillAppear": "{count} token(s) will appear at round {round}",
       "tookChoiceCard": "{name} took the choice card.",
       "totalCostExceedsAvailableRepairs": "Total cost exceeds available repairs.",
       "turnTriggersOtherScene": "Turn triggers skipped: open {scene} to run them. Durations still tick.",
@@ -1412,8 +1557,8 @@
       "updatingPlacedTokenVision": "Updating placed token vision...",
       "updatingPrototypeTokenVision": "Updating prototype token vision...",
       "useammoflowNotRegisteredIsTheFlowRegistration": "UseAmmoFlow not registered. Is the flow registration enabled?",
-      "voteConcluded": "Vote concluded — winner: {winner}",
-      "wallHeightIsNotActiveValuesWritten": "Wall Height is not active — values written but unused by the canvas.",
+      "voteConcluded": "Vote concluded. Winner: {winner}",
+      "wallHeightIsNotActiveValuesWritten": "Wall Height is not active: the values are written but the canvas doesn't use them.",
       "weaponReloaded": "{name}'s {weapon} reloaded!",
       "workshopLikeFailed": "Could not save the like: {error}",
       "workshopRefreshFailed": "Workshop refresh failed: {error}",
@@ -1430,9 +1575,9 @@
       "asyncEvaluationWarning": "lancer-automations | Evaluation for \"{name}\" is async and {reason} without \"Await Activation Completion\". This will likely fail to block movement or timing-sensitive bonuses.",
       "barrageNeedsToken": "lancer-automations | barrage requires a token.",
       "brokeFreeFromSealant": "{name} breaks free from the Sealant Blend!",
-      "choiceRecipientOfflineFallback": "lancer-automations | \"{names}\" offline — {fallback} will handle the choice instead.",
-      "choiceRecipientOfflineRemoved": "lancer-automations | \"{names}\" offline — removed from choice recipients.",
-      "chooseTokenPreselectedOverflow": "chooseToken: {selected} pre-selected tokens but count is {count}; only the first {count} will be used.",
+      "choiceRecipientOfflineFallback": "lancer-automations | \"{names}\" offline, {fallback} will handle the choice instead.",
+      "choiceRecipientOfflineRemoved": "lancer-automations | \"{names}\" offline, removed from choice recipients.",
+      "chooseTokenPreselectedOverflow": "chooseToken: {selected} pre-selected tokens but count is {count}. Only the first {count} will be used.",
       "choseTraitNpcOnly": "choseTrait: only NPC actors are supported.",
       "clearedConditionFrom": "Cleared {condition} from {name}.",
       "diagnosticsFirstTargetOnly": "Battlefield Diagnostics: Multiple targets hit. Only applying to the first target.",
@@ -1446,6 +1591,7 @@
       "flowNotFoundPrefixed": "lancer-automations | Flow \"{name}\" not found.",
       "generalActionMissing": "lancer-automations | activateGeneralAction: no general action \"{name}\".",
       "getActorFlagsArgs": "getActorFlags: actor is required.",
+      "gmRequestFailed": "The GM could not apply this change.",
       "getItemFlagsArgs": "getItemFlags: item is required.",
       "getTokenFlagsArgs": "getTokenFlags: token is required.",
       "halfDamageNeedsToken": "lancer-automations | halfDamageOnSave needs a Token origin, damage roll skipped.",
@@ -1460,6 +1606,7 @@
       "lockActorActionTypesArgs": "lockActorActionTypes: actor, activationTypes and sourceId are required.",
       "lockActorActionTypesEmpty": "lockActorActionTypes: at least one activation type is required.",
       "movingTargetRifleMissing": "Moving Target: Anti-materiel Rifle not found on {name}.",
+      "noRiftToBreak": "{name} has no Rift immobilization to break free from.",
       "noSealantToBreak": "{name} has no Sealant Blend immobilization to break free from.",
       "noTokensSelected": "No tokens selected.",
       "noWeaponsToCalibrate": "{name} has no valid weapons to calibrate.",
@@ -1538,7 +1685,7 @@
         "label": "Set token height from size?"
       },
       "automation": {
-        "blurb": "Activation behavior, the prebuilt content pack, and scanning.",
+        "blurb": "Automation behavior, the prebuilt content pack, and scanning.",
         "label": "Activations & Content"
       },
       "battle-log": {
@@ -1570,8 +1717,8 @@
         "label": "Spend actions on successful activations?"
       },
       "consume-reaction": {
-        "explain": "Spends the token's reaction for the round.",
-        "label": "Spend reactions on Reaction activations?"
+        "explain": "Spends the token's Reaction for the round.",
+        "label": "Spend the Reaction on Reaction-type actions?"
       },
       "count-3d-distance": {
         "explain": "Elevation feeds Overwatch, engagement and weapon range checks.",
@@ -1624,6 +1771,14 @@
         "explain": "A move ends when the token comes adjacent to a hostile of equal or greater size.",
         "label": "Stop movement on engagement?"
       },
+      "foundry-applications-theme": {
+        "explain": "Colors of Foundry's sheets and other windows.",
+        "label": "Which Foundry theme for applications?"
+      },
+      "foundry-interface-theme": {
+        "explain": "Colors of Foundry's sidebar and other interface elements.",
+        "label": "Which Foundry theme for the interface?"
+      },
       "guardian-bulwark-aura": {
         "choices": {
           "always": "Always",
@@ -1662,9 +1817,8 @@
         "label": "Add Lancer detection modes to new tokens?"
       },
       "lasossis-items": {
-        "explain": "30+ automations like Dispersal Shield and Defense Net, some needing my NPC Deployables LCP.",
-        "label": "Install LaSossis's item activations?",
-        "link": "Get the Deployables LCP"
+        "explain": "30+ automations like Dispersal Shield and Defense Net.",
+        "label": "Install LaSossis's item automations?"
       },
       "link-manual-deploy": {
         "explain": "A hand-placed deployable links to your token like one from the deploy menu.",
@@ -1672,8 +1826,7 @@
       },
       "movement-beta": {
         "blurb": "Features that interrupt or reshape movement mid-drag.",
-        "label": "Movement: Interrupts",
-        "note": "<p><b>A word on movement.</b> Movement and the automation around it (Overwatch, Engagement, reactions on move, boost split, etc.) hooks into Foundry's v13 move pipeline. The multi step stacks (Boost &amp; Move, Overcharge &amp; Boost &amp; Move) advance on <code>onMove</code> / <code>onActivation</code>, which fire post commit, so each leg has settled before the next one runs.</p><p>It's only medium stable though, so a few caveats:</p><ul><li>Be wary on <b>very vertical maps</b>: heavy climbing / hover / big elevation deltas can throw off the cost math, and the longer chains (3 leg Overcharge path) have the most surface to misbehave.</li><li>If a stack stalls or a leg lands wrong, fall back to <b>Ignore</b> on the choice card, or hold the <b>free movement</b> key for a single drag.</li><li>For purely measuring (no token follow, no cost), <b>Ctrl+drag</b> from any empty hex gives you the vanilla ruler.</li></ul><p>Predictive / multi waypoint dragging is still beta. If you hit weirdness, splitting the move into two drags usually unblocks it.</p>"
+        "label": "Movement: Interrupts"
       },
       "movement-cap": {
         "choices": {
@@ -1736,8 +1889,8 @@
           "gm": "GM only",
           "owner": "Owner only"
         },
-        "explain": "Who gets the prompt when an activation fires.",
-        "label": "Who sees the activation popup?"
+        "explain": "Who gets the reminder when an automation fires.",
+        "label": "Who gets the reminders?"
       },
       "reloadPrompt": "Some of your answers need a reload to take effect. Reload now? The tour is offered once Foundry is back.",
       "remove-wrecks-combat": {
@@ -1902,10 +2055,6 @@
         "explain": "The Token Factions ring draws below the sprite with no color fill.",
         "label": "Put faction rings under the token art?"
       },
-      "throw-flow": {
-        "explain": "Thrown weapons first ask whether to attack or throw onto the field.",
-        "label": "Ask Attack or Throw for thrown weapons?"
-      },
       "token-hud-buttons": {
         "explain": "Hides Foundry's status, combat and target buttons and the module's extra buttons.",
         "label": "Slim down the right-click token HUD?"
@@ -1955,8 +2104,8 @@
       "forceTitle": "Force this on your players (Force Client Settings). You can soften or lift it later from the lock icons in the config window.",
       "hideAdvanced": "Hide advanced",
       "importTip": "<b>Already set up another world?</b> Export your config there (<b>Tools → Export to JSON</b>) and import it here to skip all of this.",
-      "intro": "This wizard walks you through the module's main features as plain yes/no questions. Your answers flip the matching settings. Nothing is saved until you reach the end and press <b>Apply</b>.",
-      "introLater": "You can change any of these later in <b>Game Settings → Configure Settings → Lancer Automations</b>, or re-run this wizard from there at any time.",
+      "intro": "Yes/no questions about the module's main features. Each answer flips the matching settings. Nothing is saved until you press <b>Apply</b> at the end.",
+      "introLater": "Change any of these later in <b>Game Settings → Configure Settings → Lancer Automations</b>, where you can also re-run this wizard.",
       "lancerAutomationsSetup": "LANCER AUTOMATIONS SETUP",
       "myRecommendedAnswersForEverythingThen": "My recommended answers for everything, then a handful of choices only you can make.",
       "next": "Next",
@@ -1971,6 +2120,15 @@
       "useRecommendedSetup": "Use recommended setup",
       "yes": "Yes"
     },
+    "ownEconomy": {
+      "auto": "Auto",
+      "ownActions": "Own actions",
+      "ownActionsHint": "Its actions do not spend the owner's actions.",
+      "ownMove": "Moves on its own",
+      "ownMoveHint": "Moves with its own movement while its owner fights.",
+      "speed": "Speed",
+      "speedHint": "Blank uses its own speed, else the owner's."
+    },
     "perFrequency": {
       "perMission": "PER MISSION",
       "perRound": "PER ROUND",
@@ -1984,6 +2142,126 @@
         "orgPurpose": "Purpose / Goal"
       }
     },
+    "prepare": {
+      "ask": "Take the prepared action?",
+      "askTitle": "PREPARED: {name}",
+      "basic": "Basic",
+      "changeAction": "Action",
+      "confirm": "Prepare",
+      "damageType": "Damage type",
+      "dropped": "Dropped",
+      "found": "Found",
+      "holding": "Holding:",
+      "letPass": "Let pass",
+      "lost": "Lost",
+      "missing": "{name} is no longer available.",
+      "movedFoot": "Moved this turn: the Skirmish weapon pick will refuse Ordnance weapons.",
+      "noMatch": "No quick action matches.",
+      "or": "or",
+      "ordnanceReason": "Ordnance: moved before preparing",
+      "presets": "Presets",
+      "range": {
+        "in": "in my {source}",
+        "inWeapon": "in range of my {weapon}",
+        "into": "into my {source}",
+        "intoWeapon": "into range of my {weapon}",
+        "los": "Line of sight",
+        "manual": "Range",
+        "noLos": "{text} (line of sight ignored)",
+        "noWeapon": "No weapon",
+        "within": "within {range} of me",
+        "withinSource": "within my {source}",
+        "withinWeapon": "within range of my {weapon}"
+      },
+      "row": "Prepared: {name}",
+      "rule": "Until the start of {name}'s next turn. Taken as a reaction when triggered.",
+      "searchPlaceholder": "Search systems, gear and other quick actions",
+      "sentenceThen": ", then",
+      "sentenceWhen": "When",
+      "source": {
+        "manual": "Manual",
+        "reach": "Max Reach",
+        "sensor": "Sensors",
+        "threat": "Threat",
+        "weapon": "Weapon"
+      },
+      "taken": "Taken this turn",
+      "then": "Then",
+      "title": "PREPARE",
+      "triggerPlaceholder": "When...",
+      "use": "Use",
+      "used": "Used",
+      "when": {
+        "action": {
+          "text": "takes an action",
+          "tile": "Action"
+        },
+        "attacks": {
+          "text": "attacks",
+          "tile": "Attacks"
+        },
+        "attacksMe": {
+          "text": "attacks me",
+          "tile": "Attacks me"
+        },
+        "damages": {
+          "text": "deals {types}damage",
+          "tile": "Damages"
+        },
+        "damagesMe": {
+          "text": "deals {types}damage to me",
+          "tile": "Damages me"
+        },
+        "hits": {
+          "text": "hits",
+          "tile": "Hits"
+        },
+        "misses": {
+          "text": "misses",
+          "tile": "Misses"
+        },
+        "moves": {
+          "text": "starts moving",
+          "tile": "Moves",
+          "where": "moves {where}"
+        },
+        "reaction": {
+          "text": "takes a reaction",
+          "tile": "Reaction"
+        }
+      },
+      "whenHead": "When",
+      "where": {
+        "adjacent": {
+          "inside": "while {key} to me",
+          "key": "adjacent",
+          "moving": "{key} to me",
+          "text": "{key} to me",
+          "tile": "Adjacent"
+        },
+        "range": {
+          "tile": "In range"
+        },
+        "sight": {
+          "inside": "in my {key}",
+          "key": "line of sight",
+          "moving": "into my {key}",
+          "text": "in my {key}",
+          "tile": "In sight"
+        }
+      },
+      "whereHead": "Where",
+      "whereInside": "Already there counts",
+      "who": {
+        "ally": "Any ally",
+        "hostile": "Any hostile",
+        "tokens": "Tokens"
+      },
+      "whoHead": "Who",
+      "whoPick": "Click a token · ⇧ several · Right-click / Esc ends",
+      "whoRemove": "Remove",
+      "writeOwn": "Write my own"
+    },
     "reaction": {
       "chooseTheAdjacentMechTo": "Choose the adjacent mech to JOCKEY.",
       "content": {
@@ -1996,6 +2274,16 @@
       "flyingTookDamage": "<b>{name}</b> took {damage} while Flying. Roll AGILITY save or lose Flying.",
       "hangingInAir": "<b>{name}</b> is hanging in the air. Does it fall?",
       "jockeyClimbs": "{name} climbs onto {mech}. Choose one:",
+      "lane": {
+        "clearAll": "Clear all",
+        "count": "{count} reminders",
+        "dismiss": "Dismiss",
+        "fold": "Fold",
+        "moreOnToken": "+{count} more on 1 token",
+        "moreOnTokens": "+{count} more on {tokens} tokens",
+        "open": "Open",
+        "use": "Use"
+      },
       "limitedHandlingPrompt": "<b>{name}</b> can only clear Prone while adjacent to an allied character. Is an ally adjacent?",
       "makeAMeleeAttackAgainstAn": "Make a melee attack against an adjacent character the same SIZE or smaller than you. On a success, your target is knocked PRONE and you may also choose to knock them back by one space, directly away from you.",
       "mineEntered": "<b>{mover}</b> entered <b>{mine}</b>'s trigger zone. Detonate?",
@@ -2017,8 +2305,8 @@
     },
     "reactionConfig": {
       "activationManager": "Automation Manager",
-      "activations": "Activations",
-      "addActivation": "Add Activation",
+      "activations": "Automations",
+      "addActivation": "Add Automation",
       "addScript": "Add Script",
       "allTriggers": "All Triggers",
       "conflictBothFire": "Both fire",
@@ -2033,7 +2321,7 @@
       "conflictsSummary": "{conflicts} conflicts · {edited} edited defaults",
       "controls": "Controls",
       "createFolder": "Create Folder",
-      "defaultActivationsFromTheRegistryClick": "Default activations from the registry. Click copy to create an editable override.",
+      "defaultActivationsFromTheRegistryClick": "Default automations from the registry. Click copy to create an editable override.",
       "defaults": "Defaults",
       "dragItemsOntoFolderHeadersTo": "Drag items onto folder headers to organize.",
       "edit": "Edit",
@@ -2043,14 +2331,14 @@
       "exportPack": "Export Pack",
       "importPack": "Import Pack",
       "loadingTheWorkshop": "Loading the workshop...",
-      "manageDefaultAndCustomActivationsFor": "Manage default and custom activations for checking triggers.",
+      "manageDefaultAndCustomActivationsFor": "Manage default and custom automations for checking triggers.",
       "nameDescription": "Name / Description",
       "nameLid": "Name / LID",
       "noConflicts": "No conflicts.",
-      "noCustomActivationsDefined": "No custom activations defined.",
+      "noCustomActivationsDefined": "No custom automations defined.",
       "noStartupScriptsDefined": "No startup scripts defined.",
       "onReady": "On Ready",
-      "scriptsNote": "Scripts run on module ready. Use <code>api.registerUserHelper(name, fn)</code> to register reusable helpers, then access them in activations via <code>api.getUserHelper(name)</code>.",
+      "scriptsNote": "Scripts run on module ready. Use <code>api.registerUserHelper(name, fn)</code> to register reusable helpers, then access them in automations via <code>api.getUserHelper(name)</code>.",
       "showInList": "Show in list",
       "startup": "Startup",
       "triggers": "Triggers",
@@ -2060,7 +2348,7 @@
       "workshop": "Workshop"
     },
     "reactionEditor": {
-      "aUniqueNameForThisActivation": "A unique name for this activation.",
+      "aUniqueNameForThisActivation": "A unique name for this automation.",
       "actionPath": "Action Path",
       "actionType": "Action Type",
       "activationCode": "Activation Code",
@@ -2071,7 +2359,7 @@
       "allowsSourceMatch": "allows source match",
       "alongsideFlow": "Alongside flow",
       "alongsideFlowAlsoPostsCard": "Alongside flow (also posts card)",
-      "alsoFiresThisReactionSOwn": "also fires this reaction's own flow / chat card. It does not delay your code until after the triggering action, both run together. The action you are reacting to always runs either way.",
+      "alsoFiresThisReactionSOwn": "also fires this automation's own flow / chat card. It does not delay your code until after the triggering action, both run together. The action you are reacting to always runs either way.",
       "anyScene": "Any scene",
       "appliesToAllTokensNoItem": "(applies to all tokens, no item required)",
       "autoActivate": "Auto Activate",
@@ -2098,7 +2386,7 @@
       "frequency": "Frequency",
       "friendly": "Friendly",
       "functionReference": "Function Reference",
-      "generalActivation": "General Activation",
+      "generalActivation": "General Automation",
       "hostile": "Hostile",
       "insteadOfFlow": "Instead of flow",
       "insteadOfFlowCodeOnly": "Instead of flow (code only)",
@@ -2113,7 +2401,7 @@
       "neutral": "Neutral",
       "noItemFound": "No item found",
       "none": "None",
-      "noneNoActivationFlowShowsChat": "None (no activation), Flow (shows chat card), Macro/JS (run custom code). Mode: run Macro/JS alone, or alongside this reaction's own flow/card.",
+      "noneNoActivationFlowShowsChat": "None (nothing runs), Flow (shows chat card), Macro/JS (run custom code). Mode: run Macro/JS alone, or alongside this automation's own flow/card.",
       "nonePickedMeansNoFilter": "none picked means no filter",
       "onInitNote": "Runs when a token enters the scene, or when the scene loads for a scene reactor. Variables: <code>token</code>, <code>item</code>, <code>api</code>",
       "onMessageNote": "Runs via <code>triggerData.sendMessageToReactor(data, userId)</code>. Variables: <code>triggerType</code>, <code>data</code>, <code>reactorToken</code>, <code>item</code>, <code>activationName</code>, <code>api</code>",
@@ -2122,8 +2410,8 @@
       "onlySceneNoTokens": "Only (scene, no tokens)",
       "onmessageCode": "onMessage Code",
       "outOfCombat": "Out of Combat",
-      "overridesEffectTextFromActionPath": "Overrides effect text from Action Path. Required for general reactions.",
-      "overridesTriggerTextFromActionPath": "Overrides trigger text from Action Path. Required for general reactions.",
+      "overridesEffectTextFromActionPath": "Overrides effect text from Action Path. Required for general automations.",
+      "overridesTriggerTextFromActionPath": "Overrides trigger text from Action Path. Required for general automations.",
       "paste": "Paste",
       "pathNote": "Path within <code>system</code> to the action data. Leave empty to use the item itself. (system)",
       "preconditions": "Preconditions",
@@ -2140,8 +2428,8 @@
       "runsOnMech": "Mech",
       "runsOnNote": "talents and bonds",
       "runsOnPilot": "Pilot",
-      "saveActivation": "Save Activation",
-      "sceneReactorEvaluatesOnceAsThe": "Scene Reactor evaluates once as the viewed scene, on the GM client. Add keeps the per-token passes, Only replaces them. Scene limits the whole activation to one scene.",
+      "saveActivation": "Save Automation",
+      "sceneReactorEvaluatesOnceAsThe": "Scene Reactor evaluates once as the viewed scene, on the GM client. Add keeps the per-token passes, Only replaces them. Scene limits the whole automation to one scene.",
       "sceneReactorScene": "Scene Reactor / Scene",
       "secret": "Secret",
       "shownInTheManagerList": "Shown in the manager list.",
@@ -2208,10 +2496,75 @@
       "total": "TOTAL"
     },
     "reinforcement": {
-      "cancelAll": "Cancel All",
-      "howManyRounds": "How many rounds until tokens appear?",
-      "npcsArrived": "{count} NEW NPC{plural} HAS ARRIVED",
-      "selectWhichNpcs": "Select which NPCs will appear:"
+      "arriving": "Arriving",
+      "bar": {
+        "clock": "Clock",
+        "color": "Color",
+        "inRounds": "in {count}",
+        "newClock": "New clock",
+        "newClockTitle": "NEW WORLD CLOCK",
+        "pickClock": "Pick or create a clock first.",
+        "round": "Round",
+        "segments": "Segments",
+        "show": "Show",
+        "tick": "Tick it at each round change",
+        "title": "DROP ON MAP"
+      },
+      "blocked": "Blocked by {name}: lands on the nearest free spot",
+      "configNote": "Reinforcement, round {round}. Saving changes this unit only. The prototype token and the actor stay as they are.",
+      "delayAll": "Delay all",
+      "due": "{count} due. Untick a unit to delay it one round.",
+      "dueBoth": "{arriving} arriving, {leaving} leaving. Untick a unit to delay it or keep it here.",
+      "editToken": "Edit token…",
+      "edited": "Edited copy",
+      "gmOnly": "Only the GM can plan reinforcements.",
+      "hint": "Click a unit to land or delay it",
+      "hintBoth": "Click a unit to change it",
+      "holdAll": "Hold all",
+      "land": "LAND",
+      "landCount": "Land {count}",
+      "landNow": "Land now",
+      "landed": "Reinforcements landed: {count}",
+      "landsAtSpot": "Lands at its spot",
+      "later": "One round later (R{round})",
+      "laterAll": "One round later",
+      "leaving": "Leaving",
+      "menu": {
+        "current": "current",
+        "disposition": "Disposition",
+        "noTeam": "No team",
+        "team": "Team",
+        "thisUnitOnly": "this unit only"
+      },
+      "now": "NOW",
+      "round": "Round {round}",
+      "selectedCount": "{count} selected",
+      "sooner": "One round sooner (R{round})",
+      "soonerAll": "One round sooner",
+      "teamVis": {
+        "disposition": {
+          "badge": "Disposition hidden from players",
+          "hidden": "Disposition hidden",
+          "hide": "Hide disposition from players",
+          "show": "Show disposition to players",
+          "shown": "Disposition shown"
+        },
+        "team": {
+          "badge": "Team hidden from players",
+          "hidden": "Team hidden",
+          "hide": "Hide team from players",
+          "show": "Show team to players",
+          "shown": "Team shown"
+        }
+      },
+      "title": "Reinforcements",
+      "unknown": "UNKNOWN",
+      "visibility": {
+        "exact": "Exact",
+        "full": "Full",
+        "secret": "Secret"
+      },
+      "wait": "WAIT"
     },
     "ruler": {
       "los": {
@@ -2251,7 +2604,8 @@
       "undoNever": "this action can't be undone",
       "undoNoMovement": "no movement left to take back",
       "undoOverheated": "an overheat already happened",
-      "undoPlain": "Undo"
+      "undoPlain": "Undo",
+      "undoThrownAgain": "the weapon was thrown again"
     },
     "reroll": {
       "alt": "Alt ({value})",
@@ -2262,7 +2616,7 @@
       "miss": "MISS",
       "original": "Original ({value})",
       "succeeded": "Success",
-      "use": "Use - ({subtype})"
+      "use": "Use ({subtype})"
     },
     "reserves": {
       "tab": {
@@ -2407,8 +2761,8 @@
     },
     "settings": {
       "activationFolders": {
-        "hint": "Folder assignments for custom activations.",
-        "name": "Activation Folders"
+        "hint": "Folder assignments for custom automations.",
+        "name": "Automation Folders"
       },
       "additionalStatuses": {
         "hint": "Extra statuses (Resist All, Disengage, Grappling, etc.) in the status effects list.",
@@ -2499,9 +2853,17 @@
         "hint": "Size of the card art on this client.",
         "name": "Portrait Size (px)"
       },
+      "carouselShow": {
+        "hint": "Shows the carousel on this client.",
+        "name": "Show Combat Carousel"
+      },
       "clearTargetsAfterRoll": {
         "hint": "Drop targets once an attack or damage roll resolves.",
         "name": "Clear Targets After Roll"
+      },
+      "clockWindowEnabled": {
+        "hint": "Shows world and pinned clocks at the top right.",
+        "name": "Enable Clock Window"
       },
       "combatCarousel": {
         "hint": "Combatants in team lanes at the top of the screen.",
@@ -2517,7 +2879,7 @@
         "name": "Consume Action on Activation"
       },
       "consumeReaction": {
-        "hint": "Auto-spend the token's reaction when a Reaction activation fires.",
+        "hint": "Auto-spend the token's Reaction when a Reaction-type action fires.",
         "name": "Consume Reaction on Activation"
       },
       "convertHeatToEnergyOnHeatless": {
@@ -2536,15 +2898,15 @@
         }
       },
       "customReactions": {
-        "hint": "Define custom activations for items.",
-        "name": "Custom Activations"
+        "hint": "Custom automations for items.",
+        "name": "Custom Automations"
       },
       "dataConsent": {
         "hint": "Anonymous count of GM/Player installs (no game.userId, no IP).",
         "name": "Data Collection Consent"
       },
       "debugAutomation": {
-        "hint": "Logs which triggers fire and which activations run.",
+        "hint": "Logs which triggers fire and which automations run.",
         "name": "Debug: Automation System"
       },
       "debugForceJb2aFree": {
@@ -2556,7 +2918,7 @@
         "name": "Debug: Movement"
       },
       "debugOutOfCombat": {
-        "hint": "Show UI warnings when an activation is skipped because the token is not in combat.",
+        "hint": "Show UI warnings when an automation is skipped because the token is not in combat.",
         "name": "Debug: Out of Combat Warnings"
       },
       "defaultDeployableArt": {
@@ -2566,6 +2928,18 @@
       "deployableArtScale": {
         "hint": "Token art scale given to deployables that receive the default art.",
         "name": "Default Deployable Art Scale"
+      },
+      "deployableFolderName": {
+        "hint": "Subfolder of the owner's folder that holds its deployables, empty for none.",
+        "name": "Deployable Folder"
+      },
+      "diceFirst": {
+        "hint": "Play the 3D dice at the roll, before automations and the chat card.",
+        "name": "Dice So Nice: Dice First"
+      },
+      "diceFirstLead": {
+        "hint": "Continue this long before the dice animation ends (0 = full animation).",
+        "name": "Dice First: Continue Early (ms)"
       },
       "disableHumanDeathSound": {
         "hint": "Mute wreck sounds for human/pilot/squad deaths.",
@@ -2595,6 +2969,10 @@
       "dragVisionMultiplier": {
         "hint": "Ratio for Scaled, distance for Capped.",
         "name": "Drag vision amount"
+      },
+      "dragVisionRefreshFps": {
+        "hint": "Cap how often vision, lighting and auto-walls update while dragging a token (0 = every step).",
+        "name": "Drag Vision Refresh Rate (FPS)"
       },
       "effectNotificationMode": {
         "choices": {
@@ -2632,7 +3010,7 @@
         "name": "Automate Knockback on Hit"
       },
       "enableLaSossisItems": {
-        "hint": "Adds 30+ prebuilt item activations.",
+        "hint": "Adds 30+ prebuilt item automations.",
         "name": "LaSossis's Items"
       },
       "enableObstructionStepOver": {
@@ -2662,10 +3040,6 @@
           "off": "Disabled"
         }
       },
-      "enableThrowFlow": {
-        "hint": "Thrown-tagged weapons prompt Attack or Throw at the start of the flow.",
-        "name": "Ask Attack or Throw"
-      },
       "enableWreckAnimation": {
         "hint": "Play explosion effects when tokens are wrecked.",
         "name": "Wreck Explosion Effects"
@@ -2675,8 +3049,8 @@
         "name": "Wreck Automation"
       },
       "generalReactions": {
-        "hint": "Define activations that apply to all tokens.",
-        "name": "General Activations"
+        "hint": "Automations that apply to all tokens.",
+        "name": "General Automations"
       },
       "guardianBulwarkAuraMode": {
         "choices": {
@@ -2789,9 +3163,19 @@
         "hint": "Discrete uses size rules, trig uses true sightlines.",
         "name": "Line of sight height rule"
       },
-      "lancerLosPeekRange": {
-        "hint": "Trig only. Low walls re-block past this range.",
-        "name": "Peek range"
+      "lancerLosTrigShadowQuality": {
+        "choices": {
+          "high": "High",
+          "low": "Low",
+          "medium": "Medium",
+          "ultra": "Ultra"
+        },
+        "hint": "Sharper shadow edges, slower shadow updates on this computer.",
+        "name": "Trig shadow quality"
+      },
+      "lancerLosTrigShadows": {
+        "hint": "Trig only. Ground hidden behind low walls becomes fog.",
+        "name": "Trig shadows"
       },
       "lancerSensorCombatOnly": {
         "hint": "Only render sensor highlights during active combat.",
@@ -2876,7 +3260,7 @@
         "name": "Range Pulse Wave Opacity"
       },
       "reactionConfig": {
-        "hint": "Configure custom activations and triggers.",
+        "hint": "Configure custom automations and triggers.",
         "label": "Open Automation Manager",
         "name": "Automation Manager"
       },
@@ -2886,8 +3270,8 @@
           "gm": "GM Only",
           "owner": "Owner Only"
         },
-        "hint": "Who sees the activation popup.",
-        "name": "Activation Notification Mode"
+        "hint": "Who gets the reminders.",
+        "name": "Automation Notification Mode"
       },
       "resistSelfHeat": {
         "hint": "Heat resistance halves self-heat, vulnerability doubles it.",
@@ -2921,7 +3305,7 @@
         "name": "Cache Settings Reads for All Modules"
       },
       "settingsOnboardingMenu": {
-        "hint": "Walk through the main Lancer Automations settings as yes/no questions.",
+        "hint": "The main Lancer Automations settings as yes/no questions.",
         "label": "Run Setup Wizard",
         "name": "Setup Wizard"
       },
@@ -3026,6 +3410,10 @@
         "hint": "Color of the usage number drawn on status icons and in the combat tracker.",
         "name": "Usage Counter Color"
       },
+      "tacticalDistanceThrottleFps": {
+        "hint": "Cap how often distance labels update while dragging (0 = every frame).",
+        "name": "Tactical Distance Update Rate (FPS)"
+      },
       "tacticalLabelPosition": {
         "choices": {
           "above": "Above the token",
@@ -3115,27 +3503,35 @@
           "hint": "Volume of TAH hover/click sounds.",
           "name": "UI Sound Volume"
         },
+        "weaponFxVolume": {
+          "hint": "Volume of LA's default weapon effect sounds.",
+          "name": "Weapon FX Volume"
+        },
         "wheelRadiusOffset": {
           "hint": "Push the radial wheels further from the token, or pull them closer.",
           "name": "Wheel Radius Offset"
         },
         "portrait": {
-          "mode": {
-            "name": "HUD Portrait",
-            "hint": "Artwork shown above the HUD name band. Changing it resets the HUD position.",
-            "choices": {
-              "off": "None",
-              "token": "Token art",
-              "actor": "Actor portrait"
-            }
+          "choices": {
+            "off": "None",
+            "token": "Token art",
+            "actor": "Actor portrait"
           },
-          "scope": {
-            "name": "Portrait Applies To",
-            "hint": "Which actor types get a HUD portrait.",
-            "choices": {
-              "mechPilot": "Mechs and pilots",
-              "all": "All actors"
-            }
+          "mech": {
+            "name": "Mech Portrait",
+            "hint": "Artwork shown above the HUD name band for mechs. Changing it resets the HUD position."
+          },
+          "pilot": {
+            "name": "Pilot Portrait",
+            "hint": "Artwork shown above the HUD name band for pilots. Changing it resets the HUD position."
+          },
+          "npc": {
+            "name": "NPC Portrait",
+            "hint": "Artwork shown above the HUD name band for NPCs. Changing it resets the HUD position."
+          },
+          "deployable": {
+            "name": "Deployable Portrait",
+            "hint": "Artwork shown above the HUD name band for deployables. Changing it resets the HUD position."
           },
           "mechUsePilot": {
             "name": "Mechs Use Pilot Art",
@@ -3196,7 +3592,7 @@
         "name": "Configuration Tour"
       },
       "treatGenericPrintAsActivation": {
-        "hint": "Item chat cards fire activations and spend uses.",
+        "hint": "Item chat cards fire onActivation and spend uses.",
         "name": "Chat Prints Count as Activations"
       },
       "uplinkAutoOpen": {
@@ -3215,25 +3611,9 @@
         "hint": "Draw the perimeter sample points on the canvas.",
         "name": "Vision From Edge: Debug Overlay"
       },
-      "visionFromEdgeDeferDrag": {
-        "hint": "Edge vision pauses while a token moves.",
-        "name": "Vision From Edge: Defer While Moving"
-      },
       "visionFromEdgeEnabled": {
         "hint": "Compute vision from the token perimeter instead of its center.",
         "name": "Vision From Edge"
-      },
-      "visionFromEdgeSampleMode": {
-        "choices": {
-          "adaptive": "Adaptive",
-          "corners4": "4 (corners only)",
-          "perimeter16": "16 (dense perimeter)",
-          "perimeter8": "8 (corners + edge midpoints)",
-          "silhouette": "Token shape corners (recommended)",
-          "silhouette2": "Token shape corners x2"
-        },
-        "hint": "Sample points per token. More points cost more.",
-        "name": "Vision From Edge: Sample Density"
       },
       "visionFromEdgeSampleOffset": {
         "hint": "Distance of the sample points from the token edge. Positive outsets, negative insets.",
@@ -3242,6 +3622,10 @@
       "weaponFxAboveTokens": {
         "hint": "Draws Lancer Weapon FX above tokens and lighting.",
         "name": "Weapon FX Above Tokens"
+      },
+      "weaponFxDefaults": {
+        "hint": "Plays LA's effects for basic attacks and for weapons Lancer Weapon FX has no effect for, when the attack used LA targeting.",
+        "name": "Additional Default Weapon Effects"
       },
       "wreckAssetsPath": {
         "hint": "Custom folder for wreck images/effects/audio. Leave blank for built-in.",
@@ -3480,11 +3864,6 @@
           "control": "Ctrl+Right-click",
           "where": "Status row"
         },
-        "ctrlWheelShapePlacement": {
-          "action": "Rotate an aimed shape, cone or line",
-          "control": "Ctrl+Wheel",
-          "where": "Shape placement"
-        },
         "escapeAnyWheel": {
           "action": "Close the wheel",
           "control": "Escape",
@@ -3495,10 +3874,20 @@
           "control": "Hover",
           "where": "HUD row"
         },
+        "leftDragShapePlacement": {
+          "action": "Aim a cone or line from where you press",
+          "control": "Left drag",
+          "where": "Shape placement"
+        },
         "rightClickHudRowWheelItem": {
           "action": "Open its details popup",
           "control": "Right-click",
           "where": "HUD row, wheel item"
+        },
+        "rightClickShapePlacement": {
+          "action": "Cancel. A right drag moves the camera instead",
+          "control": "Right-click",
+          "where": "Shape placement"
         },
         "shiftLeftClickAdvancedMeasure": {
           "action": "Paint marks, drag to continue. Not in area mode",
@@ -3526,9 +3915,11 @@
         "skill": "Skill",
         "tech": "Tech Attack"
       },
-      "getDeployablesLcp": {
-        "hint": "Downloads LaSossis_Npc_Deployables.lcp.",
-        "label": "Get the Deployables LCP"
+      "foundryApplicationsTheme": {
+        "label": "Foundry Applications Theme"
+      },
+      "foundryInterfaceTheme": {
+        "label": "Foundry Interface Theme"
       },
       "guardianBulwarkAuraMode": {
         "hint": "Corner marks on the footprint of bulwarked and guardian tokens.",
@@ -3562,6 +3953,9 @@
       },
       "lancerSensorUseModeRange": {
         "label": "Sensor: Use Mode Range"
+      },
+      "lancerUiTheme": {
+        "label": "Lancer Theme"
       },
       "measureRulerSnapToCenter": {
         "hint": "Snap the Measure Distance ruler to space centers.",
@@ -3606,11 +4000,11 @@
         "label": "Open GM card (test)"
       },
       "openExport": {
-        "hint": "Export activations, startup scripts, module settings, and the shortcuts shown here to a JSON file.",
+        "hint": "Export automations, startup scripts, module settings, and the shortcuts shown here to a JSON file.",
         "label": "Export to JSON"
       },
       "openImport": {
-        "hint": "Import from a JSON file, with a review dialog to pick which activations and settings to apply.",
+        "hint": "Import from a JSON file, with a review dialog to pick which automations and settings to apply.",
         "label": "Import from JSON"
       },
       "openLcpRepair": {
@@ -3626,7 +4020,7 @@
         "label": "Re-run Setup Wizard"
       },
       "openReset": {
-        "hint": "Reset all module settings and activations to their default values.",
+        "hint": "Reset all module settings and automations to their default values.",
         "label": "Reset to Defaults"
       },
       "openTelemetryDebug": {
@@ -3665,7 +4059,11 @@
         "label": "Wave Opacity"
       },
       "reactionNotificationMode": {
-        "label": "Activation Notification Mode"
+        "label": "Automation Notification Mode"
+      },
+      "reapplyDeployableArt": {
+        "hint": "Runs the Default Deployable Art apply or revert again, for its current state. Also recreates missing template actors.",
+        "label": "Reapply Deployable Art"
       },
       "refreshLancerVisionTokens": {
         "hint": "Rebuild and reorder detection modes on every token. Run after enabling Auto-add.",
@@ -3701,8 +4099,7 @@
       "rulerToolCursor": {
         "hint": "Tool cursor and sound while measuring or targeting.",
         "label": "Tool cursors"
-      },
-      "scanJournalSource": {
+      },      "scanJournalSource": {
         "hint": "System = native Lancer v3 scan journal, Lancer Automations = the LA journal template.",
         "label": "Scan journal source"
       },
@@ -3745,11 +4142,14 @@
         "battleLog": {
           "label": "Battle Log"
         },
+        "clocks": {
+          "label": "Clocks"
+        },
         "combatCarousel": {
           "label": "Combat Carousel"
         },
         "coreShortcuts": {
-          "hint": "Foundry's own performance options, shown here so you don't have to leave this window.",
+          "hint": "Foundry's own performance options, shown here too.",
           "label": "Foundry core"
         },
         "customTokenStatBars": {
@@ -3770,6 +4170,10 @@
         },
         "dragVision": {
           "label": "Drag Vision"
+        },
+        "experimental": {
+          "hint": "Features still in testing.",
+          "label": "Experimental"
         },
         "fixedControls": {
           "hint": "Built-in gestures. These cannot be rebound.",
@@ -3824,7 +4228,6 @@
           "label": "Opening & Layout"
         },
         "optionalContentPacks": {
-          "hint": "Some LaSossis deployables need the personal <b>NPC Deployables LCP</b>. Get it below, then import it via the Lancer Compendium Manager.",
           "label": "Optional content packs"
         },
         "perCategoryWrecks": {
@@ -3960,9 +4363,18 @@
         "toolColors": {
           "label": "Tool Colors"
         },
-        "tutorials": {
-          "hint": "Guided walkthroughs of the module.",
-          "label": "Tutorials"
+        "tutorialsAutomation": {
+          "label": "Automations"
+        },
+        "tutorialsCombat": {
+          "label": "In Combat"
+        },
+        "tutorialsStart": {
+          "hint": "Guided walkthroughs of the module. Start with these.",
+          "label": "Start Here"
+        },
+        "tutorialsTools": {
+          "label": "Tools"
         },
         "uiSounds": {
           "label": "UI sounds"
@@ -3977,12 +4389,11 @@
         "visionRules": {
           "label": "Vision Rules"
         },
-        "visionFromEdgeExperimental": {
-          "hint": "Sample vision from the token edge instead of its center.",
-          "label": "Vision From Edge (experimental)"
-        },
         "visualEffects": {
           "label": "Visual effects"
+        },
+        "weaponFxAudio": {
+          "label": "Weapon FX audio"
         },
         "wreckGeneration": {
           "label": "Wreck Generation"
@@ -4155,7 +4566,7 @@
           "label": "Bolster Effect"
         },
         "fx_burn": {
-          "label": "Burn Glow"
+          "label": "Burn Effect"
         },
         "fx_cascading": {
           "label": "Cascading Effect"
@@ -4191,7 +4602,7 @@
           "label": "Impaired Effect"
         },
         "fx_infection": {
-          "label": "Infection Glow"
+          "label": "Infection Effect"
         },
         "fx_intangible": {
           "label": "Intangible Effect"
@@ -4241,8 +4652,12 @@
         "fx_vulnerable": {
           "label": "Vulnerable Effect"
         },
+        "legacyBurnInfection": {
+          "hint": "The old outline glow for Burn and Infection, instead of the flames and the leaking code. Needs reload.",
+          "label": "Old Burn and Infection Effects"
+        },
         "lowQuality": {
-          "hint": "Outline-only swaps for Overheated, Core Power, Jammed.",
+          "hint": "Outline-only swaps for Overheated and Core Power.",
           "label": "Low-Quality Status FX"
         },
         "master": {
@@ -4283,12 +4698,12 @@
         "label": "Apply Token Heights to All Actors"
       },
       "syncTemplateActors": {
-        "hint": "Reset the module's template actors to their defaults. Placed tokens are not changed.",
+        "hint": "Reset the module's template actors to their defaults and recreate missing ones. Placed tokens are not changed.",
         "label": "Reset Template Actors"
       },
       "tab": {
         "activations": {
-          "label": "Activations"
+          "label": "Automations"
         },
         "battelog": {
           "label": "Battle Log"
@@ -4464,6 +4879,9 @@
           },
           "invade": {
             "label": "Invade"
+          },
+          "invadeHit": {
+            "label": "Invade hit"
           },
           "jockey": {
             "label": "Jockey"
@@ -4748,6 +5166,9 @@
           "hover": {
             "label": "Hover"
           },
+          "locateToken": {
+            "label": "Locate Token"
+          },
           "open": {
             "label": "Open"
           },
@@ -4761,17 +5182,27 @@
         "uiSoundVolume": {
           "label": "UI Sounds"
         },
+        "weaponFxVolume": {
+          "label": "Weapon FX"
+        },
         "wheelRadiusOffset": {
           "label": "Wheel Radius Offset"
         },
         "portrait": {
-          "mode": {
-            "label": "HUD Portrait",
+          "type": {
             "hint": "Art above the HUD name band. Resets HUD position."
           },
-          "scope": {
-            "label": "Portrait Applies To",
-            "hint": "Which actor types get a HUD portrait."
+          "mech": {
+            "label": "Mech Portrait"
+          },
+          "pilot": {
+            "label": "Pilot Portrait"
+          },
+          "npc": {
+            "label": "NPC Portrait"
+          },
+          "deployable": {
+            "label": "Deployable Portrait"
           },
           "mechUsePilot": {
             "label": "Mechs Use Pilot Art",
@@ -4789,6 +5220,9 @@
       },
       "tahEnabled": {
         "label": "Enable Token Action HUD"
+      },
+      "tmfxDisableAnimations": {
+        "hint": "Freezes TokenMagic and LA token effects on this client."
       },
       "toggleLancerFloatingNumbers": {
         "hint": "Damage and heal numbers floating over tokens, a Lancer system setting.",
@@ -4853,11 +5287,12 @@
       "visionFromEdgeDebug": {
         "label": "Vision From Edge Overlay"
       },
-      "visionFromEdgeSampleMode": {
-        "label": "Sample Density"
-      },
       "visionFromEdgeSampleOffset": {
         "label": "Sample Offset (px)"
+      },
+      "weaponFxDefaults": {
+        "heuristicOff": "Lancer Weapon FX's weapon heuristic is off. LA's defaults still play for weapons it doesn't know.",
+        "needsLwfx": "Needs Lancer Weapon FX active."
       },
       "wreckAssetsPath": {
         "label": "Wreck Assets Folder"
@@ -4878,22 +5313,29 @@
       "journalNamePlaceholder": "Leave empty for auto-generated name"
     },
     "stabilize": {
+      "chooseWhatToClear": "{name}: choose what to clear.",
       "clearBurn": {
         "detail": "Remove all burn from yourself.",
         "label": "Clear Burn"
       },
       "clearOtherCond": {
-        "detail": "Clear a condition on an adjacent ally (resolved manually).",
+        "detail": "Clear a condition on an adjacent ally.",
         "label": "Clear Ally Condition"
       },
       "clearOwnCond": {
-        "detail": "Clear a condition affecting you (resolved manually).",
+        "detail": "Clear a condition affecting you.",
         "label": "Clear Own Condition"
       },
+      "clearWhichCondition": "Clear which condition?",
+      "clickAlly": "Click an ally on the map.",
       "cool": {
         "detail": "Clear all heat and the EXPOSED status.",
         "label": "Cool Mech"
       },
+      "noRepairs": "No repairs left.",
+      "onToken": "on",
+      "option1": "Option 1",
+      "option2": "Option 2",
       "reload": {
         "detail": "Reload all LOADING weapons.",
         "label": "Reload"
@@ -4902,10 +5344,11 @@
         "detail": "Spend 1 repair to regain HP.",
         "label": "Restore HP"
       },
-      "stabilize": "Stabilize"
+      "stabilize": "Stabilize",
+      "willClear": "Will clear"
     },
     "startupEditor": {
-      "scriptsNote": "JavaScript code executed on module ready. Available: <code>api</code> - use <code>api.registerUserHelper(name, fn)</code> to register reusable helpers, then access them in activations via <code>api.getUserHelper(name)</code>."
+      "scriptsNote": "JavaScript code executed on module ready. Available: <code>api</code>. Use <code>api.registerUserHelper(name, fn)</code> to register reusable helpers, then access them in automations via <code>api.getUserHelper(name)</code>."
     },
     "startupScript": {
       "aUniqueNameForThisStartup": "A unique name for this startup script.",
@@ -4970,17 +5413,26 @@
       "infection": {
         "description": "Like Burn, but Heat. You take Heat equal to the Infection received, and it stacks. End of your turn: a SYSTEMS check clears it, or take Heat equal to it. Whatever clears Burn (like STABILIZE) clears it too."
       },
+      "leaving": {
+        "description": "Leaves the battlefield at the start of the next round. Remove this status to stay."
+      },
       "overheated": {
         "description": "No actions or abilities that inflict Heat on you, including OVERCHARGE and HEAT X (SELF) systems. Weapons lose OVERKILL. STABILIZE clears it."
       },
       "phasing": {
         "description": "You can move through characters but can't end your move on them."
       },
+      "preparing": {
+        "description": "You hold a quick action until the start of your next turn and take it as a reaction when its trigger happens. While holding it you can't move or take other actions or reactions. Removing this status drops it."
+      },
       "reactor_meltdown": {
         "description": "Your reactor is melting down."
       },
       "resistance_all": {
         "description": "Resistance to all damage, burn and heat: take half, rounded up."
+      },
+      "straight_line": {
+        "description": "You move only in straight lines. Turning ends your current move action."
       },
       "surefoot": {
         "description": "You ignore difficult terrain, but not dangerous terrain."
@@ -5093,15 +5545,19 @@
         "fullRepair": "Run a Full Repair on the selected unit(s).",
         "generateScan": "Create the scan journal for the selected token(s).",
         "hideRevealToken": "Toggle this token's hidden state.",
+        "leaveBattlefield": "Leave the battlefield at the start of the next round. Use it again to stay.",
         "linkToToken": "Link this token to an owner token (deployable-style ownership).",
         "otherSkillBody": "Roll a trigger you have no training in: 1d20 + 0. For improvised checks not covered by your Skills or Triggers.",
         "overheat": "Fill the heat track and roll an overheat check.",
+        "pickupThrown": "Pick up {weapon}. It goes back into {owner}'s loadout and can be used again.",
         "reactorExplosion": "Detonate the reactor: blast damage around the token.",
+        "recallDeployable": "{name} can be recalled ({activation}). It leaves the map and can be deployed again later.",
         "recharge": "Roll the NPC recharge flow for uncharged systems.",
-        "reinforcement": "Hide selected tokens and reveal them as reinforcements at a target round.",
+        "reinforcement": "Open the drop bar. Actors dropped on the map arrive as reinforcements at the chosen round.",
         "reloadWeapon": "Reload one Loading weapon.",
         "reserve": "Add a reserve to the pilot.",
         "resurrect": "Restore this wreck to a live unit.",
+        "returnDeployable": "Tool: remove this deployable from the map without spending an action. For deployables that have no Recall.",
         "structure": "Drop HP to 0 and roll a structure check.",
         "suicide": "Zero structure, stress and HP.",
         "template": "Template",
@@ -5114,6 +5570,7 @@
       "label": {
         "actions": "Actions",
         "activation": "Activation",
+        "activations": "Activations",
         "active": "Active",
         "add": "Add",
         "addExtra": "Add Extra",
@@ -5129,6 +5586,7 @@
         "basicTech": "Basic Tech",
         "bolster": "Bolster",
         "bond": "BOND",
+        "breakFree": "Break Free",
         "burdens": "BURDENS",
         "charged": "Charged",
         "class": "Class",
@@ -5145,6 +5603,7 @@
         "downtime": "Downtime",
         "effectManager": "Effect Manager",
         "empty": "Empty",
+        "endGrapple": "End Grapple",
         "engineering": "Engineering",
         "environment": "World",
         "fall": "Fall",
@@ -5167,6 +5626,7 @@
         "invade": "Invade",
         "invades": "Invades",
         "knockback": "Knockback",
+        "leaveBattlefield": "Leave Battlefield",
         "link": "Link",
         "linkToToken": "Link to Token",
         "linkUnlinkActor": "Link/Unlink Actor",
@@ -5178,13 +5638,13 @@
         "manageRoster": "Manage roster…",
         "measures": "Measures",
         "misc": "Misc",
-        "mount": "{type} Mount",
         "movement": "Movement",
         "npcs": "NPCs",
         "otherSkill": "Other Roll",
         "overcharge": "Overcharge",
         "overheat": "Overheat",
         "passive": "PASSIVE",
+        "pickup": "Pickup",
         "pickupWeapon": "Pickup Weapon",
         "pilot": "Pilot",
         "pilots": "Pilots",
@@ -5208,6 +5668,7 @@
         "resources": "RESOURCES",
         "rest": "Rest",
         "resurrect": "Resurrect",
+        "returnToOwner": "Return to Owner",
         "revertAllMovements": "Revert All Movements",
         "revertLastMovement": "Revert Last Movement",
         "scan": "Scan",
@@ -5217,6 +5678,7 @@
         "stabilize": "Stabilize",
         "standingUp": "Standing Up",
         "statuses": "Statuses",
+        "stayOnBattlefield": "Stay on Battlefield",
         "structure": "Structure",
         "suicide": "Suicide",
         "systems": "Systems",
@@ -5239,9 +5701,19 @@
         "whileActive": "WHILE ACTIVE"
       },
       "mod": "MOD",
+      "newStatus": "New status",
+      "newStatusName": "Status name",
+      "noPresets": "No presets yet",
       "notFavorited": "Not favorited",
       "onWheel": "On wheel {n}",
       "ordnanceLocked": "Ordnance: you moved or acted this turn",
+      "presetHint": "Click to apply, right-click to edit",
+      "presetKind": {
+        "bonus": "Bonus",
+        "custom": "Custom",
+        "standard": "Status"
+      },
+      "presets": "Presets",
       "profiles": "PROFILES",
       "searchStatuses": "Search statuses…",
       "selectMacro": "(select a macro)",
@@ -5259,6 +5731,7 @@
         "combat": "Combat",
         "conditions": "Conditions",
         "cover": "Cover",
+        "custom": "Custom",
         "effects": "Effects",
         "favorites": "Favorites",
         "mechState": "Mech state",
@@ -5278,21 +5751,27 @@
     },
     "tour": {
       "addExtraAddEffectAndExtra": "Add Extra, Add Effect and Extra Config from an actor or item sheet.",
+      "attackDescription": "Picking targets, aiming areas, hit chances, the invade pick, the firing strip, and Vulnerable, the Reliable type and Variable damage in the damage roll.",
+      "battleLogDescription": "The GM card when a combat ends, the recap everyone gets, its tabs and the share image.",
       "cancelTour": "Cancel Tour",
+      "cardsDescription": "The card corner, both kinds of reactions, and the Prepare action.",
+      "carouselDescription": "The turn order carousel, planned reinforcements, and units leaving the battlefield.",
+      "clocksDescription": "The clocks panel: world clocks, and the pilot clocks and burdens you pin.",
+      "visionDescription": "Line of sight, Lancer Sensors and Battlefield Awareness on the map.",
       "content": {
-        "aColouredTriangleOnARow": "A coloured triangle on a row's left edge marks it <b>automated</b> - using it runs its built-in effects.",
-        "aMeasuringToolsetReusingLaS": "A measuring toolset reusing LA's targeting visuals - toggle it with <b>Shift+R</b>. Everything lives on this floating toolbar.",
+        "aColouredTriangleOnARow": "A coloured triangle on a row's left edge marks it <b>automated</b>: using it runs its built-in effects.",
+        "aMeasuringToolsetReusingLaS": "A measuring toolset reusing LA's targeting visuals. Toggle it with <b>Shift+R</b>. Everything lives on this floating toolbar.",
         "aPassThroughTheToolsTucked": "A pass through the tools tucked into the HUD, past just firing weapons.",
         "actionsCanAlsoBeAnAttack": "Actions can also be an attack or damage roll.",
         "addExtraOpensThisTieExtra": "Add Extra opens this: tie extra actions, deployables, and resource bars onto the actor or item.",
-        "addExtrasAndEffectsToAny": "Add extras and effects to any actor or item right from its sheet. The <b>L.A</b> button in its header is the entry point; the number shows how much is already attached.",
-        "addOpensThisEditorTriggersFilters": "Add opens this editor. Triggers, filters, and code all live here; Save commits, closing discards.",
+        "addExtrasAndEffectsToAny": "Add extras and effects to any actor or item right from its sheet. The <b>L.A</b> button in its header is the entry point. The number shows how much is already attached.",
+        "addOpensThisEditorTriggersFilters": "Add opens this editor. Triggers, filters, and code all live here. Save commits, closing discards.",
         "addsTheBonusToTheTarget": "Adds the bonus to the target.",
-        "allTheCombatFlavorTogglesKnockback": "All the combat-flavor toggles: knockback, throw, movement-cap, boost detection, alt structure/stress rules, infection damage. The big stuff.",
+        "allTheCombatFlavorTogglesKnockback": "Targeting and attacks (auto damage, knockback, Dice First), Roll Uplink, the clocks panel, the combat carousel, Boost, and the structure, infection and heat rules.",
         "allTheSoundFeedbackOptionsIncluding": "All the sound feedback options, including the UI sounds for the TAH.",
-        "anyRowThatIsNotA": "Any row that is not a sub-category is an item. Left-click usually activates it; right-click (or Shift+Q) opens a detail popup with its full text.",
-        "attachDeployablesByActorOrLid": "Attach deployables by actor or LID, or drag one in - this is how an NPC feature gets its deployable in the TAH. The T1/T2/T3 pills gate an entry to that NPC tier; none lit = every tier.",
-        "bindItToAnItemBy": "Bind it to an item (by LID) or make it <b>general</b> - checked on every token.",
+        "anyRowThatIsNotA": "Any row that is not a sub-category is an item. Left-click usually activates it. Right-click (or Shift+Q) opens a detail popup with its full text.",
+        "attachDeployablesByActorOrLid": "Attach a deployable by actor or LID, or drag one in. <b>New deployable</b> makes your own deployable, drone or mine, or takes one pasted as LCP JSON, no LCP or imported actor needed. This is how an NPC feature gets its deployable in the TAH. The T1/T2/T3 pills limit an entry to that NPC tier, none lit means every tier.",
+        "bindItToAnItemBy": "Bind it to an item (by LID) or make it <b>general</b>, checked on every token.",
         "clickTheMagnifierOrPressShift": "Click the magnifier or press <b>Shift+F</b> to live-filter every action.",
         "clickTheNameToOpenThe": "Click the name to open the actor sheet.",
         "clickTheSwordsIconToAdd": "Click the swords icon to add or remove the token from the combat tracker without leaving the HUD.",
@@ -5300,25 +5779,138 @@
         "codingAndAutomationCanFeelRough": "Coding and automation can feel rough, and mid-game you need stuff fast. Here's a UI on top of the Lancer Automations systems, no code.",
         "createANewOneYouLl": "Create a new one. You'll pick item-bound (LID) or general, the triggers, and the code blocks that run on evaluate / activate / init.",
         "ctrlRightClickAnyActionTo": "Ctrl+Right-click any action to pick which wheel it goes on. The mark on a row says where it lives. Hover the star in the Menu band to open the list.",
-        "customActionsBoltedOntoTheActor": "Custom actions bolted onto the actor or item - name, activation, icon, optional resource limits. They show up in the TAH.",
-        "customIsYourOwnStuffDefaults": "Custom is your own stuff. Defaults are the activations bundled with the module. Startup is JS that runs once on Foundry ready.",
-        "dragATokenToMeasureThe": "Drag a token to measure. The ruler follows Lancer rules: speed cap, terrain cost, climb, flight ceiling.",
-        "driveTheHudByKeyboardShift": "Drive the HUD by keyboard: <b>Shift+WASD</b> moves, <b>Shift+1-9</b> jumps to a row, <b>Shift+E</b> left-clicks, <b>Shift+Q</b> right-clicks, <b>Shift+F</b> searches, <b>Escape</b> backs out.",
-        "duringADragPressMTo": "During a drag, press <b>M</b> to cycle the type for that drag only - the token's base type stays put.",
+        "customActionsBoltedOntoTheActor": "Custom actions bolted onto the actor or item: name, activation, icon, optional resource limits. They show up in the TAH.",
+        "customIsYourOwnStuffDefaults": "Custom is your own stuff. Defaults are the automations bundled with the module. Startup is JS that runs once on Foundry ready.",
+        "dragATokenToMeasureThe": "Drag a token to measure. The ruler follows Lancer rules: speed cap, terrain cost, climb, flight ceiling.",        "driveTheHudByKeyboardShift": "Drive the HUD by keyboard: <b>Shift+WASD</b> moves, <b>Shift+1-9</b> jumps to a row, <b>Shift+E</b> left-clicks, <b>Shift+Q</b> right-clicks, <b>Shift+F</b> searches, <b>Escape</b> backs out.",
+        "duringADragPressMTo": "During a drag, press <b>Tab</b> to cycle the type for that drag only. The token's base type stays put.",
+        "wheelCurrentType": "The current type. Pick another to change it.",
+        "rulerLabelsIntro": "Each waypoint you place gets a label.",
+        "labelCostIs": "What the turn has cost so far.",
+        "labelRingIs": "The speed band reached: blue Standard Move, gold Boost, pink Overcharge Boost. White is a free move, purple a knockback.",
+        "bandStartIs": "Where the move you drag enters the Boost or the Overcharge Boost. Past it, the move uses that Boost.",
+        "labelDistanceIs": "Spaces moved on that leg.",
+        "labelRowIs": "Height moved, then ⚠ for the cost the rules add: climbing, rough ground, a jump paying its distance twice. Movement lost on a turn or a landing shows in gold on the disc's lower left.",
+        "labelSavedIs": "Cost the rules skip: height on terrain set to Climbing + Vertical, a flyer's climb, the shorter side of a teleport. Spaces moved, plus ⚠, minus this, is what the move cost.",
+        "labelPathfindIs": "<b>X</b> turns pathfinding on or off. Dim when off.",
+        "labelElevModeIs": "<b>Z</b> swaps Ground (feet on a surface) and Hold (keep altitude).",
+        "labelStraightIs": "<b>C</b> turns straight-line movement on or off for this drag. Dim when off.",
+        "labelElevCostIs": "<b>G</b> turns the extra cost of climbing off for this drag. Lit when off.",
+        "pastYourSpeedIs": "In combat, a drag past your speed stops and asks first. <b>Boost & Move</b> walks up to your speed, takes Boost, then finishes the move. <b>Ignore</b> moves anyway. If Boost is not enough, the card offers Overcharge too.",
+        "overSpeedIs": "The <b>Over speed</b> setting decides: <b>Ask to Boost</b> shows this card, <b>Auto Boost</b> takes Boost for you, <b>Stop</b> only cancels the move, <b>Off</b> lets you go past. A free move with <b>V</b> never asks.",
+        "clocksIntro": "Clocks count progress or a threat in segments, like Lancer's narrative clocks. World clocks belong to the table: the GM makes them and picks who sees each one. Pilot clocks and burdens belong to a pilot, on its sheet. This panel at the top right shows the world clocks and the ones you pin.",
+        "clockSetIs": "Click a segment to set the clock, right-click it for its options. The GM sets world clocks, a pilot's owner sets pinned ones. A full clock posts to chat.",
+        "clockHiddenIs": "Right-click a clock and pick <b>Hide this clock for me</b> to hide it on your screen only. This button brings them back.",
+        "clockAddIs": "Opens the world clock list: add a clock and set its segments, color, and who sees it. <b>World &gt; Clocks</b> in the narrative TAH, with no token selected, adds one too.",
+        "clockPinsIs": "Pilot clocks and burdens live on the pilot sheet. Click the pin on one there, or in the TAH, to keep it in view here. Pins are yours only.",
+        "clockRingsIs": "At rest the panel folds to a line of rings. The arrow opens the list.",
+        "reinforcementsIntro": "Units that join the fight later in the encounter. You plan them on the map now, and they land at the round you pick or when a world clock fills. During an encounter, this bar opens from the carousel's parachute button or <b>Utility &gt; Gameplay</b> in the TAH.",
+        "reinforcementBarIs": "Drag an actor from the sidebar onto the map. A marker shows where it lands. Hold <b>Shift</b> to skip the grid snap.",
+        "reinforcementArriveIs": "Land on a round, picked with − and +, or switch to <b>Clock</b>: they land when that world clock fills. <b>New clock</b> makes one, and it can tick by itself each round.",
+        "reinforcementVisibilityIs": "<b>Secret</b>: players see nothing. <b>Exact</b>: they see the marker. <b>Full</b>: the marker and the art.",
+        "reinforcementTeamIs": "Show or hide the unit's team, or its disposition, from players.",
+        "reinforcementMarkerIs": "A reinforcement is a unit the GM planned to arrive later. Its marker shows where it lands, and the number counts the rounds left. The GM can drag it, right-click it, and select it like a token.",
+        "leaveBattlefieldIntro": "A unit can leave the fight, to retreat or escape. It goes by the nearest map edge at the start of the next round and leaves the encounter. The Battle Log marks it as left.",
+        "leaveBattlefieldIs": "Use <b>Leave Battlefield</b> in the TAH's <b>Utility &gt; Gameplay</b>, or right-click the unit's carousel card. The Leaving status and closing rings show it until the next round starts. Use it again to stay.",
+        "arrivalCardIs": "When a new round starts, one card lists the units that land and the ones that leave. Click a unit to switch it: <b>Land</b> or <b>Wait</b> one round.",
+        "leaveOrStayIs": "<b>Leave</b>: the unit exits by the nearest edge. <b>Stay</b>: it keeps its place and loses the Leaving status.",
+        "rollUplinkIntro": "See your players' rolls while they set them up. When a player opens an attack, tech, damage, check or structure roll, a live copy shows up here at the top right. Turn it on with the <b>Roll Uplink</b> setting. With <b>Uplink Auto-Open</b>, it opens by itself and closes after the last roll.",
+        "uplinkChipsAre": "One chip per open roll: the unit and the kind (ATK, TECH, DMG, or the check's stat). Click a chip to show its copy, click again to fold it. ↻ redraws a copy that looks stuck, ✕ hides the panel until the next roll.",
+        "uplinkWhoIs": "The weapon or check, the unit and the player. Click the portrait to pan to the token.",
+        "uplinkChoicesAre": "What the player ticks, as they tick it: accuracy, difficulty and LA bonuses. Read only, you can't change it from here.",
+        "uplinkRangeIs": "The weapon's ranges and damage. Hover a range to pulse it around the roller on the map.",
+        "uplinkTargetsAre": "Each target with its cover, Lock On and total. Hover it to see line of sight and the hit chance on the map, click it to pan. The roller has to be on the map you are viewing.",
+        "configRulerIs": "The Lancer ruler and its labels, pathfinding, climb waypoints, tactical distance labels, and the Ctrl ruler of Advanced Measure.",
+        "configStatBarsIs": "LA's own token stat bars, a Bar Brawl alternative, and the stat hint that pops up over a hovered token.",
+        "configColorsIs": "The Foundry and Lancer UI themes, plus the colors of targeting, range pulses, the ruler and status badges.",
+        "configMapModulesIs": "How Terrain Height Tools and Template Macro draw on the map: shading, contours, height labels and terrain types.",
+        "configBattleLogIs": "Records each combat and opens a recap when it ends. Turn it on here, choose whether friendly mechs count as squad, turn the awards off, and pick the theme music.",
+        "configControlIs": "Every LA key in one place: the LA keys, TAH navigation, movement and Advanced Measure, plus the fixed mouse and keyboard controls.",
+        "configPerformanceIs": "How often vision, lighting and distance labels refresh, Foundry's own performance options, and the settings cache. Lower values help a slow machine.",
+        "tahSkirmishBarrage": "Skirmish and Barrage live here as real actions, so automations watching for them react. Click the weapon to fire first in the card, the rest of the mount follows, and the secondary weapon gets its no-bonus-damage rule.",
+        "tahBasicTools": "Support tools for rolls your setup doesn't cover. Basic Attack and Damage sit under Attacks, Basic Tech under Tech. Reach for them to roll something by hand.",
+        "tahBoost": "Boost feeds the movement cap: with that feature on, using it auto-emulates the extra move, and anything reacting to a boost fires through here. The auto-boost offer also spots when you need one and prompts you.",
+        "tahDeploy": "Places a deployable. The range ring is only the default suggestion, nothing stops you dropping it outside. Change a deployable's range or count with Add Extra or Extra Config on the item.",
+        "tahRecallItem": "Takes one of your deployables off the map. It's a tool and spends no action: to recall by the rules, use the Recall action on the deployable itself. Red marks the ones with no Recall action.",
+        "tahLinkUnlinkActor": "Makes any token one of this unit's deployables, or frees it. Hover the unit or one of its deployables to see the gold lines between them.",
+        "tahContest": "Runs a contested check between two tokens. A tie goes to the one who started it. Also available as an automation tool.",
+        "tahForceCheck": "Sends a HASE check to picked tokens, rolled by their owners. With a save target it becomes a save against it.",
+        "tahGenerateScan": "Builds a scan of a token by hand when you need one. A token's settings can also force it to read as scanned with no scan document.",
+        "tahLinkToToken": "Ties two tokens together. Hover one and its linked token lights up with it.",
+        "tahReinforcement": "Opens the DROP ON MAP bar during an encounter: drop actors on the map, and they land at the round you pick or when a world clock fills. The Combat Carousel tour covers it.",
+        "tahLeaveBattlefield": "The unit leaves by the nearest map edge at the start of the next round. Use it again to stay.",
+        "tahDowntime": "Runs the between-mission downtime actions.",
+        "tahReserve": "Grabs a downtime reserve for the pilot.",
+        "tahVote": "Sends a quick poll to the table and tallies the answers.",
+        "battleLogIntro": "The Battle Log records every combat: attacks, damage, kills, actions, moves, structure and stress. When you end the encounter, this card opens for you first. Nobody else sees anything yet. It only records combats started while it is on. This one is a sample made from your world's actors.",
+        "battleLogOutcomeIs": "How it went: success, partial or failure. It sets the verdict in the intro, the stamp on the recap, and which theme music plays if you set some in Configuration &gt; Battle Log.",
+        "battleLogMvpIs": "Pick the MVP, or leave it blank and the pilot with the most award points gets it. The points show next to each name.",
+        "battleLogAnalysisIs": "Add your own lines, like a test and its result. They type out in the intro, before the verdict.",
+        "battleLogBroadcastIs": "<b>Broadcast Recap</b> plays the intro and opens the recap for every connected player. <b>Dismiss</b> closes the card and the log is gone: it can't be opened again.",
+        "battleLogRecapIs": "The debrief everyone gets after the intro: date, rounds, turns, real time, combatants, and the outcome stamp. It has three tabs.",
+        "battleLogSquadIs": "One card per pilot: confirmed kills and assists, actions and moves, damage dealt and taken, accuracy, what survived, the favourite weapon. Click a card for its full details. The button on the portrait flips to the pilot.",
+        "battleLogAwardsAre": "Each pilot's awards: MVP in amber, a lost mech in red, a second place in grey. Hover one to see what earned it.",
+        "battleLogEncounterIs": "Every unit you met, filtered by side: what destroyed it, the damage both ways, and its scan data. Units your players never scanned stay unidentified for them.",
+        "battleLogTelemetryIs": "HP, heat, damage and kills over the fight, one line per pilot. Click a name to isolate it. Squad Total adds them up.",
+        "battleLogShareIs": "Saves the squad as an image, or the open pilot card. Shift-click copies it instead. Nothing goes to the chat.",
+        "attackIntro": "When you attack, LA adds a <b>Targeting</b> section to Lancer's attack window, here at the bottom right. Pick your targets on the map from it, and see your chance to hit before you roll. If the attack has no target, the picker starts by itself. The <b>Attack HUD Target Picker</b> setting can stop that, or turn the section off.",
+        "attackPickIs": "The button shows the weapon's range. Click a token on the map to target it, click a target to drop it. <b>Shift</b>+click keeps the picker open to pick more. The arrows next to it swap Range and Threat when the weapon has both.",
+        "attackCancelIs": "While the picker runs, the button pulses and this line lists the keys. Right-click or <b>Esc</b> cancels, so does a second click on the button. <b>Ctrl+T</b> starts or stops it from the keyboard.",
+        "attackMapIs": "On the map, your targets get a gold dashed mark and your unit a white one. The token under the cursor lights up cyan, red when it is out of range. While the window is open, every token shows its distance from you.",
+        "attackChanceIs": "Above each target, your chance to hit with everything set in the window: accuracy, difficulty, cover and Lock On. Red is low, blue is high, and <b>CRIT</b> means a sure crit. Players see <b>??%</b> on a target they don't own until they scan it. The <b>Target Info Labels</b> setting picks who sees them.",
+        "attackLosIs": "With <b>Lancer Line of Sight</b> and Terrain Height Tools on, hover a target in the window to draw your line of sight to it: green rays reach it, a red one stops where it is blocked. The eye by each distance tells if you see that token.",
+        "areasIntro": "An area weapon gets one button per area: Blast, Burst, Cone or Line. Click it, then place the area on the map. Every token it catches becomes a target.",
+        "areaAimIs": "Blast: click a cell. Burst: click a token. Cone and Line: press, drag to aim, release. Caught tokens glow cyan, and the area turns red when it reaches past your range. <b>Shift</b> places another area. <b>Q</b>/<b>E</b> lower or raise it, <b>S</b>/<b>W</b> tilt a line, <b>Z</b> resets it.",
+        "areaOptionsAre": "<b>Elevation</b>: tokens above or below the area are not caught. <b>Terrain</b>: the area sits on the terrain under it. <b>Spread</b>: it spreads from its origin and stops at terrain taller than itself. <b>Line of sight</b>, when shown, hides the hexes you can't see from the range pulse.",
+        "areaShapeIs": "The polygon button opens this strip, on any attack. Change the shape, its size or its range, and the button follows. ↺ goes back to the weapon's own.",
+        "invadeIs": "An Invade rolls its tech attack first. When it hits, this card asks which invade to use. With several targets, pick a target, then its invade, or <b>Same for all</b>. Right-click an invade for its details.",
+        "fireStripIs": "When Skirmish or Barrage fires more than one weapon, the shots go one by one and this strip follows them: the shot count, the next weapon, and <b>No bonus damage</b> on a shot without it. <b>Stop</b> ends the chain.",
+        "vulnerableIntro": "With Dead Rings, a hit on a <b>Vulnerable</b> target can consume it for 1d6 bonus damage. This row shows in the damage roll when a target qualifies, already ticked. The die takes the attack's main Kinetic, Energy or Explosive type. Click the type icon to pick another. On <b>Roll</b>, Vulnerable leaves every target hit with it ticked.",
+        "vulnerableCardsAre": "With several targets, each Vulnerable target gets this box on its card, so you can take it or keep it per target. Bonus damage is halved on a multi-target or area attack, so the die shows 1d6/2.",
+        "reliableTypeIs": "With more than one damage type in Base Damage, rows you add included, click the type icon next to the Reliable value to pick which type the Reliable damage is.",
+        "variableDamageIs": "A weapon with Variable damage gets this row. Pick Kinetic, Energy or Explosive for the attack, and the damage rows, Reliable and Vulnerable follow it. For the GM, it starts on the type that hurts the targets most. Players start on Kinetic. A weapon that sets its type once asks on its first damage roll and keeps it.",
+        "carouselIntro": "The encounter's turn order, at the top of the screen. Each lane is a side and each card a unit that can act. It shows while there is an encounter, <b>Enable Combat Carousel</b> turns it on or off.",
+        "carouselLanesAre": "A lane is one side: your party, allies, hostiles, or Token Factions teams. The glyphs count the activations the side has left.",
+        "carouselUnitsAre": "A unit with its portrait, name and statuses. Click it to select your unit and pan to it, or to pan to someone else's. Hover it to light its token on the map.",
+        "carouselActivationsAre": "The unit's activations. Once the encounter has started, click one to start its turn. With LA's stat bars on, a bolt shows whether its reaction is used.",
+        "carouselTurnIs": "The unit taking its turn. Its owner ends the turn from the glyph in its corner. Double-click a card to start or end its turn.",
+        "carouselMenuIs": "Right-click a card for more: start its turn, add or remove an activation, <b>Leave Battlefield</b>, and Foundry's own options.",
+        "carouselDeployablesAre": "A unit's deployables sit under its card. Click a chip to select and pan to them, one after the other.",
+        "carouselComingIs": "A planned reinforcement waits at the end of its lane, with the rounds left. Click it to see its marker on the map.",
+        "carouselLeavingIs": "A unit leaving the battlefield shows the door chip until the next round starts.",
+        "carouselButtonsAre": "Hover the carousel for the encounter controls: Add Event, Reinforcements, begin or end the encounter, its settings and the next round. Previous turn, previous round, reset initiative and delete are on the left.",
+        "carouselFoldIs": "Folds the carousel to a thin strip, and opens it again.",
+        "cardsIntro": "When LA needs an answer, a card opens here in the corner: which weapon, which target, which option. One shows at a time, the next ones wait their turn.",
+        "cardsRowsAre": "Click a row to choose. Right-click it for its details. <b>Esc</b> or the bottom button closes the card.",
+        "cardsQueueIs": "When more cards wait, the one in front shows how many. A card about a unit also marks and pings it on the map, so everyone sees who is being asked.",
+        "reactionsIntro": "Reactions are automated in two ways. Some pause the action and ask with a card: here <b>Overwatch v2</b> stops a hostile that starts moving in your threat until you answer. Others let it go on and leave a reminder.",
+        "reactionsCardIs": "Pick the weapon to fire, or <b>Let pass</b>. The move goes on after.",
+        "reactionsLaneIs": "Reminders wait in this lane at the top right, and nothing stops. <b>Reaction Skirmish</b>, the first Overwatch, shows here.",
+        "reactionsRowIs": "The unit, the automation and what triggered it. Any automation can post one, not only Reactions. <b>Use</b> runs it, ✕ dismisses it, and a click on the row shows the details. It goes away once used or when the turn ends.",
+        "reactionsHeadIs": "With several reminders, this line counts them and clears them all at once. Reminders of one unit fold together when space runs out.",
+        "prepareIntro": "Prepare holds a quick action for later. Use <b>Prepare</b> from the TAH's quick actions, then pick the action to hold in this card.",
+        "prepareTriggerIs": "Then build the trigger: who, where and when. The line on top reads it back. Until it fires, the unit has the Preparing status and can't act otherwise.",
+        "prepareFireIs": "When the trigger happens, its owner gets this card. <b>Use</b> takes the action as a reaction, <b>Let pass</b> waits for the next one. A move trigger stops the mover where it enters range. It lasts until the start of the unit's next turn.",
+        "visionIntro": "LA brings Foundry vision closer to Lancer: line of sight with height, and two ways to know a unit is there without seeing it, Sensors and Battlefield Awareness. It all shows on the map through your tokens' vision, so the scene needs <b>Token Vision</b> on. This board is a sample made from your world's actors.",
+        "visionLosIs": "<b>Lancer Line of Sight</b> decides who sees whom, both ways, from each unit's height: its elevation plus its size. When walls have a height, a taller unit sees over a lower one. A unit you see shows as usual.",
+        "visionTerrainIs": "Line of sight reads walls, not terrain. Terrain Height Tools terrain blocks it once it has walls: turn on <b>Auto Walls</b> on the terrain type in my THT fork, or use THT's <b>Convert to Walls</b>.",
+        "visionSensorsIs": "A unit within your <b>Sensors</b> range that you can't see gets a blue outline with a scan line. Sensors reach through walls and terrain: you know exactly where it is.",
+        "visionAwarenessIs": "Any other unit you can't see, at any range, shows as a yellow silhouette: you know something is there. <b>Battlefield Awareness: style</b> sets how much of it shows.",
+        "visionEyeIs": "While you drag a token, each distance label carries an eye: green when you would see that unit from there, red when you would not. <b>Tactical Distance Labels</b> picks when the labels show.",
+        "visionTokenIs": "Each token's Token Config has an <b>L.A</b> tab. Under Awareness, <b>Detection Visual</b> sets how the token reads: Simple Object (a turning orange outline), Visible, or Ignore. Under Line of Sight, <b>Vision From Edge</b> and <b>Blocks Line of Sight</b>.",
         "everyPageGroupsRelatedStuffSorted": "Every page groups related stuff, sorted by family on the left. The search box up top looks through all of them at once.",
         "everythingCurrentlyOnATokenIncluding": "Everything currently on a token, including passive bonuses you can't see otherwise (Veterancy adding a passive on a HASE check, etc.).",
-        "filterByNameLidOrTrigger": "Filter by name, LID, or trigger type. Handy when the list gets long.",
+        "filterByNameLidOrTrigger": "Filter by name, LID, or trigger type.",
         "fixesForIsometricModulesIsometricPerspective": "Fixes for isometric modules (Isometric Perspective, Grape Juice). Only shows when one is active.",
         "flipTheseOnIfSomethingFeels": "Flip these on if something feels off and you want to see what the module is doing under the hood.",
-        "forItemBoundActivationsTheItem": "For item-bound activations, the item's Lancer ID. The finder button beside it searches your items and compendiums, so you don't type it by hand.",
+        "forItemBoundActivationsTheItem": "For item-bound automations, the item's Lancer ID. The finder button beside it searches your items and compendiums, so you don't type it by hand.",
         "forceIsUnintentionalMovementKnockbackDrag": "<b>Force</b> is unintentional movement (knockback, drag): it doesn't trigger move automations like Overwatch.",
-        "halfSizeTokensAutoWallHeight": "Half-size tokens, auto wall-height for tokens, my own token stat bars (a Bar Brawl alternative). Mostly QoL display tweaks.",
+        "halfSizeTokensAutoWallHeight": "Deployable art and folders, half-size tokens, the token ground shadow, auto focus, token HUD buttons and status icons.",
         "hereYouCanEnableTheTah": "Here you can enable the TAH, my own Token Action HUD. It offers a bunch of tools, with UI and sound, and a few options to tune it. Still work in progress but fairly usable.",
-        "holdVForFreeMovementNo": "Hold <b>V</b> for free movement (no cost, ignores terrain). Hold <b>B</b> for debug movement (skips automation hooks). <b>Ctrl+drag</b> from empty space gives the vanilla ruler.",
-        "hoverHereForTheFullCheat": "Click here for the full cheat-sheet. Quick ones: <b>Ctrl+wheel</b> rotate, <b>Shift+wheel</b> size, <b>Q/E</b> elevation, <b>W/S</b> tilt a line, <b>Z</b> reset.",
-        "howActivationPopupsFeelDuringPlay": "How activation popups feel during play: who sees them, whether the reaction is auto-spent, and a couple of niche toggles.",
+        "holdVForFreeMovementNo": "During a drag, press <b>V</b> to make that move free (no cost, ignores terrain) or <b>B</b> for a debug move (skips automation hooks).",
+        "hoverHereForTheFullCheat": "Click here for the full cheat-sheet. Quick ones: <b>drag</b> to aim, <b>Shift+wheel</b> size, <b>Q/E</b> elevation, <b>W/S</b> tilt a line, <b>Z</b> reset.",
+        "howActivationPopupsFeelDuringPlay": "How automations behave during play: who gets the reminders, whether the Reaction is auto-spent, and a couple of niche toggles.",
         "howLongItSticksEndStart": "How long it sticks: end/start of turn, indefinite, etc.",
-        "jsThatRunsOnceOnFoundry": "JS that runs once on Foundry ready. Good for helper functions you want your activations to reuse.",
+        "jsThatRunsOnceOnFoundry": "JS that runs once on Foundry ready. Good for helper functions you want your automations to reuse.",
         "liveVitalsHpHeatStructureAnd": "Live vitals: HP, heat, structure and stress pips, overshield, burn.",
         "makeFoldersToKeepThingsTidy": "Make folders to keep things tidy. Drag rows in to file them.",
         "myOptionalContentPacksPersonalStuff": "My optional content packs (personal stuff), the News & Releases history, and one-shot maintenance buttons: LCP repair, reset, export, import.",
@@ -5326,30 +5918,30 @@
         "narrowWhenItFiresReactTo": "Narrow when it fires: react to self or others, disposition, in or out of combat, auto-activate.",
         "oneSaveCommitsEveryTabAt": "One Save commits every tab at once. Some changes need a reload, you'll be prompted on close.",
         "optionalAutoConsumeTriggerOnHit": "Optional auto-consume trigger (on hit, on damage, on turn end...). Picking some triggers reveals extra filters: item LID, action name, status, check type.",
-        "pickAShapeBlastBurstCone": "Pick a shape - Blast, Burst, Cone, Line - or <b>Mark</b> for gold marks. <b>Elevation</b> makes it 3D, <b>Terrain</b> follows the ground, <b>Spread</b> propagates cell to cell.",
+        "pickAShapeBlastBurstCone": "Pick a shape (Blast, Burst, Cone, Line) or <b>Mark</b> for gold marks. <b>Elevation</b> makes it 3D, <b>Terrain</b> follows the ground, <b>Spread</b> propagates cell to cell.",
         "pickAStatusAndAStack": "Pick a status and a stack count. Target is up top.",
         "pressFOnASelectedToken": "Press <b>F</b> with a token selected: your favorites form a wheel at the cursor. Click an icon to use it, right-click for its details, hover for the range preview. <b>Tab</b> switches to the next wheel once you have more than one.",
         "pressGForTheStatusesOn": "Press <b>G</b> for the statuses on the token plus the ones starred in the status panel. Click to apply or add a stack, right-click to remove one. Removing a permanent effect asks first.",
-        "pressMOnASelectedToken": "Press <b>M</b> on a selected token to open this wheel and set its <b>base</b> movement type - walk, fly, drift, each with its own cost rules.",
+        "pressMOnASelectedToken": "Press <b>M</b> on a selected token to open this wheel and set its <b>base</b> movement type: walk, fly, jump, crawl, each with its own cost rules.",
         "prettySimpleHereSTheConfiguration": "Pretty simple, here's the configuration menu where all the Lancer Automations options live. Note: some settings are <b>client-side</b> (per user) and not shared world-wide (Token Action HUD, custom stat bars, vision debug overlays, etc.). Each player must enable them on their own client.",
         "pulseARangeAroundTheShape": "Pulse a range around the hovered or selected token: a manual radius, threat, sensor, max reach, or a weapon's range. <b>T</b> cycles sources, re-clicking the active one turns it off. A movement-reach toggle is here too.",
         "quickAddAManualTokenStat": "Quick-add a manual token stat bar to track anything you like.",
-        "quickFullReactionProtocolMovePips": "Quick / Full / Reaction / Protocol / Move pips. Click to spend, right-click to restore; on your turn the spent slot becomes End Turn. It mirrors Lancer\\'s own action tracker, so you can disable that one in the Lancer system settings.",
+        "quickFullReactionProtocolMovePips": "Quick / Full / Reaction / Protocol / Free / Move pips. Click to spend, right-click to restore. On your turn the spent slot becomes End Turn. It mirrors Lancer's own action tracker, so you can disable that one in the Lancer system settings.",
         "reOpenActivationManager": "Re-open this any time from the <b>Automation Manager</b> button in the Game Settings sidebar, under the LANCER section.",
         "reOpenThisAnyTimeFrom": "Re-open this any time from the <b>Lancer Automations</b> button in the Game Settings sidebar, under the LANCER section.",
-        "reRunTheSetupWizardOr": "Re-run the <b>Setup Wizard</b>, or launch any tour: Token Action HUD, ruler &amp; movement, advanced measure, effect manager, automation. They can run long - start one now or come back whenever.",
+        "reRunTheSetupWizardOr": "Re-run the <b>Setup Wizard</b>, or start any tour from here. They can run long, take one now or come back whenever.",
         "registeringEveryPossibleStatusFromNpc": "Registering every possible status from NPC stuff is tedious and noisy on the status list. This tab lets you create temporary statuses on the fly. With my <b>temporary-custom-statuses</b> module some can be saved and reused.",
-        "revertTheLastMoveOrClear": "Revert the last action, or clear this token\\'s recorded history.",
+        "revertTheLastMoveOrClear": "Revert the last action, or clear this token's recorded history.",
         "rightClickARangeSourceOr": "<b>Right-click</b> a range source (or a weapon in its list) to pin it: a steady ring that stays on the map after you close the tool, on as many tokens as you want. The ★ on the Range button counts pins. The TAH range toggles pin the same way.",
         "rightClickAnyItemOrShift": "Right-click any item (or <b>Shift+Q</b>) to open a detail popup: full text, tags, and any Disable / Destroy toggles.",
         "sameTriggerPickerAsStandardCombined": "Same trigger picker as Standard. Combined with Uses, this is how you build things like <i>3 stacks of +1d6 damage on next attack, consumed on damage roll</i>.",
-        "saveAFilledInEffectAs": "Save a filled-in effect as a preset and reload it later - handy for ones you apply often.",
+        "saveAFilledInEffectAs": "Save a filled-in effect as a preset and reload it later.",
         "shiftClickInFreeModeMarks": "<b>Shift+click</b> in free mode marks a token (shows its range and reach) or the ground (manual-range only). Hold <b>Ctrl</b> for the vanilla Measure Distance ruler.",
-        "statusesSavedThroughTemporaryCustomStatuses": "Statuses saved through temporary-custom-statuses show up here for reuse, and on a separate Statuses tab in TAH.",
+        "statusesSavedThroughTemporaryCustomStatuses": "Statuses saved through temporary-custom-statuses show up here for reuse, and in the Custom group of the TAH status panel.",
         "subCategoriesOfToolsGameplayActions": "Sub-categories of tools: Gameplay actions, Movement helpers, Measures (the Advanced Measure tool), Log, Glossary, and a Misc grab-bag.",
         "thatSTheToolboxDigThrough": "That's the toolbox. Dig through Utility for the rest.",
-        "theActivationsBundledWithTheModule": "The activations bundled with the module: Overwatch, Brace, Flight, Fall, plus a bunch of NPC-feature automations. Toggle them on or off.",
-        "theAdvancedStuffAndOneOf": "The advanced stuff, and one of the core features of the Lancer Automations engine. Many many things go through here: accuracy, damage on next attack, immunities, rerolls, target modifiers. They inject into the regular Lancer system cards seamlessly. Read <code>doc/API_EFFECTS.md</code> for the full menu.",
+        "theActivationsBundledWithTheModule": "The automations bundled with the module: Overwatch, Brace, Flight, Fall, plus a bunch of NPC-feature automations. Toggle them on or off.",
+        "theAdvancedStuffAndOneOf": "The advanced stuff, and one of the core features of the Lancer Automations engine. Many many things go through here: accuracy, damage on next attack, immunities, rerolls, target modifiers. They inject into the regular Lancer system cards. Read <code>doc/API_EFFECTS.md</code> for the full menu.",
         "theBonusTypeEachOneReveals": "The bonus type. Each one reveals its own fields below.",
         "theEditorSuggestsApiNamesAs": "The editor suggests API names as you type. Press <b>Alt-Enter</b> to open the list, then arrow through to see what each does.",
         "theFxSectionStatusVisualEffects": "The FX section: status visual effects (glows, shaders) plus the extra statuses I added. A bit like Lancer QoL, so pick one or the other if both are on.",
@@ -5365,21 +5957,75 @@
         "visionFromEdgeForBigTokens": "Vision-from-edge for big tokens, the Lancer Sensors and Battlefield Awareness detection modes (auto-add, combat-only, range source), basic-sight overrides, and drag-vision behavior all live here.",
         "whatHappensWhenSomethingDiesSpawn": "What happens when something dies. Spawn a wreck token, play the explosion, optionally drop terrain. Per-category if you want monstrosity wrecks to look different from mech wrecks.",
         "whereYouBuildAutomationsItemBound": "Where you build automations. Item-bound (per LID) or general, code-driven, fired on triggers like onMove, onHit, onActivation, and so on.",
-        "yourActivationsGroupedIntoFoldersEach": "Your activations, grouped into folders. Each row binds to one or more triggers and runs your code.",
+        "yourActivationsGroupedIntoFoldersEach": "Your automations, grouped into folders. Each row binds to one or more triggers and runs your code.",
         "yourLogicEvaluateShouldItFire": "Your logic: <b>evaluate</b> (should it fire?), <b>activation</b> (what happens), plus onInit and onMessage."
+      },
+      "demo": {
+        "clockA": "Reactor Breach",
+        "clockB": "Evacuation",
+        "mech": "Everest",
+        "mechB": "Lancaster",
+        "pilot": "Pilot",
+        "pinA": "Old Debts",
+        "player": "Player",
+        "drone": "Drone",
+        "unitA": "Assault",
+        "unitB": "Sniper",
+        "unitC": "Berserker",
+        "unitD": "Bombard",
+        "brace": "Brace",
+        "overwatch": "Overwatch",
+        "skirmish": "SKIRMISH",
+        "weapon": "Assault Rifle",
+        "weaponB": "Tactical Knife",
+        "weaponDetailsHint": "Right-click a row for weapon details",
+        "weaponSub": "Main Rifle",
+        "weaponSubB": "Aux Melee",
+        "weaponC": "Missile Rack",
+        "areaWeapon": "Flamethrower"
+      },
+      "off": {
+        "askGm": "Your GM can turn it on.",
+        "attackPicker": "The attack target picker is off in this world.",
+        "awards": "Awards are off in this world.",
+        "battleLog": "The Battle Log is off in this world.",
+        "autoStart": "Auto-start is off in this world: the picker waits for a click.",
+        "carousel": "The Combat Carousel is off in this world.",
+        "carouselShow": "The carousel is hidden on your screen.",
+        "clockWindow": "The clock window is hidden on your screen.",
+        "deployLines": "Deployable lines are off on your screen.",
+        "distanceLabels": "Distance labels are off on your screen.",
+        "done": "Turned on.",
+        "hitLabels": "Hit chance labels are off in this world.",
+        "hitLabelsGm": "Only the GM sees hit chance labels in this world.",
+        "lancerLos": "Lancer Line of Sight is off in this world.",
+        "losHover": "Sightlines on target hover are off in this world.",
+        "narrativeTah": "The narrative TAH is off on your screen.",
+        "overSpeed": "Over speed is Off or Stop in this world, so this card never shows.",
+        "overwatchCard": "Overwatch v2 is off in this world. The GM turns it on in the Automation Manager, under Defaults.",
+        "reactionSkirmish": "Reaction Skirmish is off in this world. The GM turns it on in the Automation Manager, under Defaults.",
+        "reminders": "Reminders go to the GM only in this world.",
+        "tah": "The Token Action HUD is off on your screen.",
+        "tht": "This needs the Terrain Height Tools module.",
+        "turnOn": "Turn on",
+        "turnOnReload": "Turn on and reload",
+        "uplink": "Roll Uplink is off in this world.",
+        "uplinkAutoOpen": "Uplink auto-open is off on your screen.",
+        "visionModes": "New tokens don't get Sensors and Battlefield Awareness in this world."
       },
       "guidedWalkthroughOfEveryTabIn": "Guided walkthrough of every tab in the Lancer Automations configuration window.",
       "placeTokenBody": "Drop a player mech onto the scene and select it, then click Continue. Talents, Frame and mounts are mech-only, so an NPC won't do, and an unequipped mech leaves the weapon steps with nothing to point at.",
       "placeTokenSubtitle": "The TAH tour needs a mech token.",
       "placeTokenTitle": "PLACE A TOKEN",
-      "resumeBody": "You can re-launch this tour later from <b>Configure Settings</b> &gt; <b>Module Settings</b> &gt; <b>Lancer Automations</b> &gt; <b>Tour</b>, or from Foundry's <b>Configure Tours</b> menu.",
+      "resumeBody": "You can re-launch this tour later from <b>Configure Settings</b> &gt; <b>Module Settings</b> &gt; <b>Lancer Automations</b>, in the <b>Tutorials</b> tab, or from Foundry's <b>Configure Tours</b> menu.",
       "resumeSubtitle": "Take the tour now or later.",
       "resumeTitle": "SETUP APPLIED",
+      "rollUplinkLiveCopies": "Live copies of your players' roll dialogs.",
       "step": {
         "actionTracker": "Action Tracker",
         "actionWheel": "Action Wheel",
         "activationManager": "Automation Manager",
-        "activations": "Activations",
+        "activations": "Automations",
         "addExtra": "Add Extra",
         "advancedMeasure": "Advanced Measure",
         "advancedTahTools": "Advanced TAH Tools",
@@ -5387,17 +6033,17 @@
         "autocomplete": "Autocomplete",
         "automationHint": "Automation Hint",
         "bonus": "Bonus",
-        "bonusAdd": "Bonus - Add",
-        "bonusConsume": "Bonus - Consume",
-        "bonusType": "Bonus - Type",
+        "bonusAdd": "Bonus: Add",
+        "bonusConsume": "Bonus: Consume",
+        "bonusType": "Bonus: Type",
         "categories": "Categories",
         "codeBlocks": "Code Blocks",
         "combatMovement": "Combat & Movement",
         "combatToggle": "Combat Toggle",
         "configuration": "Configuration",
         "custom": "Custom",
-        "customBuild": "Custom - Build",
-        "customSaved": "Custom - Saved",
+        "customBuild": "Custom: Build",
+        "customSaved": "Custom: Saved",
         "cycleWhileDragging": "Cycle While Dragging",
         "debug": "Debug",
         "defaults": "Defaults",
@@ -5427,6 +6073,118 @@
         "lancerAutomationsTahAdvancedTools": "Lancer Automations: TAH Advanced Tools",
         "lancerAutomationsTokenActionHud": "Lancer Automations: Token Action HUD",
         "lancerRuler": "Lancer Ruler",
+        "wheelCurrent": "Current Type",
+        "rulerLabels": "Ruler Labels",
+        "labelCost": "Cost So Far",
+        "labelRing": "Ring Color",
+        "bandStart": "Boost Starts Here",
+        "labelDistance": "Spaces Moved",
+        "labelRow": "Extra Cost",
+        "labelSaved": "Saved Cost",
+        "labelPathfind": "Pathfinding",
+        "labelElevMode": "Ground or Hold",
+        "labelStraight": "Straight Line",
+        "labelElevCost": "Elevation Cost",
+        "pastYourSpeed": "Past Your Speed",
+        "overSpeed": "Over Speed",
+        "lancerAutomationsClocks": "Lancer Automations: Clocks",
+        "lancerAutomationsRollUplink": "Lancer Automations: Roll Uplink",
+        "clocks": "Clocks",
+        "clockSet": "Set a Clock",
+        "clockHidden": "Hidden Clocks",
+        "clockAdd": "Add a Clock",
+        "clockPins": "Pinned Clocks",
+        "clockRings": "Rings or List",
+        "reinforcements": "Reinforcements",
+        "reinforcementBar": "Drop on Map",
+        "reinforcementArrive": "When They Land",
+        "reinforcementVisibility": "What Players See",
+        "reinforcementTeam": "Team",
+        "reinforcementMarker": "Reinforcement Marker",
+        "leaveBattlefield": "Leave Battlefield",
+        "leaveMark": "Mark a Unit",
+        "arrivalCard": "Start of the Round",
+        "leaveOrStay": "Leave or Stay",
+        "rollUplink": "Roll Uplink",
+        "uplinkChips": "Open Rolls",
+        "uplinkWho": "Who Rolls",
+        "uplinkChoices": "Their Choices",
+        "uplinkRange": "Range and Damage",
+        "uplinkTargets": "Targets",
+        "skirmishBarrage": "Skirmish & Barrage",
+        "vulnerable": "Vulnerable",
+        "vulnerableCards": "Vulnerable per Target",
+        "reliableType": "Reliable Type",
+        "variableDamage": "Variable Damage",
+        "basicTools": "Basic Attack, Damage, Basic Tech",
+        "boost": "Boost",
+        "deploy": "Deploy",
+        "recallItem": "Recall Item",
+        "linkUnlinkActor": "Link/Unlink Actor",
+        "contest": "Contest",
+        "forceCheck": "Force Check",
+        "generateScan": "Generate Scan",
+        "linkToToken": "Link to Token",
+        "reinforcement": "Reinforcement",
+        "downtime": "Downtime",
+        "reserve": "Reserve",
+        "vote": "Vote",
+        "lancerAutomationsBattleLog": "Lancer Automations: Battle Log",
+        "battleLog": "Battle Log",
+        "battleLogOutcome": "Record Outcome",
+        "battleLogMvp": "Award MVP",
+        "battleLogAnalysis": "Custom Analysis",
+        "battleLogBroadcast": "Broadcast",
+        "battleLogRecap": "The Recap",
+        "battleLogSquad": "Squad",
+        "battleLogAwards": "Awards",
+        "battleLogEncounter": "Encounter",
+        "battleLogTelemetry": "Telemetry",
+        "battleLogShare": "Share Image",
+        "lancerAutomationsAttacking": "Lancer Automations: Attacking",
+        "attacking": "Attacking",
+        "attackPick": "Pick Targets",
+        "attackCancel": "While Picking",
+        "attackMap": "On the Map",
+        "attackChance": "Hit Chance",
+        "attackLos": "Line of Sight",
+        "areas": "Areas",
+        "areaAim": "Aim an Area",
+        "areaOptions": "Area Options",
+        "areaShape": "Shape and Size",
+        "invade": "Invade",
+        "lancerAutomationsCombatCarousel": "Lancer Automations: Combat Carousel",
+        "combatCarousel": "Combat Carousel",
+        "carouselLanes": "Lanes",
+        "carouselUnits": "Units",
+        "carouselActivations": "Activations",
+        "carouselTurn": "Active Turn",
+        "carouselMenu": "Right-Click",
+        "carouselDeployables": "Deployables",
+        "carouselButtons": "Encounter Controls",
+        "carouselFold": "Fold",
+        "carouselIncoming": "Incoming",
+        "carouselLeaving": "Leaving",
+        "lancerAutomationsCardsReactions": "Lancer Automations: Cards and Reactions",
+        "cards": "Cards",
+        "cardsRows": "Pick a Row",
+        "cardsQueue": "Waiting Cards",
+        "reactions": "Reactions",
+        "reactionsCard": "Answer the Card",
+        "reactionsLane": "Reminders",
+        "reactionsRow": "A Reminder",
+        "reactionsHead": "Many at Once",
+        "prepare": "Prepare",
+        "prepareTrigger": "Build the Trigger",
+        "prepareFire": "Prepared Action",
+        "lancerAutomationsVision": "Lancer Automations: Vision and Sensors",
+        "vision": "Vision",
+        "visionLos": "Line of Sight",
+        "visionTerrain": "Terrain",
+        "visionSensors": "Lancer Sensors",
+        "visionAwareness": "Battlefield Awareness",
+        "visionEye": "Seen or Not",
+        "visionToken": "Per Token",
         "manage": "Manage",
         "markersRuler": "Markers & Ruler",
         "moreStats": "More Stats",
@@ -5446,9 +6204,9 @@
         "shortcuts": "Shortcuts",
         "sounds": "Sounds",
         "standard": "Standard",
-        "standardConsumeOn": "Standard - Consume on",
-        "standardDuration": "Standard - Duration",
-        "standardEffect": "Standard - Effect",
+        "standardConsumeOn": "Standard: Consume on",
+        "standardDuration": "Standard: Duration",
+        "standardEffect": "Standard: Effect",
         "startup": "Startup",
         "statsBar": "Stats Bar",
         "statusWheel": "Status Wheel",
@@ -5467,9 +6225,9 @@
       },
       "stepCount": "{count} steps",
       "theAdvancedMeasureToolShapesRanges": "The Advanced Measure tool: shapes, ranges, markers, and shortcuts.",
-      "theGameplayToolsInsideTheToken": "The gameplay tools inside the Token Action HUD: skirmish/barrage, boost, deploy, contest, scan, link, reinforcement, downtime, reserve, vote.",
-      "theMovementWheelMovementTypesAnd": "The movement wheel, movement types, and the free/debug keys.",
-      "walksThroughTheActivationManagerDialog": "Walks through the Automation Manager dialog (custom activations, defaults, startup scripts).",
+      "theGameplayToolsInsideTheToken": "The gameplay tools inside the Token Action HUD: skirmish/barrage, boost, deploy, contest, scan, link, reinforcement, leave battlefield, downtime, reserve, vote.",
+      "theMovementWheelMovementTypesAnd": "The movement wheel, the ruler labels, and the free/debug keys.",
+      "walksThroughTheActivationManagerDialog": "Walks through the Automation Manager dialog (custom automations, defaults, startup scripts).",
       "walksThroughTheEffectManagerDialog": "Walks through the Effect Manager dialog (standard, custom, bonus, manage).",
       "walksThroughTheTokenActionHud": "Walks through the Token Action HUD on a controlled token.",
       "welcome": {
@@ -5478,7 +6236,7 @@
         "help": "If you have any question or issue, head out to the <a href=\"https://discord.com/invite/lancer\" target=\"_blank\" rel=\"noopener\">Lancer Discord</a>, or come talk to me directly on <a href=\"https://discord.com/channels/426286410496999425/1436087781666455642\" target=\"_blank\" rel=\"noopener\">my channel</a>.",
         "lastWarning": "<b>Last warning:</b> if you installed this without reading <a href=\"https://agraael.github.io/lancer-automations/\" target=\"_blank\" rel=\"noopener\">the documentation</a>, please go read it. This is not a plug and play module, and you have to be serious about that.",
         "subtitle": "A module that went way bigger than I initially planned.",
-        "support": "This module is free and always will be. If you wanna support my late nights, <a href=\"https://www.patreon.com/cw/LaSossis\" target=\"_blank\" rel=\"noopener\">Patreon</a> or <a href=\"https://ko-fi.com/lasossis\" target=\"_blank\" rel=\"noopener\">Ko-fi</a>.",
+        "support": "This module is free and always will be. Patron money goes back into it: commissioned art and assets for LA, and the occasional dead PC part. If you wanna support my late nights, <a href=\"https://www.patreon.com/c/LaSossis\" target=\"_blank\" rel=\"noopener\">Patreon</a> or <a href=\"https://ko-fi.com/lasossis\" target=\"_blank\" rel=\"noopener\">Ko-fi</a>.",
         "thanks": "First of all, thanks for downloading.",
         "title": "WELCOME TO LANCER AUTOMATIONS",
         "tours": "Since it's a big module, here's a set of tours for the important stuff. They can run long, so take them one at a time and come back later."
@@ -5506,10 +6264,12 @@
       "fromEdgeTip": "Vision computed from the token's perimeter (Lancer LOS-style) so larger tokens can peek around corners. 'Default' follows the world setting."
     },
     "wreck": {
+      "coverFilterName": "Not taller than the wreck (Lancer Automations)",
       "defaultGlobalSetting": "Default (use global setting)",
       "pickFolderTip": "Pick a folder: a random file is used on each death",
       "resurrect": "Resurrect",
       "sectionAwareness": "Awareness",
+      "sectionLineOfSight": "Line of Sight",
       "sectionMovement": "Movement",
       "sectionPortrait": "Portrait",
       "sectionScan": "Scan",

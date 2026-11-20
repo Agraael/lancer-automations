@@ -2,7 +2,7 @@
 
 [← Back to Home](../index.md) · Advanced: [Movement Advanced](./MOVEMENT_ADVANCED.md) · Isometric: [Isometric](./ISOMETRIC.md)
 
-Lancer Automations ships its own token and canvas ruler, built around Lancer's speed tiers and elevation. Boost detection, the movement cap, and the debug toggles are in [Movement Advanced](./MOVEMENT_ADVANCED.md).
+Lancer Automations has its own token and canvas ruler, built around Lancer's speed tiers and elevation. Boost detection, the movement cap, and the debug toggles are in [Movement Advanced](./MOVEMENT_ADVANCED.md).
 
 ---
 
@@ -42,11 +42,11 @@ Each step costs:
 
 By movement type:
 
-- **Walking** adds a climb surcharge: the first unit of a climb is free, each unit after it costs 1 more. A 3-unit climb costs 5 (3 height + 2 surcharge). Flying, the climber status and an elevation immunity bonus remove the surcharge.
+- **Walking** adds a climb surcharge: the first unit of a climb has none, each unit after it costs 1 more. A 3-unit climb costs 5 (3 height + 2 surcharge). Flying, the climber status and an elevation immunity bonus remove the surcharge.
 - **Flying** follows the highest terrain it crosses and holds altitude over dips. No surcharge.
 - **Jumping** one cell across, rising no more than the token's SIZE, costs double the horizontal distance. The climb is free and only the landing cell's terrain counts. A longer or higher jump costs the same as walking.
 
-Pathfinding and reach colors use the same costs. Gridless scenes work too, sampling penalties along the line.
+Pathfinding and reach colors use the same costs. Gridless scenes work too.
 
 ### Low walls
 
@@ -56,11 +56,16 @@ With **Step Over Low Walls** (`enableObstructionStepOver`, on by default), a SIZ
 - Ending a move on that terrain puts the token on top.
 - Terrain as tall as its SIZE or taller is climbed as usual.
 
-It only applies in Ground mode. Flying tokens, SIZE 1 tokens and pilots always climb. The **No Step-over** toggles add NPC templates that always climb too (vehicles, squads, humans and specialists by default), and the `noObstructionPass` flag opts out any token. Both are in **Ruler & Measures → Lancer Automations Ruler**.
+It only applies in Ground mode. These always climb:
+
+- Flying tokens, SIZE 1 tokens and pilots.
+- NPC templates added with the **No Step-over** toggles (vehicles, squads, humans and specialists by default).
+
+**Step Over Low Walls** and the **No Step-over** toggles are both in **Ruler & Measures → Lancer Automations Ruler**.
 
 Elevation also feeds combat range checks (overwatch, engagement, range) through **Count Elevation in Combat Distance** (`count3DDistance`, on by default), in **Combat & Movement → Movement & Boost**.
 
-The ruler works with my forks of [Grid-Aware Auras](https://github.com/Agraael/FoundryVTT-Grid-Aware-Auras) and [Terrain Height Tools](https://github.com/Agraael/FoundryVTT-Terrain-Height-Tools), plus my [TemplateMacro](https://github.com/Agraael/templatemacro): set difficult terrain by painting it with THT, dropping a GAA aura, or placing a TemplateMacro zone, and the ruler bills the penalty as you cross it.
+The ruler works with my forks of [Grid-Aware Auras](https://github.com/Agraael/FoundryVTT-Grid-Aware-Auras) and [Terrain Height Tools](https://github.com/Agraael/FoundryVTT-Terrain-Height-Tools), plus my [TemplateMacro](https://github.com/Agraael/templatemacro): set difficult terrain by painting it with THT, dropping a GAA aura, or placing a TemplateMacro zone, and the ruler adds the penalty as you cross it.
 
 <img src="../vid/mv-difficult-terrain.gif" width="70%"/>
 
@@ -74,16 +79,16 @@ During a drag, **E** raises the token's elevation and **Q** lowers it, by one gr
 
 With Terrain Height Tools, the token also **auto-elevates** as you drag, on drop, and when you first place it. It has two modes, picked by the movement action:
 
-- **Ground** - the token stands on a surface. It climbs what it must, goes under overhangs and bridges it fits beneath, and comes down off ledges. Walk, climb, crawl and jump use it. E/Q add on top of the surface.
-- **Hold** - the elevation at drag start is a floor. The token rises only where terrain fills its space, comes back to the floor once clear, and never goes below it. Fly uses it. E/Q move the floor.
+- **Ground**: the token stands on a surface. It climbs what it must, goes under overhangs and bridges it fits beneath, and comes down off ledges. Walk, climb, crawl and jump use it. E/Q add on top of the surface.
+- **Hold**: the elevation at drag start is a floor. The token rises only where terrain fills its space, comes back to the floor once clear, and never goes below it. Fly uses it. E/Q move the floor.
 
 Press **Z** to swap them for the session. The badge on the last waypoint shows which one is active. You can turn auto-elevation off three ways:
 
-- **Globally** - **Terrain auto-elevation** (`terrainElevationMode`) set to **Off**.
-- **Measure ruler only** - the same setting set to **Move only**.
-- **One token** - its own **`disableAutoTerrainElevation`** flag, or Terrain Height Tools' own `ignoreAutoElevation`.
+- **Globally**: **Terrain auto-elevation** (`terrainElevationMode`) set to **Off**.
+- **Measure ruler only**: the same setting set to **Move only**.
+- **One token**: **Disable Auto-elevation from Terrain** in its Token Config **L.A** tab, or Terrain Height Tools' own `ignoreAutoElevation`.
 
-**Auto-insert Climb Waypoints** (`enableClimbWaypoints`, on by default) splits the path with `climb` steps wherever terrain height changes, so the cost is billed at each climb. Fly only splits where it rises.
+**Auto-insert Climb Waypoints** (`enableClimbWaypoints`, on by default) splits the path with `climb` steps wherever terrain height changes, so the cost is counted at each climb. Fly only splits where it rises.
 
 <br clear="right"/>
 
@@ -107,12 +112,12 @@ V, B, M, X and Z are rebindable under **Configure Controls → Lancer Automation
 
 | Key | What it does |
 |-----|--------------|
-| **V** (hold) | **Free movement** - the next move doesn't spend the movement cap and ignores terrain penalties. |
-| **B** (hold) | **Debug movement** - the next move is recorded by Foundry but skips automation (no `onMove`, no history, no engagement update). |
-| **M** | **Movement wheel** - open the picker (outside a drag). |
+| **V** (toggle) | **Free Move / Action**: press it during a drag to make that move free. It doesn't spend the movement cap and ignores terrain penalties. Outside a drag, while it's on, an action clicked in the TAH spends no action. Every drag starts with it off. |
+| **B** (toggle) | **Debug movement**: press it during a drag to make that move skip automation (no `onMove`, no history, no engagement update). Foundry still records it. Every drag starts with it off. |
+| **M** | **Movement wheel**: open the picker (outside a drag). |
 | **Tab** | Cycle the movement type mid-drag. Foundry core key, rebind it under **Core**. |
-| **X** | **Toggle Pathfinding** - flips drag pathfinding on or off for this session. Needs Pathfind Drag Movement on. |
-| **Z** | **Swap Elevation Mode** - swaps Ground and Hold for this session. |
+| **X** | **Toggle Pathfinding**: flips drag pathfinding on or off for this session. Needs Pathfind Drag Movement on. |
+| **Z** | **Swap Elevation Mode**: swaps Ground and Hold for this session. |
 | **E / Q** | During a drag, raise / lower elevation by one. |
 
 ---
@@ -132,6 +137,8 @@ While you drag a token, **Tactical Distance Labels** (`enableTacticalDistance`) 
 <img align="right" src="../img/mv-history.png" width="45%"/>
 
 Each token's moves are recorded during combat (distance, cost, whether dragged, free, or forced). From the [HUD](./HUD.md) combat bar you can **revert the last move** (retraces the token back along the path it took) or **clear the history**.
+
+A keyboard move in combat gets a **Manual Move** chip on the action tape. It spends no action and can be undone.
 
 History clears on combat start. Two extra world settings clear it at the end of each turn (`historyClearOnTurn`) or the start of each round (`historyClearOnRound`). Neither has a UI row, so set them from the console with `game.settings.set('lancer-automations', 'historyClearOnTurn', true)`.
 

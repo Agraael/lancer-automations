@@ -5,7 +5,9 @@ export async function dedupeWorldSettings()
 {
     if (!isExecutorGM())
         return;
+
     const byKey = new Map();
+
     for (const setting of game.settings.storage.get('world'))
     {
         const mapKey = `${setting.key}|${setting.user ?? ''}`;
@@ -13,7 +15,9 @@ export async function dedupeWorldSettings()
             byKey.set(mapKey, []);
         byKey.get(mapKey).push(setting);
     }
+
     const staleIds = [];
+
     for (const docs of byKey.values())
     {
         if (docs.length < 2)
@@ -22,6 +26,7 @@ export async function dedupeWorldSettings()
         for (const doc of docs.slice(1))
             staleIds.push(doc.id);
     }
+
     if (staleIds.length === 0)
         return;
     await Setting.deleteDocuments(staleIds);

@@ -7,12 +7,15 @@ function createSingleMarkStore(colorFn = () => TG.placed, above = false, haloFn 
 {
     const marks = [];
     const gfx = new PIXI.Graphics();
+
     if (above)
         addGraphicsAboveTokens(gfx);
     else
         addGraphicsBelowTokens(gfx);
+
     const keyOf = (mark) => mark.tokenId ?? `${mark.col},${mark.row}`;
     const indexOf = (mark) => marks.findIndex(existing => keyOf(existing) === keyOf(mark));
+
     const liveToken = (id) =>
     {
         for (const preview of canvas.tokens?.preview?.children ?? [])
@@ -20,14 +23,17 @@ function createSingleMarkStore(colorFn = () => TG.placed, above = false, haloFn 
             if (preview?.document?.id === id)
                 return preview;
         }
+
         return canvas.tokens.get(id);
     };
+
     const drawGeom = (mark) =>
     {
         if (mark.tokenId)
         {
             if (!drawTokens)
                 return;
+
             const token = liveToken(mark.tokenId);
             if (!token || !isTokenVisible(token))
                 return;
@@ -47,24 +53,29 @@ function createSingleMarkStore(colorFn = () => TG.placed, above = false, haloFn 
             gfx.drawRect(center.x - canvas.grid.size / 2, center.y - canvas.grid.size / 2, canvas.grid.size, canvas.grid.size);
         }
     };
+
     const markCells = (mark) =>
     {
         if (!mark.tokenId)
             return [[mark.col, mark.row]];
         if (!drawTokens)
             return [];
+
         const token = liveToken(mark.tokenId);
         return token && isTokenVisible(token) ? getOccupiedOffsets(token).map(offset => [offset.col, offset.row]) : [];
     };
+
     const drawDashed = () =>
     {
         const seen = new Set();
         const cells = [];
+
         for (const mark of marks)
         {
             for (const [col, row] of markCells(mark))
             {
                 const key = `${col},${row}`;
+
                 if (!seen.has(key))
                 {
                     seen.add(key);
@@ -72,9 +83,12 @@ function createSingleMarkStore(colorFn = () => TG.placed, above = false, haloFn 
                 }
             }
         }
+
         paintDashedFootprint(gfx, cells, colorFn(marks[0]), { halo: haloFn(marks[0]) });
     };
+
     let drawn = false;
+
     const tick = () =>
     {
         if (gfx.destroyed)
@@ -82,6 +96,7 @@ function createSingleMarkStore(colorFn = () => TG.placed, above = false, haloFn 
             canvas.app.ticker.remove(tick);
             return;
         }
+
         if (!marks.length || !gfx.visible)
         {
             if (drawn)
@@ -89,20 +104,25 @@ function createSingleMarkStore(colorFn = () => TG.placed, above = false, haloFn 
             drawn = false;
             return;
         }
+
         drawn = true;
         gfx.alpha = 0.65 + 0.35 * Math.sin(performance.now() / 280);
         gfx.clear();
+
         if (dashed)
         {
             drawDashed();
             return;
         }
+
         gfx.lineStyle(gridLineWidth(7), 0x000000, 0.6);
+
         for (const mark of marks)
         {
             if (haloFn(mark))
                 drawGeom(mark);
         }
+
         for (const mark of marks)
         {
             const color = colorFn(mark);
@@ -112,6 +132,7 @@ function createSingleMarkStore(colorFn = () => TG.placed, above = false, haloFn 
             gfx.endFill();
         }
     };
+
     canvas.app.ticker.add(tick);
     return {
         marks,

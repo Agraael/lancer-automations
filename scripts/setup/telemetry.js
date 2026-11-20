@@ -22,11 +22,13 @@ export async function getOrCreateInstallId()
     try
     {
         let id = getModuleSetting(INSTALL_ID_SETTING) || "";
+
         if (!id)
         {
             id = foundry.utils.randomID();
             await game.settings.set(MODULE_ID, INSTALL_ID_SETTING, id);
         }
+
         return id;
     }
     catch
@@ -51,6 +53,7 @@ async function _upsertUser(userHash, role)
                 language,
                 updated_at: new Date().toISOString(),
             }, { onConflict: "user_hash" });
+
         if (error)
             throw error;
     }
@@ -78,12 +81,14 @@ async function _maybeDailyTouch(userHash, role)
 {
     const today = new Date().toISOString().slice(0, 10);
     const last = getModuleSetting(LAST_PING_SETTING) || "";
+
     if (last === today)
         return;
     await _pingDaily(userHash, role);
     // Unknown users have no id to upsert; they only count towards the daily total.
     if (userHash)
         await _upsertUser(userHash, role);
+
     try
     {
         await game.settings.set(MODULE_ID, LAST_PING_SETTING, today);
@@ -100,11 +105,13 @@ async function _showFirstLaunchPopup()
     return new Promise((resolve) =>
     {
         let answered = false;
+
         const pick = (value) =>
         {
             answered = true;
             resolve(value);
         };
+
         new Dialog({
             title: localize('LA.dialogTitle.lancerAutomations'),
             content: `
@@ -148,6 +155,7 @@ async function _showFirstLaunchPopup()
 async function _runFirstLaunch()
 {
     const role = await _showFirstLaunchPopup();
+
     if (role === CONSENT_DECLINED)
     {
         await game.settings.set(MODULE_ID, CONSENT_SETTING, CONSENT_DECLINED);
@@ -155,6 +163,7 @@ async function _runFirstLaunch()
         console.log("lancer-automations | User declined; counted as unknown only.");
         return;
     }
+
     const installId = foundry.utils.randomID();
     await game.settings.set(MODULE_ID, INSTALL_ID_SETTING, installId);
     await game.settings.set(MODULE_ID, CONSENT_SETTING, role);
@@ -193,6 +202,7 @@ class ConsentMenu extends FormApplication
     render()
     {
         const current = getModuleSetting(CONSENT_SETTING);
+
         const label = current === ROLE_GM ? "currently counted as GM"
             : current === ROLE_PLAYER ? "currently counted as Player"
                 : current === CONSENT_DECLINED ? "currently opted out"

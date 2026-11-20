@@ -20,6 +20,7 @@ function densify(token, startPos, waypoints, action)
 {
     const doc = token.document;
     const src = doc._source;
+
     const startWp = {
         x: startPos.x,
         y: startPos.y,
@@ -29,6 +30,7 @@ function densify(token, startPos, waypoints, action)
         shape: src.shape,
         action: action ?? waypoints[0]?.action
     };
+
     const path = [startWp, ...waypoints];
     const terrainPath = token.createTerrainMovementPath ? token.createTerrainMovementPath(path, { preview: true }) : path;
     return { densePath: doc.getCompleteMovementPath(terrainPath), src };
@@ -57,6 +59,7 @@ export function splitPathAtCosts(token, waypoints, startPos, budgets, action)
     {
         if (!Array.isArray(waypoints) || !waypoints.length)
             return null;
+
         const { densePath, src } = densify(token, startPos, waypoints, action);
         const hasFlyAction = densePath.some(cell => String(cell.action ?? '').includes('fly'));
         const measureInput = hasFlyAction ? densePath : densePath.map(cell => ({ ...cell, checkpoint: true }));
@@ -67,14 +70,17 @@ export function splitPathAtCosts(token, waypoints, startPos, budgets, action)
         let cumCost = 0;
         let wpCursor = 0;
         let targetIdx = 0;
+
         const closeLeg = (cell) =>
         {
             const currentLeg = legs.at(-1);
             const lastWp = currentLeg.at(-1);
+
             if (!lastWp || !posEq(lastWp, cell))
                 currentLeg.push(boundaryWaypoint(cell, src, action));
             legs.push([]);
         };
+
         const snappedBoundaryIdx = (denseIdx) =>
         {
             let backIdx = denseIdx - 1;
@@ -82,15 +88,19 @@ export function splitPathAtCosts(token, waypoints, startPos, budgets, action)
                 backIdx--;
             return backIdx;
         };
+
         for (let denseIdx = 1; denseIdx < densePath.length; denseIdx++)
         {
             const segCost = Number(measure.waypoints?.[denseIdx]?.backward?.cost ?? 0);
+
             while (targetIdx < targets.length && cumCost + segCost > targets[targetIdx] + 1e-6)
             {
                 closeLeg(densePath[snappedBoundaryIdx(denseIdx)]);
                 targetIdx++;
             }
+
             cumCost += segCost;
+
             while (wpCursor < waypoints.length && posEq(waypoints[wpCursor], densePath[denseIdx]))
             {
                 const consumed = waypoints[wpCursor];
@@ -101,11 +111,13 @@ export function splitPathAtCosts(token, waypoints, startPos, budgets, action)
                     break;
             }
         }
+
         while (targetIdx < targets.length)
         {
             closeLeg(densePath.at(-1));
             targetIdx++;
         }
+
         if (wpCursor !== waypoints.length)
             return null;
         return legs;
@@ -124,6 +136,7 @@ export function measurePathCost(token, waypoints, startPos, action)
     {
         if (!Array.isArray(waypoints) || !waypoints.length)
             return null;
+
         const { densePath } = densify(token, startPos, waypoints, action);
         const hasFlyAction = densePath.some(cell => String(cell.action ?? '').includes('fly'));
         const measureInput = hasFlyAction ? densePath : densePath.map(cell => ({ ...cell, checkpoint: true }));
@@ -146,12 +159,15 @@ export function trimPathToPosition(token, waypoints, startPos, position, action)
     {
         if (!Array.isArray(waypoints) || !waypoints.length || !position)
             return null;
+
         const { densePath, src } = densify(token, startPos, waypoints, action);
         const trimmed = [];
         let wpCursor = 0;
+
         for (let denseIdx = 1; denseIdx < densePath.length; denseIdx++)
         {
             const cell = densePath[denseIdx];
+
             while (wpCursor < waypoints.length && posEq(waypoints[wpCursor], cell))
             {
                 const consumed = waypoints[wpCursor];
@@ -161,6 +177,7 @@ export function trimPathToPosition(token, waypoints, startPos, position, action)
                 if (nextWp && posEq(nextWp, consumed) && nextWp.elevation !== consumed.elevation)
                     break;
             }
+
             if (posEq(cell, position))
             {
                 const lastWp = trimmed.at(-1);
@@ -169,6 +186,7 @@ export function trimPathToPosition(token, waypoints, startPos, position, action)
                 return trimmed;
             }
         }
+
         return null;
     }
     catch (err)

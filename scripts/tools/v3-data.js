@@ -16,6 +16,7 @@ const DEFENSE_BONUS_IDS = new Set(['immunity', 'resistance']);
 const PILOT_EQUIPMENT_TYPES = new Set(['pilot_gear', 'pilot_armor', 'pilot_weapon']);
 const MECH_READS_PILOT_TYPES = new Set(['talent', 'core_bonus', 'reserve', ...PILOT_EQUIPMENT_TYPES]);
 const SKILLS = ['hull', 'agility', 'systems', 'engineering'];
+
 const ACCURACY_ROLL_TYPES = {
     attack: ['attack'],
     ranged: ['ranged', 'nexus'],
@@ -27,6 +28,7 @@ const ACCURACY_ROLL_TYPES = {
     check: [...SKILLS, 'grit'].map(skill => `${skill}_check`),
     ...Object.fromEntries(SKILLS.flatMap(skill => [[skill, [skill]], [`${skill}_check`, [`${skill}_check`]], [`${skill}_save`, [`${skill}_save`]]]))
 };
+
 const WEAPON_FILTERS = { weapon_types: 'weaponTypes', weapon_sizes: 'weaponSizes', range_types: 'weaponRangeTypes', damage_types: 'weaponDamageTypes' };
 const WEAPON_HOOK_PATH = /^(profiles\.\d+\.)?on_(hit|crit|attack|miss)(\.\d+)?$/;
 const HOOK_HIT_TYPES = { on_hit: 'hit', on_crit: 'crit', on_attack: 'hit', on_miss: 'miss' };
@@ -51,9 +53,11 @@ export function v3Duration(duration, { self = null, target = null } = {})
         return duration.at === 'end' ? untilEndOfRound(Number(duration.round) + 1) : untilStartOfRound(Number(duration.round));
     if (!duration.at || !duration.of)
         return null;
+
     const origin = duration.of === 'self' ? self : (target ?? self);
     if (!origin)
         return null;
+
     const turns = duration.next ? 1 : 0;
     return duration.at === 'start' ? untilStartOfTurn(origin, turns) : untilEndOfTurn(origin, turns);
 }
@@ -83,6 +87,7 @@ function isAutoEntry(entry)
         return false;
     if (['damage', 'add_status', 'add_other', 'add_special'].some(key => isPresent(raw[key])))
         return false;
+
     const resistRecords = [...entry.resist, ...entry.vulnerability, ...entry.immunity].filter(record => record.field === 'add_resist');
     return resistRecords.length > 0 && resistRecords.every(isSelfRecord) && isPassiveLocation(entry.path);
 }
@@ -99,15 +104,20 @@ function passiveDefenseBonuses(entry)
 {
     const bonuses = [];
     const resistTypes = entry.resist.filter(isSelfRecord).map(record => record.type);
+
     if (resistTypes.length)
         bonuses.push({ type: 'resistance', damageTypes: damageTypeList(resistTypes) });
+
     const vulnerableTypes = entry.vulnerability.filter(isSelfRecord).map(record => record.type);
     if (vulnerableTypes.length)
         bonuses.push({ type: 'vulnerability', damageTypes: damageTypeList(vulnerableTypes) });
+
     const immunities = entry.immunity.filter(isSelfRecord);
     const immuneTypes = immunities.filter(record => record.damage).map(record => record.damage);
+
     if (immuneTypes.length)
         bonuses.push({ type: 'immunity', subtype: 'damage', damageTypes: damageTypeList(immuneTypes) });
+
     const immuneEffects = immunities.filter(record => record.status).map(record => record.status);
     if (immuneTypes.includes('burn'))
         immuneEffects.push('burn');
@@ -120,11 +130,14 @@ function bonusRecordDefenses(record)
 {
     const values = (Array.isArray(record.val) ? record.val : [record.val]).map(value => String(value ?? '').trim().toLowerCase()).filter(Boolean);
     const damage = values.flatMap(value => (value === 'all' ? RESIST_DAMAGE_TYPES : [value])).filter(value => DAMAGE_SUBJECTS.includes(value));
+
     if (record.id === 'resistance')
         return damage.length ? [{ type: 'resistance', damageTypes: damageTypeList(damage) }] : [];
+
     const bonuses = [];
     if (damage.length)
         bonuses.push({ type: 'immunity', subtype: 'damage', damageTypes: damageTypeList(damage) });
+
     const effects = values.filter(value => value !== 'all' && !DAMAGE_SUBJECTS.includes(value)).map(normalizeV3StatusId);
     if (damage.includes('burn'))
         effects.push('burn');
@@ -144,6 +157,7 @@ function recordAccuracyBonus(record)
 {
     const rollTypes = ACCURACY_ROLL_TYPES[String(record.id ?? '').toLowerCase()];
     const net = (Number(record.accuracy) || 0) - (Number(record.difficulty) || 0);
+
     if (!rollTypes || !net)
         return null;
     return { type: net > 0 ? 'accuracy' : 'difficulty', val: Math.abs(net), rollTypes, ...recordFilters(record) };
@@ -186,8 +200,10 @@ function recordValueBonuses(record)
 {
     const id = String(record.id ?? '').toLowerCase();
     const build = VALUE_BONUS_BUILDERS[id];
+
     if (!build || record.val === undefined || record.val === null || record.val === '')
         return [];
+
     const filters = recordFilters(record);
     if (id === 'min_range')
         delete filters.weaponRangeTypes;
@@ -220,10 +236,12 @@ function ownerName(item, path)
 {
     const [first, second] = String(path ?? '').split('.');
     const system = item.system ?? {};
+
     if (['traits', 'ranks', 'actions'].includes(first) && /^\d+$/.test(second ?? ''))
         return system[first]?.[Number(second)]?.name ?? null;
     if (first !== 'core_system')
         return null;
+
     const core = system.core_system ?? {};
     return (String(second ?? '').startsWith('passive') ? core.passive_name : core.active_name) || core.name || null;
 }
@@ -242,6 +260,7 @@ function bonusDamageScope(item, entry)
 {
     if (entry.condition || entry.activation || entry.save || entry.attack)
         return null;
+
     const weapon = isWeaponItem(item);
     if (WEAPON_HOOK_PATH.test(entry.path))
         return weapon ? { itemId: item.id, hitType: HOOK_HIT_TYPES[entry.hook] } : null;
@@ -258,6 +277,7 @@ function damageBonusRows(item, entry)
         const hitType = record.hitType ?? scope.hitType;
         if (hitType === 'miss')
             return [];
+
         const bonus = {
             type: 'damage',
             damageMode: 'add',
@@ -267,6 +287,7 @@ function damageBonusRows(item, entry)
             ...(record.weaponSizes?.length ? { weaponSizes: record.weaponSizes } : {}),
             ...(hitType === 'crit' ? { critOnly: true } : { defaultOff: true })
         };
+
         return [buildRow(item, entry, [bonus], { idSuffix: `_d${record.index}`, duration: entry.duration ?? null })];
     });
 }
@@ -278,32 +299,40 @@ export function v3DataRows(item)
     const entries = item?.flags?.[NPC_IMPORT_ID]?.v3?.entries;
     if (!Array.isArray(entries) || !(/** @type {any} */ (game.modules.get(NPC_IMPORT_ID))?.api?.getV3Data))
         return [];
+
     const cached = _rowCache.get(entries);
     if (cached)
         return cached;
+
     const built = [];
+
     for (const entry of getV3Data(item))
     {
         if (isAutoEntry(entry))
         {
             const bonuses = passiveDefenseBonuses(entry);
             const recordDuration = [...entry.resist, ...entry.vulnerability, ...entry.immunity].find(record => record.field === 'add_resist' && record.duration)?.duration ?? null;
+
             if (bonuses.length)
                 built.push(buildRow(item, entry, bonuses, { duration: entry.duration ?? recordDuration }));
         }
+
         built.push(...damageBonusRows(item, entry));
         if (!isPassiveBonusEntry(entry))
             continue;
+
         for (const { record, index } of v3EntryBonusRecords(entry))
         {
             const rowOptions = { condition: record.condition ?? null, duration: entry.duration ?? null, bonusRecord: true };
             const bonuses = DEFENSE_BONUS_IDS.has(record.id) ? bonusRecordDefenses(record) : [recordAccuracyBonus(record)].filter(Boolean);
+
             if (bonuses.length)
                 built.push(buildRow(item, entry, bonuses, { idSuffix: `_b${index}`, ...rowOptions }));
             recordValueBonuses(record).forEach((valueBonus, valueIndex) =>
                 built.push(buildRow(item, entry, [valueBonus], { idSuffix: `_b${index}v${valueIndex || ''}`, ...rowOptions })));
         }
     }
+
     _rowCache.set(entries, built);
     return built;
 }
@@ -359,13 +388,16 @@ export async function replaceV3Data(item, paths)
 {
     if (!item?.setFlag)
         return;
+
     if (paths === undefined || paths === null)
     {
         console.warn('lancer-automations | replaceV3Data: no path given');
         return;
     }
+
     const current = getLAFlag(item, REPLACED_FLAG) ?? [];
     const next = [...new Set([...current, ...[paths].flat().map(v3PathKey)])];
+
     if (next.length !== current.length)
         await setItemFlag(item, MODULE_ID, REPLACED_FLAG, next);
 }
@@ -374,15 +406,19 @@ export async function restoreV3Data(item, paths)
 {
     if (!item?.setFlag)
         return;
+
     const current = getLAFlag(item, REPLACED_FLAG) ?? [];
+
     if (paths === undefined)
     {
         if (current.length)
             await unsetItemFlag(item, MODULE_ID, REPLACED_FLAG);
         return;
     }
+
     const removed = new Set([paths].flat().map(v3PathKey));
     const next = current.filter(entry => !removed.has(entry));
+
     if (next.length !== current.length)
         await setItemFlag(item, MODULE_ID, REPLACED_FLAG, next);
 }

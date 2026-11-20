@@ -26,7 +26,7 @@ When a token's structure hits 0, the module drops its wreck in place and clears 
 
 ## Per-category behaviour
 
-The dead token is sorted into an auto-detected category, **Mech**, **Vehicle** (any NPC carrying a VEHICLE template), **Human / Pilot / Squad**, **Monstrosity**, or **Biological**. Each one's wreck can be a **Token** (a wreck actor with its own HP), a flat **Tile**, or **Skip**ped, set in the per-category table along with its on-wreck terrain.
+The dead token gets an auto-detected category: **Mech**, **Vehicle** (any NPC carrying a VEHICLE template), **Human / Pilot / Squad**, **Monstrosity**, or **Biological**. In the per-category table, each one's wreck can be a **Token** (a wreck actor with its own HP), a flat **Tile**, or **Skip**ped, along with the terrain it leaves.
 
 **Token** mode uses a world actor named **Template Wreck**, a deployable the module creates by itself the first time it needs one. Nothing to set up.
 
@@ -36,11 +36,21 @@ The dead token is sorted into an auto-detected category, **Mech**, **Vehicle** (
 
 A wreck can leave something on its footprint: **THT difficult terrain** (needs Terrain Height Tools, painting the type set by **`wreckTerrainType`**) or a **movement +1 aura**. The aura itself draws on stock Grid-Aware Auras, only its movement penalty needs the GAA fork. It's set per category, so mech hulls can clog the field while corpses don't.
 
+The aura also gives **hard cover** to tokens inside it that are not taller than the wreck.
+
+- Needs **Enable effect automation** on in Grid-Aware Auras.
+- Wrecks made before 4.8.0 don't have it.
+
 ---
 
 ## Per-token config
 
-A single token can override its category in the Token Config **L.A** tab: its wreck mode and terrain, a custom wreck image, effect, and sound, the tile scale, and whether the image, sound, and effect play at all.
+A single token can override its category in the Token Config **L.A** tab:
+
+- its wreck mode and terrain
+- a custom wreck image, effect, and sound
+- the tile scale
+- whether the image, sound, and effect play at all
 
 The image, effect, and sound fields also accept a **folder** path: a random file from it is picked on each death.
 
@@ -62,7 +72,7 @@ The explosion animation is **`enableWreckAnimation`**, the sound follows **`wrec
 
 ## Custom wreck assets
 
-**`wreckAssetsPath`** points the system at a folder of your own wreck images, effects, and sounds. Left blank, it falls back to `modules/lancer-automations/wrecks`. Lay the folder out like this:
+**`wreckAssetsPath`** points to a folder of your own wreck images, effects, and sounds. Left blank, it falls back to `modules/lancer-automations/wrecks`. Lay the folder out like this:
 
 ```
 <wreckAssetsPath>/

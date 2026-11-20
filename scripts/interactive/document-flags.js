@@ -21,6 +21,7 @@ export async function addItemFlags(item, flags)
         ui.notifications.error(localize('LA.notify.addItemFlagsArgs'));
         return null;
     }
+
     for (const [key, flagValue] of Object.entries(flags))
         await setItemFlag(item, MODULE_ID,key, flagValue);
     return item;
@@ -39,6 +40,7 @@ export async function removeItemFlags(item, flags)
         ui.notifications.error(localize('LA.notify.removeItemFlagsArgs'));
         return null;
     }
+
     for (const key of Object.keys(flags))
         await unsetItemFlag(item, MODULE_ID,key);
     return item;
@@ -57,6 +59,7 @@ export async function addActorFlags(actor, flags)
         ui.notifications.error(localize('LA.notify.addActorFlagsArgs'));
         return null;
     }
+
     for (const [key, value] of Object.entries(flags))
         await setActorFlag(actor, MODULE_ID,key, value);
     return actor;
@@ -75,6 +78,7 @@ export async function removeActorFlags(actor, flags)
         ui.notifications.error(localize('LA.notify.removeActorFlagsArgs'));
         return null;
     }
+
     for (const key of Object.keys(flags))
         await unsetActorFlag(actor, MODULE_ID,key);
     return actor;
@@ -88,11 +92,13 @@ export async function removeActorFlags(actor, flags)
 export async function addTokenFlags(tokenOrDoc, flags)
 {
     const td = tokenOrDoc?.document ?? tokenOrDoc;
+
     if (!td || typeof flags !== 'object')
     {
         ui.notifications.error(localize('LA.notify.addTokenFlagsArgs'));
         return null;
     }
+
     for (const [key, value] of Object.entries(flags))
         await setTokenFlag(td, MODULE_ID,key, value);
     return td;
@@ -106,11 +112,13 @@ export async function addTokenFlags(tokenOrDoc, flags)
 export async function removeTokenFlags(tokenOrDoc, flags)
 {
     const td = tokenOrDoc?.document ?? tokenOrDoc;
+
     if (!td || typeof flags !== 'object')
     {
         ui.notifications.error(localize('LA.notify.removeTokenFlagsArgs'));
         return null;
     }
+
     for (const key of Object.keys(flags))
         await unsetTokenFlag(td, MODULE_ID,key);
     return td;
@@ -124,11 +132,13 @@ export async function removeTokenFlags(tokenOrDoc, flags)
 export function getTokenFlags(tokenOrDoc, flagName = null)
 {
     const td = tokenOrDoc?.document ?? tokenOrDoc;
+
     if (!td)
     {
         ui.notifications.error(localize('LA.notify.getTokenFlagsArgs'));
         return null;
     }
+
     if (flagName)
         return getLAFlag(td,flagName);
     return getLAFlags(td) || {};
@@ -147,6 +157,7 @@ export function getItemFlags(item, flagName = null)
         ui.notifications.error(localize('LA.notify.getItemFlagsArgs'));
         return null;
     }
+
     if (flagName)
         return getLAFlag(item,flagName);
     return getLAFlags(item) || {};
@@ -165,6 +176,7 @@ export function getActorFlags(actor, flagName = null)
         ui.notifications.error(localize('LA.notify.getActorFlagsArgs'));
         return null;
     }
+
     if (flagName)
         return getLAFlag(actor,flagName);
     return getLAFlags(actor) || {};

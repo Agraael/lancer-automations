@@ -18,9 +18,11 @@ export function playSeasonalSound(variant, { volumeScale = 1 } = {})
     const entry = SOUNDS[variant];
     if (!entry)
         return;
+
     const vol = Number(getModuleSetting(VOLUME_SETTING)) || 0;
     if (vol <= 0)
         return;
+
     const src = entry.srcs ? entry.srcs[Math.floor(Math.random() * entry.srcs.length)] : entry.src;
     foundry.audio.AudioHelper.play(
         /** @type {any} */ ({ src, volume: vol * entry.scale * volumeScale, autoplay: true, loop: false }),

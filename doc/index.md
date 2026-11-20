@@ -27,17 +27,19 @@
 <details>
 <summary>patreon...</summary>
 
-Well, project became bigger, now there's more people. So the Patreon is starting to get real. If you wanna support my late nights, that's here.
+Well, the project got bigger, and now there are more people. So the Patreon is starting to get real. If you wanna support my late nights, that's here.
 
-In any case, my stuff would always be free, and if I stop working on it, I'll just close that thing. [Patreon](https://www.patreon.com/cw/LaSossis) or [Ko-fi](https://ko-fi.com/lasossis)
+In any case, my stuff will always be free. If I stop working on it, I'll just close the Patreon. [Patreon](https://www.patreon.com/c/LaSossis) or [Ko-fi](https://ko-fi.com/lasossis)
 
 </details>
+
+[Support & Credits](supporters.md)
 
 Check out my other modules and tools: [List of stuff](https://www.patreon.com/posts/list-of-stuff-149377511)
 
 ---
 
-Welcome to Lancer Automations. It's a full layer over Lancer on Foundry VTT: an automation engine that can drive almost any item from any LCP, plus a custom action HUD, token bars, movement, vision, wrecks, and a lot more.
+Welcome to Lancer Automations. It's a full layer over Lancer on Foundry VTT. The core is an automation engine that can drive almost any item from any LCP. Around it there's a custom action HUD, token bars, movement, vision, wrecks, and a lot more.
 
 What started as a tiny QoL tweak for my own games is closer to a game engine now, with its own identity. Not all of it is built to be fully customizable, a lot is just how I see the game. A game for everyone is a game for no one, so Lancer Automations will shape how you play. Once you're in, it's hard to leave, so be careful.
 
@@ -45,20 +47,20 @@ What started as a tiny QoL tweak for my own games is closer to a game engine now
   <img src="vid/battlelog.gif" width="85%"/>
 </p>
 
-A lot of it weaves right into the interface, so if you aren't deep in the Lancer Foundry ecosystem you might assume some of these features are vanilla. They aren't.
+A lot of it is built right into the interface, so if you aren't deep in the Lancer Foundry ecosystem you might think some of these features are vanilla. They aren't.
 
 <details>
 <summary><b>⚠️ Please read before you install ⚠️</b></summary>
 
-> **First of all, I really recommend reading the feature guides.** I know it's a lot, but trust me, it's important. Docs are split in two: feature guides for what a feature does and how to reach it, `doc/API_*.md` for the code side. The very latest additions land first on my [Patreon](https://www.patreon.com/cw/LaSossis), with illustrations.
+> **First of all, I really recommend reading the feature guides.** I know it's a lot, but trust me, it's important. Docs are split in two: feature guides for what a feature does and how to reach it, `doc/API_*.md` for the code side. The very latest additions land first on my [Patreon](https://www.patreon.com/c/LaSossis), with illustrations.
 >
 > This is a dense, heavy module, with built-in takes on popular modules (Token Action HUD, Lancer QoL, Bar Brawl, and more). You should already know Foundry and Lancer well. If you're new to Foundry, get comfortable there first or you risk losing a lot of time.
 >
 > **I don't maintain compatibility with Lancer QoL anymore.** I tried for a while, so running both is up to you, I just can't promise it stays stable. The two also overlap a lot, so you probably won't need both.
 >
-> **The default setup is more than enough for most Lancer GMs.** If you write your own activations and get stuck, ask me on Discord.
+> **The default setup is more than enough for most Lancer GMs.** If you write your own automations and get stuck, ask me on Discord.
 >
-> **It does not (yet) provide full item and NPC automation.** Some items and simple NPC automations are built in, that's it for now. The optional personal activation set is my own automations for my own games, shared as-is, not part of the core module.
+> **It does not (yet) provide full item and NPC automation.** Some items and simple NPC automations are built in, that's it for now. The optional personal automation set is what I made for my own games, shared as-is, not part of the core module.
 >
 > **Before asking questions**, explore and try stuff first. It's a lot easier on me if I don't have to answer the same obvious questions, and it may be that I just haven't documented it yet. Thanks.
 
@@ -81,7 +83,7 @@ These are guides on how to play with Lancer Automations, from the Korean communi
 
 ## 📘 [Read the full API reference →](API_REFERENCE.md)
 
-Trigger schemas, function signatures, every option. Split across eleven `API_*.md` files. Start there if you're writing activation code, macros, or hooking the engine from another module.
+The whole code side is there, triggers and functions with all their options, split across eleven `API_*.md` files. Start there if you write activation code or macros, or hook into the engine from another module.
 
 ---
 
@@ -100,8 +102,8 @@ https://github.com/Agraael/lancer-automations/releases/latest/download/module.js
 | FoundryVTT v13.351+ | The version I'm currently working on |
 | [Lancer Style Library](https://github.com/Agraael/lancer-style-library) | Shared UI components and styling, v1.2.0 or newer |
 | [Temporary Custom Statuses](https://github.com/Agraael/temporary-custom-statuses) | Custom status effects with stacking |
-| [lib-wrapper](https://github.com/foundryvtt/lib-wrapper) | Required for API hooks |
-| [Socketlib](https://foundryvtt.com/packages/socketlib) | Declared as a dependency in the manifest |
+| [lib-wrapper](https://github.com/foundryvtt/lib-wrapper) | Required |
+| [Socketlib](https://foundryvtt.com/packages/socketlib) | Required |
 | [Token Magic FX](https://foundryvtt.com/packages/tokenmagic) | Shader filters used by the module's token and canvas effects |
 | [Sequencer](https://foundryvtt.com/packages/sequencer) | Drives the module's FX and sounds |
 
@@ -135,18 +137,18 @@ https://github.com/Agraael/lancer-automations/releases/latest/download/module.js
 
 Almost everything in the module is configured from one place: **Game Settings > Configure Settings > Module Settings > Lancer Automations > Open Configuration**.
 
-Every feature has its toggles here, and a handful of buttons open dedicated tools: the Activation Manager, export and import, the guided tour, the news popup, and a full reset.
+Every feature has its toggles here, and a handful of buttons open dedicated tools: the Automation Manager, export and import, the guided tour, the news popup, and a full reset.
 
 There are a lot of settings, so they aren't all listed here. Each feature guide explains the ones that matter for it, and every setting has an inline hint.
 
 > [!TIP]
-> Go through the settings before your first session and set a baseline. Most features are on out of the box. Many settings are client-scoped (per player), so use Force Client Settings to apply your setup to the whole table.
+> Go through the settings before your first session and set a baseline. Most features are on by default. Many settings are client-scoped (per player), so use Force Client Settings to apply your setup to the whole table.
 
 ### Export & Import
 
 <img align="right" src="img/ae-import-review.png" width="70%"/>
 
-Export your whole setup (automations, startup scripts, settings, and keybindings) to a JSON file for a backup or to share a build, then import it back through a review dialog that lets you pick exactly what comes in.
+You can export your whole setup (automations, startup scripts, settings and keybindings) to a JSON file, as a backup or to share it. Importing goes through a review dialog where you pick what comes in.
 
 A full reset is here too.
 
@@ -164,7 +166,7 @@ The core feature of Lancer Automations, and the hardest to grasp. The engine aut
 
 Many of Lancer's base actions, plus some items and simple NPC automations, are handled by default.
 
-I also ship my personal set of activations, but that's separate: just my own games' stuff shared as-is, not part of the core module, there for you to use, inspect, or modify to dip your toes into the engine.
+I also ship my personal set of automations, but that's separate: just my own games' stuff shared as-is, not part of the core module. It's there for you to use, inspect, or modify to dip your toes into the engine.
 
 → Full guide: [Automation Engine](feature/AUTOMATION_ENGINE.md) ・ engine internals: [Automation System](AUTOMATION_SYSTEM.md) ・ worked examples: [NPC Examples](feature/NPC_EXAMPLES.md) ・ ready-made macros: [Macros](MACROS.md)
 
@@ -178,7 +180,7 @@ I also ship my personal set of activations, but that's separate: just my own gam
 
 The Effect Manager can be driven from automation code through the API, but it's also fully available by hand during play.
 
-It manages effects, custom effects, and many bonuses and status effects so you can apply almost anything you want: custom effects that grant charges, weapon range bonuses, a single reroll, and more.
+It handles effects, custom effects, bonuses and statuses: an effect that grants charges, a weapon range bonus, a single reroll, and more.
 
 → Full guide: [Effects & Bonuses](feature/EFFECTS_AND_BONUSES.md)
 
@@ -190,7 +192,7 @@ It manages effects, custom effects, and many bonuses and status effects so you c
 
 <img align="right" src="vid/feature-tah.gif" width="60%"/>
 
-The TAH, or Token Action HUD, is a custom-built action menu attached right to your token: your items, skills, stats, scans, history, favorites, a search tool, range preview, and more.
+The TAH (Token Action HUD) is my own action menu, attached to your token. Your items, skills, stats, scans, history, favorites, search, range preview and more are all in there.
 
 → Full guide: [Token Action HUD](feature/HUD.md)
 
@@ -202,11 +204,16 @@ The TAH, or Token Action HUD, is a custom-built action menu attached right to yo
 
 <img align="right" src="img/feature-token-display.png" width="53%"/>
 
-Lancer Automations draws its own token bars, tailored to Lancer and meant to replace Bar Brawl. The whole subsystem is skipped while the Bar Brawl module is active, so disable that module first.
+Lancer Automations draws its own token bars, made for Lancer, to replace Bar Brawl. They're turned off while Bar Brawl is active, so disable it first.
 
-They show the stats that matter, with per-token control over when they're visible (separate in-combat and out-of-combat modes: All, Owners only, Owners + scanned, or None), icon scale, and row height.
+They show the stats that matter, with per-token control over:
 
-You can add extra custom bars per token, and talent counters can be injected automatically.
+- when they're visible (separate in-combat and out-of-combat modes: All, Owners only, Owners + scanned, or None)
+- row height
+
+Icon scale is a world setting, shared by every token.
+
+You can add extra custom bars per token, and talent counters can be added automatically.
 
 → Full guide: [Token Display](feature/TOKEN_DISPLAY.md)
 
@@ -218,11 +225,9 @@ You can add extra custom bars per token, and talent counters can be injected aut
 
 <img align="right" src="vid/feature-ruler.gif" width="53%"/>
 
-Lancer Automations ships its own Lancer ruler, built to be as detailed as possible.
+Lancer Automations has its own Lancer ruler. I tried to make it as detailed as I could, and there's still more work to do.
 
-There's still more work to do.
-
-The same system powers cancelling movement through engagement, the boost offer, and more, all wired into the automation engine.
+It also handles Engagement cancelling your move, the Boost offer, and more.
 
 → Full guide: [Movement](feature/MOVEMENT.md) ・ advanced/beta: [Movement Advanced](feature/MOVEMENT_ADVANCED.md)
 
@@ -236,7 +241,7 @@ The same system powers cancelling movement through engagement, the boost offer, 
 
 If you run an isometric game, Lancer Automations plays nicely with the isometric modules.
 
-It animates token elevation in iso view and adapts its own UI (stat bars, tactical distance labels, waypoint labels, the target reticle, click zones, the selection marquee, scrolling text, and more) so the module's additions line up correctly in an isometric scene.
+It animates token elevation in iso view, and moves its own UI so it lines up in an isometric scene: stat bars, distance and waypoint labels, the target reticle, click zones, the selection box, scrolling text and more.
 
 Each piece can be toggled from the Isometric settings tab.
 
@@ -256,7 +261,7 @@ Honestly, I don't play isometric myself, so it's lower on my priority list for n
 
 Interactive tools are meant to be used with the automation engine, and elsewhere too.
 
-Lancer Automations provides many of them to build multi-step actions: applying knockback, choosing targets, picking tokens within a defined range, spawning tokens, running votes, and more.
+There are a lot of them to build multi-step actions: knockback, choosing targets, picking tokens in a range, spawning tokens, votes and more.
 
 → Full guide: [Interactive Tools](feature/INTERACTIVE_TOOLS.md)
 
@@ -268,7 +273,7 @@ Lancer Automations provides many of them to build multi-step actions: applying k
 
 <img align="right" src="vid/feature-attack-targeting.gif" width="53%"/>
 
-An upgrade to the Lancer system's targeting flow: choose your target or place a blast, cone, or line from the attack HUD, with 3D targeting, elevation and terrain blocking through Terrain Height Tools, adjustable line angles, and multi-targeting.
+An upgrade of the Lancer system's targeting. From the attack HUD you pick your target, or place a blast, cone or line. It works in 3D: elevation and terrain from Terrain Height Tools can block it, lines can be tilted, and you can pick several targets.
 
 → Full guide: [Attack Targeting](feature/ATTACK_TARGETING.md)
 
@@ -280,9 +285,9 @@ An upgrade to the Lancer system's targeting flow: choose your target or place a 
 
 <img align="right" src="img/feature-gameplay.png" width="53%"/>
 
-Through the automation engine and many tweaks to the Lancer system, Lancer Automations runs Lancer's actions and reactions for you, from combat to the out-of-combat flows: scanning, rest, downtime, and reserves.
+Lancer Automations runs Lancer's actions and reactions for you, through the automation engine and a lot of tweaks to the system. That goes for combat, and for what happens outside it: scanning, rest, downtime and reserves.
 
-It also handles skill checks and contests, and tracks usage per turn, per round, or per scene.
+It also handles skill checks and contests, and tracks uses per turn, per round and per encounter.
 
 → Full guide: [Gameplay Automation](feature/GAMEPLAY_AUTOMATION.md)
 
@@ -296,7 +301,7 @@ It also handles skill checks and contests, and tracks usage per turn, per round,
 
 There's more flavor in Lancer Automations than just JB2A and Lancer Weapon FX.
 
-Sounds and graphical effects run throughout the module, and almost all of them can be tweaked or disabled.
+There are sounds and visual effects all over the module, and almost all of them can be tweaked or turned off.
 
 → Full guide: [FX, Visuals and Sounds](feature/FX_AND_SOUNDS.md)
 
@@ -312,7 +317,7 @@ Lancer doesn't really have a concept of fog of war or vision, but personally, fo
 
 To stay within the rules, Lancer Automations gives you a way to do that: two vision modes, one for units visible on sensors and one for units seen anywhere through Battlefield Awareness.
 
-A per-token "blocks line of sight" option (with Bulwark support, elevation-aware via Wall Height) lets units actually break sight.
+Each token can also block line of sight (Bulwark uses it too). With Wall Height, that takes elevation into account.
 
 There are also performance tools for light and movement, and a system that emulates Lancer's true edge-of-token line of sight (visually only).
 
@@ -326,7 +331,11 @@ There are also performance tools for light and movement, and a system that emula
 
 <img align="right" src="img/feature-wreck.png" width="53%"/>
 
-When a unit is destroyed, the module drops a dedicated wreck on the field, with per-category art, explosion, and sound, optional difficult terrain through Terrain Height Tools, and a resurrect button to bring the unit back.
+When a unit is destroyed, it leaves a wreck on the field, with:
+
+- per-category art, explosion, and sound
+- optional difficult terrain through Terrain Height Tools
+- a resurrect button to bring the unit back
 
 Art, FX, sound, and scale can be overridden per token.
 
@@ -340,7 +349,7 @@ Art, FX, sound, and scale can be overridden per token.
 
 <img align="right" src="img/feature-battlelog.png" width="53%"/>
 
-When a combat ends the module tracks the whole fight and hands you a recap, XCom-style. As GM you set the outcome and MVP on a card, then broadcast it: per-pilot stats, the enemies and who killed them, awards, and per-round telemetry charts.
+The module tracks the whole fight and hands you an XCom-style recap when the combat ends. As GM you set the outcome and MVP on a card, then broadcast the recap: per-pilot stats, the enemies and who killed them, awards, and per-round telemetry charts.
 
 → Full guide: [Battle Log](feature/BATTLE_LOG.md)
 
@@ -348,11 +357,19 @@ When a combat ends the module tracks the whole fight and hands you a recap, XCom
 
 ---
 
+### Clocks
+
+World clocks are shared by the whole table, and each one can be shown to everyone, to some players or to nobody. Pilot clocks and burdens can be pinned next to them.
+
+→ Full guide: [Clocks](feature/CLOCKS.md)
+
+---
+
 ### System Additions
 
 <img align="right" src="img/feature-system.png" width="53%"/>
 
-Some of the most useful things here aren't flashy, they're changes baked directly into the Lancer system and Foundry: item-disabled state for dropped or jammed gear, smoother handling of a system's ammo, extra status effects, and extra trackable attributes for token bars (Move, Reaction).
+These are changes made straight into the Lancer system and Foundry. Not much to look at, but some of the most useful things are here: a disabled state for dropped or jammed gear, better ammo handling on systems, extra statuses, and extra token bar attributes (Move, Reaction).
 
 The GM setup and maintenance tools have their own guide.
 
@@ -390,7 +407,7 @@ A few features need or improve with these optional modules. Install details are 
 | LA-only line of sight walls, terrain drop shading and contours | Terrain Height Tools (my fork) |
 | Elevation-aware token-blocks-line-of-sight (peek over same-height tokens) | Wall Height |
 | Built-in action animations (Boost, Hide, Shut Down, Fall, Overcharge, etc.) | Lancer Weapon FX |
-| Multi-team disposition matrix in activation filters | Token Factions (my fork) |
+| Multi-team disposition matrix in automation filters | Token Factions (my fork) |
 | Zone placement tools (effect, dangerous, difficult-terrain zones) | TemplateMacro |
 | Syntax highlighting in the code editors | CodeMirror |
 | Stack counts shown on effect icons | Status Icon Counter |
@@ -399,32 +416,9 @@ A few features need or improve with these optional modules. Install details are 
 
 ## Extra stuff
 
-**Personal deployables LCP.** Some of my personal activations spawn deployables that aren't in any official LCP. Import [`extra/LaSossis_Npc_Deployables.lcp`](../extra/LaSossis_Npc_Deployables.lcp) if one won't resolve. See [the personal activation set](feature/AUTOMATION_ENGINE.md#the-personal-activation-set).
-
-**Foundry movement patch (self-hosted).** On hex grids the trigger-boundary movement split can drift the resolved path from the preview. The clean fix is two source hooks. Code and locations in [Split movement at trigger boundaries](feature/MOVEMENT_ADVANCED.md#split-movement-at-trigger-boundaries).
+**Foundry movement patch (self-hosted).** On hex grids, splitting movement at trigger boundaries can drift the resolved path from the preview. The clean fix is one source hook. Code and locations in [Split movement at trigger boundaries](feature/MOVEMENT_ADVANCED.md#split-movement-at-trigger-boundaries).
 
 ---
-
-## Acknowledgments
-
-Inspiration, reference code, and ideas drawn from the work of:
-
-- [Eranziel](https://github.com/Eranziel)
-- [mandatoryhashtags](https://github.com/mandatoryhashtags)
-- [caewok](https://github.com/caewok)
-- [Wibble199](https://github.com/Wibble199)
-- [csmcfarland](https://gitlab.com/csmcfarland)
-- [Annoying](https://github.com/annoyedb/lancer-alternative-sheets)
-- [mxzf](https://gitlab.com/mxzf/status-halo)
-- [hylandpad](https://github.com/hylandpad)
-
-## Assets
-
-UI icons come from [game-icons.net](https://game-icons.net), licensed CC BY 3.0, credited to their individual authors.
-
-Sounds come from [freesound.org](https://freesound.org), where the licence is picked per sound: CC0, CC BY, or CC BY-NC.
-
-Vehicle wreck tokens are by @MachineBoot on Discord.
 
 ## License
 

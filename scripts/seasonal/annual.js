@@ -48,6 +48,7 @@ function _isBirthdayWindow()
 {
     if (_debugFlag('laBirthday'))
         return true;
+
     const now = new Date();
     return now.getMonth() === 8 && now.getDate() >= START_DAY && now.getDate() <= END_DAY;
 }
@@ -79,6 +80,7 @@ function _balloonState()
     {
         console.warn('lancer-automations | bad birthday balloon state, resetting.');
     }
+
     return { year: new Date().getFullYear(), lastDay: '', count: 0 };
 }
 
@@ -89,9 +91,11 @@ async function _lookupDaysOnRecord()
 {
     if (_debugFlag('laBirthdayLost'))
         return null;
+
     const installId = String(_setting('dataInstallId'));
     if (!installId)
         return null;
+
     try
     {
         const query = getSupabase()
@@ -99,11 +103,14 @@ async function _lookupDaysOnRecord()
             .select('created_at')
             .eq('user_hash', installId)
             .maybeSingle();
+
         const timeout = new Promise(resolve => setTimeout(() => resolve(null), LOOKUP_TIMEOUT_MS));
         const result = /** @type {any} */ (await Promise.race([query, timeout]));
         const createdAt = result?.data?.created_at;
+
         if (!createdAt)
             return null;
+
         const then = new Date(createdAt);
         if (Number.isNaN(then.getTime()))
             return null;
@@ -132,6 +139,7 @@ async function _storeWish(message)
 {
     if (!message)
         return true;
+
     try
     {
         const { error } = await getSupabase().from(WISH_TABLE).insert({
@@ -139,6 +147,7 @@ async function _storeWish(message)
             message: message.slice(0, MAX_MESSAGE),
             module_version: game.modules.get(MODULE_ID)?.version || 'unknown',
         });
+
         if (error)
             throw error;
         return true;
@@ -221,11 +230,13 @@ function _renderForm(inner, { finish, later, interval })
     const nags = form.querySelector('.battelog-intro-nags');
 
     const FILL_TEXT = 'Happy birthday LaSossis !!';
+
     const NAGS = [
         '> really nothing :(',
         '> not even a fart joke ?',
         '> alright alright, I put some text for you',
     ];
+
     let nagCount = 0;
     let autoFilled = false;
 
@@ -246,32 +257,38 @@ function _renderForm(inner, { finish, later, interval })
             msg.value = FILL_TEXT;
             msg.readOnly = true;
         }
+
         count.textContent = `${msg.value.length} / ${MAX_MESSAGE}`;
     });
 
     const nag = () =>
     {
         addNag(NAGS[Math.min(nagCount, NAGS.length - 1)]);
+
         if (nagCount >= NAGS.length - 1)
         {
             msg.value = FILL_TEXT;
             count.textContent = `${msg.value.length} / ${MAX_MESSAGE}`;
             autoFilled = true;
         }
+
         nagCount++;
         msg.focus();
     };
 
     let closed = false;
+
     const close = async (accepted) =>
     {
         if (closed)
             return;
+
         if (accepted && !msg.value.trim())
         {
             nag();
             return;
         }
+
         closed = true;
         send.disabled = true;
         decline.disabled = true;
@@ -362,9 +379,11 @@ function _mountBalloons(host)
 {
     if (host.querySelector('.la-bday-sky'))
         return;
+
     const sky = document.createElement('div');
     sky.className = 'la-bday-sky';
     sky.setAttribute('aria-hidden', 'true');
+
     for (let index = 0; index < 14; index++)
     {
         const balloon = document.createElement('span');
@@ -376,6 +395,7 @@ function _mountBalloons(host)
         balloon.style.setProperty('--hue', String(BALLOON_HUES[index % BALLOON_HUES.length]));
         sky.appendChild(balloon);
     }
+
     host.prepend(sky);
 }
 
@@ -383,6 +403,7 @@ function _mountButton(footer)
 {
     if (footer.querySelector('.la-bday-btn'))
         return;
+
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'la-bday-btn';
@@ -420,12 +441,14 @@ function _spawnBalloon()
     document.body.appendChild(balloon);
 
     const margin = 90;
+
     const corners = [
         [-80, -80],
         [window.innerWidth + 80, -80],
         [-80, window.innerHeight + 80],
         [window.innerWidth + 80, window.innerHeight + 80],
     ];
+
     const [startX, startY] = corners[Math.floor(Math.random() * corners.length)];
     let posX = startX;
     let posY = startY;
@@ -446,6 +469,7 @@ function _spawnBalloon()
         pointerX = ev.clientX;
         pointerY = ev.clientY;
     };
+
     window.addEventListener('pointermove', onPointerMove);
 
     const boing = () =>
@@ -461,10 +485,12 @@ function _spawnBalloon()
         targetVelX = (Math.random() * 2 - 1) * 55;
         targetVelY = (Math.random() * 2 - 1) * 38 - 6;
     };
+
     retarget();
     const retargetTimer = setInterval(retarget, 2600);
 
     let frame = 0;
+
     const step = (now) =>
     {
         const delta = Math.min(0.05, (now - lastTime) / 1000);
@@ -476,6 +502,7 @@ function _spawnBalloon()
 
         let steerX = targetVelX;
         let steerY = targetVelY;
+
         if (!entered)
         {
             if (posX < margin)
@@ -496,6 +523,7 @@ function _spawnBalloon()
         const hitW = BALLOON_W / 2 * BALLOON_HIT_SCALE;
         const hitH = BALLOON_H / 2 * BALLOON_HIT_SCALE;
         const hit = (toX / hitW) ** 2 + (toY / hitH) ** 2 <= 1;
+
         if (hit && !contact)
         {
             const dist = Math.max(1, Math.hypot(toX, toY));
@@ -503,9 +531,11 @@ function _spawnBalloon()
             velY = (toY / dist) * BALLOON_KICK_SPEED;
             boing();
         }
+
         contact = hit;
 
         const speed = Math.hypot(velX, velY);
+
         if (speed > BALLOON_MAX_SPEED)
         {
             velX = velX / speed * BALLOON_MAX_SPEED;
@@ -534,6 +564,7 @@ function _spawnBalloon()
                 targetVelX = -Math.abs(targetVelX);
                 boing();
             }
+
             if (posY < 0)
             {
                 posY = 0;
@@ -558,9 +589,11 @@ function _spawnBalloon()
 
         frame = requestAnimationFrame(step);
     };
+
     frame = requestAnimationFrame(step);
 
     let gone = false;
+
     const stop = () =>
     {
         gone = true;
@@ -569,6 +602,7 @@ function _spawnBalloon()
         clearTimeout(lifeTimer);
         window.removeEventListener('pointermove', onPointerMove);
     };
+
     const lifeTimer = setTimeout(() =>
     {
         if (gone)
@@ -597,14 +631,18 @@ function _maybeScheduleBalloon()
 {
     if (_alreadySent() || _alreadyDeclined())
         return;
+
     const debug = _debugFlag('laBirthday');
+
     if (!debug)
     {
         const state = _balloonState();
         const today = new Date().toISOString().slice(0, 10);
+
         if (state.count >= BALLOON_MAX_SHOWS || state.lastDay === today)
             return;
     }
+
     setTimeout(_spawnBalloon, debug ? 3000 : 20000 + Math.random() * 40000);
 }
 
@@ -640,12 +678,15 @@ Hooks.on(/** @type {any} */ ('renderLancerAutomationsConfig'), (/** @type {any} 
 {
     if (!_isBirthdayWindow())
         return;
+
     const root = html instanceof HTMLElement ? html : html?.[0];
     if (!root)
         return;
+
     const content = root.closest('.window-content') ?? root.querySelector('.window-content');
     if (content)
         _mountBalloons(content);
+
     const footer = root.querySelector('.la-config-footer');
     if (footer && !_alreadySent())
         _mountButton(footer);

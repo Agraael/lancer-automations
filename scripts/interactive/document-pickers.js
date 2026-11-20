@@ -8,15 +8,19 @@ import { localize, localizeFormat } from "../tools/string-utils.js";
 export async function openDeployablePicker({ title = 'Find Deployable', onPick = null } = {})
 {
     const deployables = [];
+
     for (const pack of game.packs)
     {
         if (pack.documentName !== 'Actor')
             continue;
+
         const index = await pack.getIndex({ fields: ['system.lid', 'type', 'img'] });
+
         for (const entry of index)
         {
             if (entry.type !== 'deployable')
                 continue;
+
             const lid = entry.system?.lid;
             if (!lid)
                 continue;
@@ -30,9 +34,11 @@ export async function openDeployablePicker({ title = 'Find Deployable', onPick =
             });
         }
     }
+
     deployables.sort((left, right) => left.name.localeCompare(right.name));
     const MAX_RESULTS = 50;
     const canPick = !!onPick;
+
     const subtitle = canPick
         ? 'Search for a deployable actor by name or LID. Click an entry to pick it.'
         : 'Search for a deployable actor by name or LID. Click <i class="fas fa-copy"></i> to copy.';
@@ -81,20 +87,25 @@ export async function openDeployablePicker({ title = 'Find Deployable', onPick =
             {
                 const query = String(searchInput.val() || '').toLowerCase().trim();
                 const showAll = showAllCb.is(':checked');
+
                 if (!query && !showAll)
                 {
                     listContainer.html('<div style="padding:20px;text-align:center;color:#888;font-style:italic;"><i class="fas fa-search" style="margin-right:6px;"></i>Type to search deployables…</div>');
                     return;
                 }
+
                 const matched = deployables.filter(deployable => !query || deployable.name.toLowerCase().includes(query) || deployable.lid.toLowerCase().includes(query));
+
                 if (matched.length === 0)
                 {
                     listContainer.html('<div style="padding:20px;text-align:center;color:#888;font-style:italic;">No deployables found.</div>');
                     return;
                 }
+
                 const slice = showAll ? matched : matched.slice(0, MAX_RESULTS);
                 const more = matched.length - slice.length;
                 let resultHtml = slice.map(buildEntry).join('');
+
                 if (more > 0)
                     resultHtml += `<div style="padding:8px;text-align:center;color:#888;font-style:italic;font-size:0.85em;">${more} more, keep typing or check 'Show all'</div>`;
                 listContainer.html(resultHtml);
@@ -112,12 +123,14 @@ export async function openDeployablePicker({ title = 'Find Deployable', onPick =
                 ev.preventDefault();
                 ev.stopPropagation();
                 const lid = $(this).closest('.deployable-entry').data('lid');
+
                 if (lid)
                 {
                     await navigator.clipboard.writeText(lid);
                     ui.notifications.info(localizeFormat('LA.notify.copiedLid', { lid }));
                 }
             });
+
             if (canPick)
             {
                 listContainer.on('click', '.deployable-entry', async (ev) =>
@@ -128,17 +141,21 @@ export async function openDeployablePicker({ title = 'Find Deployable', onPick =
                     ev.stopPropagation();
                     const lid = $(ev.currentTarget).data('lid');
                     const entry = deployables.find(deployable => deployable.lid === lid);
+
                     if (!entry)
                         return;
+
                     const result = await onPick(entry);
                     if (result !== 'keep-open')
                         dlg?.close();
                 });
             }
+
             listContainer.on('contextmenu', '.deployable-entry', async function (ev)
             {
                 ev.preventDefault();
                 const entry = deployables.find(deployable => deployable.lid === $(this).data('lid'));
+
                 if (entry)
                 {
                     const actor = /** @type {any} */ (await fromUuid(entry.uuid));
@@ -159,6 +176,7 @@ export async function openDeployablePicker({ title = 'Find Deployable', onPick =
 export async function openDocumentPicker({ title = 'Find Actor or Scene', documentTypes = ['Actor', 'Scene'], onPick = null } = {})
 {
     const entries = [];
+
     if (documentTypes.includes('Actor'))
     {
         entries.push(...game.actors.map(actor => ({
@@ -170,6 +188,7 @@ export async function openDocumentPicker({ title = 'Find Actor or Scene', docume
             icon: 'fa-user',
         })));
     }
+
     if (documentTypes.includes('Scene'))
     {
         entries.push(...game.scenes.map(scene => ({
@@ -181,9 +200,11 @@ export async function openDocumentPicker({ title = 'Find Actor or Scene', docume
             icon: 'fa-map',
         })));
     }
+
     entries.sort((left, right) => left.name.localeCompare(right.name));
     const MAX_RESULTS = 50;
     const canPick = !!onPick;
+
     const subtitle = canPick
         ? 'Search by name or UUID. Click an entry to pick it.'
         : 'Search by name or UUID. Click <i class="fas fa-copy"></i> to copy.';
@@ -197,6 +218,7 @@ export async function openDocumentPicker({ title = 'Find Actor or Scene', docume
             </div>
             <a class="copy-uuid-btn" title="Copy UUID" style="color:var(--primary-color);cursor:pointer;font-size:1.1em;flex:0 0 auto;padding:0 4px;"><i class="fas fa-copy"></i></a>
         </div>`;
+
     const emptyHint = '<div style="padding:20px;text-align:center;color:#888;font-style:italic;"><i class="fas fa-search" style="margin-right:6px;"></i>Type to search…</div>';
 
     let dlg = null;
@@ -229,20 +251,25 @@ export async function openDocumentPicker({ title = 'Find Actor or Scene', docume
             {
                 const query = String(searchInput.val() || '').toLowerCase().trim();
                 const showAll = showAllCb.is(':checked');
+
                 if (!query && !showAll)
                 {
                     listContainer.html(emptyHint);
                     return;
                 }
+
                 const matched = entries.filter(entry => !query || entry.name.toLowerCase().includes(query) || entry.uuid.toLowerCase().includes(query));
+
                 if (matched.length === 0)
                 {
                     listContainer.html('<div style="padding:20px;text-align:center;color:#888;font-style:italic;">No match.</div>');
                     return;
                 }
+
                 const slice = showAll ? matched : matched.slice(0, MAX_RESULTS);
                 const more = matched.length - slice.length;
                 let resultHtml = slice.map(buildEntry).join('');
+
                 if (more > 0)
                     resultHtml += `<div style="padding:8px;text-align:center;color:#888;font-style:italic;font-size:0.85em;">${more} more, keep typing or check 'Show all'</div>`;
                 listContainer.html(resultHtml);
@@ -260,12 +287,14 @@ export async function openDocumentPicker({ title = 'Find Actor or Scene', docume
                 ev.preventDefault();
                 ev.stopPropagation();
                 const uuid = $(this).closest('.document-entry').data('uuid');
+
                 if (uuid)
                 {
                     await navigator.clipboard.writeText(uuid);
                     ui.notifications.info(localizeFormat('LA.notify.copiedUuid', { uuid }));
                 }
             });
+
             if (canPick)
             {
                 listContainer.on('click', '.document-entry', async (ev) =>
@@ -277,11 +306,13 @@ export async function openDocumentPicker({ title = 'Find Actor or Scene', docume
                     const entry = entries.find(candidate => candidate.uuid === $(ev.currentTarget).data('uuid'));
                     if (!entry)
                         return;
+
                     const result = await onPick(entry);
                     if (result !== 'keep-open')
                         dlg?.close();
                 });
             }
+
             listContainer.on('contextmenu', '.document-entry', async function (ev)
             {
                 ev.preventDefault();

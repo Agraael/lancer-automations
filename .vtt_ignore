@@ -47,3 +47,4 @@ tools/i18n_audit.py
 tools/i18n_audit/
 tools/typecheck_ratchet.py
 tools/typecheck_baseline.txt
+tools/movement_harness/

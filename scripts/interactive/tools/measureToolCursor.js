@@ -48,12 +48,14 @@ function setToolCursorKind(kind)
 function showToolCursor(show, kind)
 {
     _toolCursorShown = show;
+
     if (!show)
     {
         if (_toolCursorEl)
             _toolCursorEl.style.display = 'none';
         return;
     }
+
     ensureToolCursorEl();
     setToolCursorKind(kind);
     positionToolCursor();
@@ -67,6 +69,7 @@ function setCanvasCursorHidden(hidden)
 }
 
 let _pickerCursorOn = false;
+
 export function setPickerTargetCursor(on)
 {
     if (on === _pickerCursorOn)
@@ -101,19 +104,23 @@ Hooks.once('init', () =>
         onChange: () => refreshGlobalRulerDecoration(),
     });
 });
+
 // While a token drag is live, Ctrl belongs to Foundry's waypoint placement.
 function tokenDragActive()
 {
     return !!canvas.tokens?.preview?.children?.length;
 }
+
 function ctrlRulerMode()
 {
     return getModuleSetting(CTRL_RULER_KEY, 'tool');
 }
+
 function targetCursorOn()
 {
     return !!getModuleSetting(RULER_CURSOR_KEY, true);
 }
+
 function rulerCursorOn()
 {
     return !!getModuleSetting(RULER_CURSOR_KEY, true);
@@ -163,8 +170,10 @@ function onGlobalCtrlKey(event)
             cancelGlobalCtrlArm();
         return;
     }
+
     if (ctrlRulerMode() !== 'always')
         return;
+
     if (event.type === 'keyup')
     {
         cancelGlobalCtrlArm();
@@ -175,6 +184,7 @@ function onGlobalCtrlKey(event)
         _gPrevTool = null;
         return;
     }
+
     if (event.repeat || _gCtrlHeld || _gCtrlTimer || tokenDragActive() || isTypingTarget(event.target))
         return;
     _gCtrlTimer = setTimeout(() =>
@@ -213,6 +223,7 @@ function onGlobalMove(event)
 }
 
 let _globalRulerInited = false;
+
 export function initGlobalCtrlRuler()
 {
     if (_globalRulerInited)
@@ -221,7 +232,7 @@ export function initGlobalCtrlRuler()
     injectStyles();
     document.addEventListener('keydown', onGlobalCtrlKey, true);
     document.addEventListener('keyup', onGlobalCtrlKey, true);
-    document.addEventListener('mousemove', onGlobalMove, true);
+    document.addEventListener('pointermove', onGlobalMove, true);
     document.addEventListener('wheel', onGlobalWheel, { capture: true, passive: true });
     window.addEventListener('blur', onGlobalCtrlBlur);
     Hooks.on('activateSceneControls', () => refreshGlobalRulerDecoration());

@@ -10,14 +10,22 @@ export async function moveTokenTo(tokenLike, destination, extraOpts = {})
 {
     if (!tokenLike || !destination)
         return false;
+
     const tokenDoc = tokenLike.document ?? tokenLike;
     if (!tokenDoc?.move)
         return false;
     if (Array.isArray(destination) && !destination.length)
         return false;
 
+    const actionChangesAfter = (index) =>
+    {
+        const current = destination[index]?.action;
+        const next = destination[index + 1]?.action;
+        return !!current && !!next && current !== next;
+    };
+
     const waypoint = Array.isArray(destination)
-        ? destination.map(pathWp => ({ elevation: tokenDoc.elevation, ...pathWp }))
+        ? destination.map((pathWp, index) => ({ elevation: tokenDoc.elevation, ...pathWp, ...(actionChangesAfter(index) ? { checkpoint: true } : {}) }))
         : {
             x: destination.x,
             y: destination.y,
@@ -28,6 +36,7 @@ export async function moveTokenTo(tokenLike, destination, extraOpts = {})
     const { method = 'api', constrainOptions, autoRotate, showRuler, ...options } = extraOpts;
 
     let dragAutoRotate;
+
     try
     {
         dragAutoRotate = options.isDrag ? game.settings.get('core', 'tokenAutoRotate') : undefined;
@@ -36,6 +45,7 @@ export async function moveTokenTo(tokenLike, destination, extraOpts = {})
     {
         dragAutoRotate = undefined;
     }
+
     return tokenDoc.move(waypoint, {
         method,
         constrainOptions,

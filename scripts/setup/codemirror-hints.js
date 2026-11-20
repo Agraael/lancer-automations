@@ -6,6 +6,7 @@ import { escapeHtml as _escapeHtml } from '../tools/string-utils.js';
 
 const HAND_SIGNATURE_OVERRIDES = {
 };
+
 const HAND_RETURN_OVERRIDES = {
 };
 
@@ -21,9 +22,10 @@ const TRIGGER_MANIFEST = [
     { name: 'triggeringToken', returns: 'Token', summary: 'Token that caused the trigger.' },
     { name: 'distanceToTrigger', returns: 'number | null', summary: 'Reactor to triggering token, in spaces.' },
     { name: 'canTriggerReaction', returns: 'boolean', summary: 'False when the trigger cannot provoke (disengage, hidden, ...).' },
-    { name: 'startRelatedFlow', args: '()', returns: 'Promise<void>', summary: "Run the reacting item's own flow on this client." },
+    { name: 'startRelatedFlow', args: '()', returns: 'Promise<void>', summary: "Run the reacting item's own flow, on the reactor owner's client when you don't own it." },
     { name: 'startRelatedFlowToReactor', args: '(userId, extraData, opts)', returns: 'Promise<any>', summary: "Same, on the reactor owner's client. opts.wait blocks for the result." },
     { name: 'sendMessageToReactor', args: '(data, userId, opts)', returns: 'Promise<any>', summary: "Call this activation's onMessage on another client." },
+    { name: 'askToActivate', args: '(card, opts)', returns: 'Promise<{ confirmed, responderIds }>', summary: "Yes/no card to the reactor's owner, then this reaction's flow. opts: extraData, wait, background." },
     { name: 'debugActivation', args: '(label)', returns: 'void', summary: 'Console-dump the reactor, trigger and payload.' },
 
     { name: 'cancel', args: '()', returns: 'void', summary: 'Blocks the move with no card (onPreMove, onPreInvoluntaryMove).' },
@@ -124,7 +126,7 @@ const TRIGGER_MANIFEST = [
 const COMMON_TRIGGER_FIELDS = new Set([
     'triggeringToken', 'distanceToTrigger', 'canTriggerReaction',
     'hitTokens', 'isTarget', 'targetEntry',
-    'startRelatedFlow', 'startRelatedFlowToReactor', 'sendMessageToReactor',
+    'startRelatedFlow', 'startRelatedFlowToReactor', 'sendMessageToReactor', 'askToActivate',
     'debugActivation',
 ]);
 
@@ -143,6 +145,7 @@ const TRIGGER_FIELDS_BY_TRIGGER = {
     onInitTechAttack:    ['techItem', 'targets', 'hitTokens', 'actionName', 'isInvade', 'tags', 'actionData', 'cancelTechAttack', 'flowState'],
     onTechHit:           ['techItem', 'targets', 'hitTokens', 'actionName', 'isInvade', 'tags', 'actionData', 'flowState'],
     onTechMiss:          ['techItem', 'targets', 'hitTokens', 'actionName', 'isInvade', 'tags', 'actionData', 'flowState'],
+    onInvadeHit:         ['techItem', 'targets', 'hitTokens', 'actionName', 'isInvade', 'tags', 'actionData', 'flowState'],
     onCheck:             ['statName', 'roll', 'total', 'success', 'checkAgainstToken', 'targetVal', 'flowState'],
     onInitCheck:         ['statName', 'checkAgainstToken', 'targetVal', 'cancelCheck', 'flowState'],
     onActivation:        ['actionType', 'actionName', 'item', 'actionData', 'deployable', 'reactionJustConsumed', 'endActivation', 'extraData', 'flowState'],
@@ -170,6 +173,8 @@ const TRIGGER_FIELDS_BY_TRIGGER = {
     onTurnEnd:           [],
     onRoundStart:        ['combat', 'round'],
     onRoundEnd:          ['combat', 'round'],
+    onCombatStart:       ['combat'],
+    onCombatEnd:         ['combat'],
     onEnterCombat:       [],
     onExitCombat:        [],
     onFullRepair:        [],
@@ -188,6 +193,7 @@ const HAND_OPTION_SCHEMAS = {
         ['choices', 'Array<{ text, icon, callback }>'],
         ['mode', '"or" | "and"'],
         ['userIdControl', 'string'],
+        ['owner', 'Token'],
         ['item', 'Item'],
         ['originToken', 'Token'],
         ['relatedToken', 'Token'],
@@ -219,6 +225,7 @@ const HAND_OPTION_SCHEMAS = {
         ['stack', 'number'],
         ['changes', 'object[]'],
         ['forceNew', 'boolean'],
+        ['grantActions', '{ name, activation, icon?, detail? }[]'],
     ],
     'setEffect.extraOptions': [
         ['consumption', '{ trigger, originId?, groupId?, evaluate?, itemLid?, itemId?, actionName? }'],
@@ -281,6 +288,8 @@ const HAND_OPTION_SCHEMAS = {
         ['dangerous', 'object'],
         ['statusEffects', 'string[]'],
         ['requireRange', 'boolean'],
+        ['key', 'string'],
+        ['replace', 'boolean'],
     ],
     'knockBackToken.options': [
         ['triggeringToken', 'Token'],
@@ -385,21 +394,26 @@ const HAND_OPTION_SCHEMAS = {
 function _mergeOptionSchemas(auto, hand)
 {
     const out = {};
+
     for (const key of new Set([...Object.keys(auto), ...Object.keys(hand)]))
     {
         const byName = new Map();
+
         for (const pair of (hand[key] ?? []))
         {
             if (!String(pair[0]).startsWith('...'))
                 byName.set(pair[0], pair);
         }
+
         for (const pair of (auto[key] ?? []))
         {
             if (!String(pair[0]).startsWith('...') && !byName.has(pair[0]))
                 byName.set(pair[0], pair);
         }
+
         out[key] = [...byName.values()];
     }
+
     return out;
 }
 
@@ -609,16 +623,19 @@ const VAR_TYPES = {
 function _walkType(typeName, segments)
 {
     let curType = typeName;
+
     for (const seg of segments)
     {
         const fields = TYPE_FIELDS[curType];
         if (!fields)
             return null;
+
         const field = fields[seg];
         if (!field?.type)
             return null;
         curType = field.type;
     }
+
     return curType;
 }
 
@@ -652,16 +669,20 @@ const TRIGGER_OBJECT_BY_KIND = {
 const _triggerReCache = new Map();
 
 let _apiCache = null;
+
 function _getApiList()
 {
     if (_apiCache)
         return _apiCache;
+
     const apiObj = game?.modules?.get?.(MODULE_ID)?.api ?? {};
     const entries = [];
+
     for (const apiName of Object.keys(apiObj))
     {
         if (typeof apiObj[apiName] !== 'function')
             continue;
+
         const args = HAND_SIGNATURE_OVERRIDES[apiName] ?? SIG_BY_NAME.get(apiName) ?? '(...)';
         const returns = HAND_RETURN_OVERRIDES[apiName] ?? RETURNS_BY_NAME.get(apiName) ?? '';
         const summary = SUMMARY_BY_NAME.get(apiName) ?? '';
@@ -669,6 +690,7 @@ function _getApiList()
         const hasDoc = HAS_DOC_BY_NAME.get(apiName) ?? false;
         entries.push({ name: apiName, args, returns, summary, params, hasDoc });
     }
+
     _apiCache = entries.sort((a, b) => a.name.localeCompare(b.name));
     return _apiCache;
 }
@@ -677,12 +699,15 @@ function _splitArgs(args)
 {
     if (!args)
         return [];
+
     const inner = args.replace(/^\(/, '').replace(/\)$/, '').trim();
     if (!inner)
         return [];
+
     const parts = [];
     let depth = 0;
     let buf = '';
+
     for (const char of inner)
     {
         if (char === '(' || char === '{' || char === '[')
@@ -703,6 +728,7 @@ function _splitArgs(args)
         else
             buf += char;
     }
+
     if (buf.trim())
         parts.push(buf.trim());
     return parts;
@@ -711,19 +737,23 @@ function _splitArgs(args)
 function _shortPart(part)
 {
     const noDefault = part.split('=')[0].trim();
+
     if (noDefault.startsWith('{'))
     {
         const inner = noDefault.replace(/^\{/, '').replace(/\}$/, '').trim();
         if (!inner)
             return '{}';
+
         const keys = _splitArgs(`(${inner})`);
         if (keys.length === 0)
             return '{}';
+
         const firstKey = keys[0].split('=')[0].trim();
         if (keys.length === 1)
             return `{ ${firstKey} }`;
         return `{ ${firstKey}, …+${keys.length - 1} }`;
     }
+
     if (noDefault.startsWith('['))
         return '[…]';
     return noDefault;
@@ -735,9 +765,11 @@ function _shortSig(args)
         return '';
     if (args === '(...)' || args === '()')
         return args;
+
     const parts = _splitArgs(args);
     if (parts.length === 0)
         return '()';
+
     const first = _shortPart(parts[0]);
     if (parts.length === 1)
         return `(${first})`;
@@ -754,6 +786,7 @@ function _hideTooltip()
         clearTimeout(_tooltipTimer);
         _tooltipTimer = null;
     }
+
     if (_tooltipEl?.parentElement)
         _tooltipEl.remove();
     _tooltipEl = null;
@@ -763,8 +796,10 @@ export function apiDocUrl(name)
 {
     const entry = AUTO_DOC_INDEX[name];
     const ref = AUTO_DOC_REF[name];
+
     if (!entry && !ref)
         return null;
+
     const file = entry?.file ?? ref.file;
     const anchor = entry?.anchor ? `#${entry.anchor}` : '';
     return `https://agraael.github.io/lancer-automations/${file.replace(/\.md$/, '.html')}${anchor}`;
@@ -795,11 +830,13 @@ export function getTriggerHelperEntries()
 function _openDocPopup(name)
 {
     const url = apiDocUrl(name);
+
     if (!url)
     {
         ui?.notifications?.warn?.(`No doc reference for ${name}`);
         return;
     }
+
     window.open(url, '_blank', 'noopener');
 }
 
@@ -810,16 +847,20 @@ function _showTooltip(anchor, name, fullArgs, returns, summary = '', params = []
     const paramByName = new Map((params ?? []).map((param) => [param.name, param]));
     // Doc tables are the maintained source; prefer them over JSDoc-derived meta.
     const docRows = AUTO_DOC_PARAMS[name] ?? null;
+
     const positionalNames = new Set(parts.map((argStr) =>
     {
         const eq = argStr.indexOf('=');
         return (eq >= 0 ? argStr.slice(0, eq) : argStr).trim();
     }));
+
     if (docRows)
         for (const [pname, ptype, paramDefault] of docRows)
             if (positionalNames.has(pname))
                 paramByName.set(pname, { name: pname, type: ptype, desc: paramDefault && paramDefault !== 'required' ? `default: ${paramDefault}` : '' });
+
     let body;
+
     if (!fullArgs || fullArgs === '()' || fullArgs === '(...)')
         body = `<div class="la-hint-tt-paren">${fullArgs || '()'}</div>`;
     else
@@ -832,36 +873,46 @@ function _showTooltip(anchor, name, fullArgs, returns, summary = '', params = []
             const comma = i < parts.length - 1 ? ',' : '';
             const lookupKey = namePart.replace(/^\{.*\}$/, 'options');
             let schema = OPTION_SCHEMAS[`${name}.${lookupKey}`];
+
             if (docRows && (lookupKey === 'options' || lookupKey === 'opts'))
             {
                 const bagRows = docRows.filter(([pname]) => !positionalNames.has(pname));
                 if (bagRows.length)
                     schema = bagRows.map(([pname, ptype]) => [pname, ptype || 'any']);
             }
+
             let schemaHtml = '';
+
             if (schema)
             {
                 const lines = schema.map(([fieldName, fieldType]) => `<div class="la-hint-tt-schema-line"><span class="la-hint-tt-argname">${_escapeHtml(fieldName)}</span><span class="la-hint-tt-default">: ${_escapeHtml(fieldType)}</span></div>`).join('');
                 schemaHtml = `<div class="la-hint-tt-schema">${lines}</div>`;
             }
+
             const paramMeta = paramByName.get(namePart);
             let metaHtml = '';
+
             if (paramMeta)
             {
                 const typeHtml = paramMeta.type ? `<span class="la-hint-tt-argtype">: ${_escapeHtml(paramMeta.type)}</span>` : '';
                 const descHtml = paramMeta.desc ? `<div class="la-hint-tt-argdesc">${_escapeHtml(paramMeta.desc)}</div>` : '';
                 metaHtml = `${typeHtml}${descHtml}`;
             }
+
             return `<div class="la-hint-tt-arg"><span class="la-hint-tt-argname">${namePart}</span>${metaHtml}<span class="la-hint-tt-default">${defPart}</span>${comma}${schemaHtml}</div>`;
         }).join('');
+
         body = `<div class="la-hint-tt-paren">(</div>${argLines}<div class="la-hint-tt-paren">)</div>`;
     }
+
     const summaryHtml = summary
         ? `<div class="la-hint-tt-summary">${_escapeHtml(summary)}</div>`
         : '';
+
     const retHtml = returns
         ? `<div class="la-hint-tt-returns"><span class="la-hint-tt-ret-arrow">→</span> <span class="la-hint-tt-ret-type">${returns}</span></div>`
         : '';
+
     _tooltipEl = document.createElement('div');
     _tooltipEl.className = 'la-hint-tooltip';
     _tooltipEl.innerHTML = `<div class="la-hint-tt-name">${name}</div>${summaryHtml}${body}${retHtml}`;
@@ -869,8 +920,10 @@ function _showTooltip(anchor, name, fullArgs, returns, summary = '', params = []
     const anchorRect = anchor.getBoundingClientRect();
     const ttRect = _tooltipEl.getBoundingClientRect();
     let left = anchorRect.right + 8;
+
     if (left + ttRect.width > window.innerWidth - 8)
         left = Math.max(8, anchorRect.left - ttRect.width - 8);
+
     let top = anchorRect.top;
     if (top + ttRect.height > window.innerHeight - 8)
         top = Math.max(8, window.innerHeight - ttRect.height - 8);
@@ -883,11 +936,14 @@ function _renderHint(el, _self, data)
     const name = data.displayName ?? data.text;
     const shortArgs = data.shortArgs ?? '';
     const isFn = !!data.fullArgs;
+
     const docBtn = data.hasDoc
         ? `<a class="la-hint-row-doc" title="Open API doc">?</a>`
         : '';
+
     el.classList.add(isFn ? 'la-hint-fn' : 'la-hint-var');
     el.innerHTML = `<span class="la-hint-name">${name}</span><span class="la-hint-args"> ${shortArgs}</span>${docBtn}`;
+
     if (data.hasDoc)
     {
         const btn = el.querySelector('.la-hint-row-doc');
@@ -923,9 +979,11 @@ function _filter(entries, prefix)
 {
     if (!prefix)
         return entries.map(_toCompletion);
+
     const prefixLo = prefix.toLowerCase();
     const starts = [];
     const contains = [];
+
     for (const entry of entries)
     {
         const nameLo = entry.name.toLowerCase();
@@ -934,6 +992,7 @@ function _filter(entries, prefix)
         else if (nameLo.includes(prefixLo))
             contains.push(entry);
     }
+
     return [...starts, ...contains].map(_toCompletion);
 }
 
@@ -952,6 +1011,7 @@ function _attachTooltipEvents(data, cm)
     CodeMirror.on(data, 'pick', (entry) =>
     {
         _hideTooltip();
+
         if (cm && entry?._isFn)
         {
             const pos = cm.getCursor();
@@ -967,10 +1027,13 @@ function _getSelectedTriggers(cm)
     const wrapper = cm?.getWrapperElement?.();
     if (!wrapper)
         return null;
+
     const form = wrapper.closest('form');
     if (!form)
         return null;
+
     const selected = new Set();
+
     for (const checkbox of form.querySelectorAll('input[type="checkbox"][name^="trigger."]'))
     {
         if (checkbox.checked)
@@ -980,6 +1043,7 @@ function _getSelectedTriggers(cm)
                 selected.add(triggerName);
         }
     }
+
     return selected.size > 0 ? selected : null;
 }
 
@@ -988,16 +1052,20 @@ function _filterTriggerManifestByForm(cm)
     const selected = _getSelectedTriggers(cm);
     if (!selected)
         return TRIGGER_MANIFEST;
+
     const allowed = new Set(COMMON_TRIGGER_FIELDS);
+
     for (const triggerName of selected)
     {
         const fields = TRIGGER_FIELDS_BY_TRIGGER[triggerName];
+
         if (fields)
         {
             for (const fieldName of fields)
                 allowed.add(fieldName);
         }
     }
+
     return TRIGGER_MANIFEST.filter((entry) => allowed.has(entry.name));
 }
 
@@ -1008,6 +1076,7 @@ function _hint(cm, kind)
     const before = line.slice(0, cur.ch);
 
     const apiMatch = before.match(/\bapi\.(\w*)$/);
+
     if (apiMatch)
     {
         const prefix = apiMatch[1];
@@ -1019,15 +1088,19 @@ function _hint(cm, kind)
     }
 
     const triggerObj = TRIGGER_OBJECT_BY_KIND[kind];
+
     if (triggerObj)
     {
         let re = _triggerReCache.get(triggerObj);
+
         if (!re)
         {
             re = new RegExp(`\\b${triggerObj}\\.(\\w*)$`);
             _triggerReCache.set(triggerObj, re);
         }
+
         const trigMatch = before.match(re);
+
         if (trigMatch)
         {
             const prefix = trigMatch[1];
@@ -1041,15 +1114,18 @@ function _hint(cm, kind)
     }
 
     const chainMatch = before.match(/(\w+(?:\.\w+)*)\.(\w*)$/);
+
     if (chainMatch)
     {
         const chain = chainMatch[1].split('.');
         const root = chain[0];
         const startType = VAR_TYPES[root];
+
         if (startType)
         {
             const finalType = _walkType(startType, chain.slice(1));
             const fields = finalType ? _typeFieldsAsManifest(finalType) : null;
+
             if (fields)
             {
                 const prefix = chainMatch[2];
@@ -1060,6 +1136,7 @@ function _hint(cm, kind)
                 }, cm);
             }
         }
+
         return null;
     }
 
@@ -1067,6 +1144,7 @@ function _hint(cm, kind)
     const prefix = wordMatch ? wordMatch[1] : '';
     const params = PARAMS_BY_KIND[kind] ?? [];
     const list = _filter(params.map((paramName) => ({ name: paramName })), prefix);
+
     if (!list.length)
         return null;
     return _attachTooltipEvents({
@@ -1082,15 +1160,18 @@ function _hint(cm, kind)
  */
 // Lazy-load optional addons (autoCloseBrackets, match-highlighter): module.json load fails before _CodeMirror exists.
 let _extraAddonsPromise = null;
+
 function _ensureExtraAddons()
 {
     if (_extraAddonsPromise)
         return _extraAddonsPromise;
     if (typeof CodeMirror === 'undefined')
         return Promise.resolve(false);
+
     const cmModule = game.modules.get('_CodeMirror');
     if (!cmModule?.active)
         return Promise.resolve(false);
+
     const load = (src) => new Promise((resolve) =>
     {
         const script = document.createElement('script');
@@ -1100,15 +1181,18 @@ function _ensureExtraAddons()
         script.onerror = () => resolve(false);
         document.head.appendChild(script);
     });
+
     const loadCss = (href) =>
     {
         if (document.querySelector(`link[href="${href}"]`))
             return;
+
         const link = document.createElement('link');
         link.rel = 'stylesheet';
         link.href = href;
         document.head.appendChild(link);
     };
+
     loadCss('/modules/_CodeMirror/addon/dialog/dialog.css');
     loadCss('/modules/_CodeMirror/addon/fold/foldgutter.css');
     _extraAddonsPromise = (async () =>
@@ -1143,6 +1227,7 @@ export function installLancerHints(cm, kind = 'activationCode')
             catch
             { /* addon missing */ }
         }
+
         if (flags.matchOk)
         {
             try
@@ -1152,6 +1237,7 @@ export function installLancerHints(cm, kind = 'activationCode')
             catch
             { /* addon missing */ }
         }
+
         if (flags.foldOk)
         {
             try
@@ -1162,22 +1248,27 @@ export function installLancerHints(cm, kind = 'activationCode')
             catch
             { /* addon missing */ }
         }
+
         // Bind Ctrl-/ (toggle line comment), Ctrl-F (search): keymaps are no-ops if the addon isn't loaded.
         const extra = { ...(cm.getOption('extraKeys') || {}) };
         if (flags.commentOk)
             extra['Ctrl-/'] = (cm) => cm.toggleComment();
+
         if (flags.searchOk)
         {
             extra['Ctrl-F'] = 'findPersistent';
             extra['Ctrl-G'] = 'findNext';
             extra['Shift-Ctrl-G'] = 'findPrev';
         }
+
         cm.setOption('extraKeys', extra);
     });
+
     const trigger = () => CodeMirror.showHint(cm, (cmInst) => _hint(cmInst, kind), {
         completeSingle: false,
         closeOnUnfocus: true,
     });
+
     const prev = cm.getOption('extraKeys') || {};
     cm.setOption('extraKeys', {
         ...prev,
@@ -1198,6 +1289,7 @@ export function installLancerHints(cm, kind = 'activationCode')
 function _installLancerSignatureTooltip(cm)
 {
     let tip = null;
+
     const hide = () =>
     {
         if (tip)
@@ -1205,6 +1297,7 @@ function _installLancerSignatureTooltip(cm)
             tip.remove(); tip = null;
         }
     };
+
     const show = (text, x, y) =>
     {
         if (!tip)
@@ -1214,6 +1307,7 @@ function _installLancerSignatureTooltip(cm)
             tip.style.cssText = 'position:fixed;z-index:99999;background:#1a1a1a;border:1px solid #555;color:#e8a020;font-family:monospace;font-size:0.78em;padding:3px 6px;border-radius:3px;box-shadow:0 2px 8px rgba(0,0,0,0.5);pointer-events:none;white-space:nowrap;';
             document.body.appendChild(tip);
         }
+
         tip.textContent = text;
         const rect = tip.getBoundingClientRect();
         const left = Math.max(4, Math.min(window.innerWidth - rect.width - 4, x));
@@ -1221,6 +1315,7 @@ function _installLancerSignatureTooltip(cm)
         tip.style.left = left + 'px';
         tip.style.top = top + 'px';
     };
+
     cm.on('cursorActivity', () =>
     {
         const cur = cm.getCursor();
@@ -1228,17 +1323,21 @@ function _installLancerSignatureTooltip(cm)
         const upto = line.slice(0, cur.ch);
         // Match: api.fnName( ... cursor here, no close paren yet on this line segment
         const sigMatch = upto.match(/api\.(\w+)\([^)]*$/);
+
         if (!sigMatch)
         {
             hide(); return;
         }
+
         const name = sigMatch[1];
         const sig = SIG_BY_NAME.get(name);
         const returnType = RETURNS_BY_NAME.get(name);
+
         if (!sig)
         {
             hide(); return;
         }
+
         const text = `${name}${sig}${returnType ? ` → ${returnType}` : ''}`;
         const coord = cm.cursorCoords(true, 'window');
         show(text, coord.left, coord.top);
@@ -1260,14 +1359,17 @@ function _installLancerArgOverlay(cm, kind)
         {
             if (stream.match(paramRe))
                 return 'la-arg';
+
             while (stream.next() != null && !paramRe.test(stream.peek() ?? ''))
             { /* advance */ }
+
             return null;
         }
     });
 }
 
 let _argStyleInjected = false;
+
 function _ensureLancerArgStyle()
 {
     if (_argStyleInjected)

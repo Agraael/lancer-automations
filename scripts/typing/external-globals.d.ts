@@ -56,6 +56,8 @@ declare const libWrapper: any;
 declare const TokenMagic: any;
 declare const ForceClientControls: any;
 declare const ForceClientSettings: any;
+declare const TurnMarker: any;
+declare const StartTurnMarker: any;
 
 // ─── Application augmentation ────────────────────────────────────────────────
 interface Application {
@@ -129,6 +131,15 @@ interface EffectDescriptorInput {
 }
 
 // ─── SetEffectOptions (flagged-effects.js) ───────────────────────────────────
+interface GrantedAction {
+    name: string;
+    activation: string;
+    icon?: string;
+    detail?: string;
+    condition?: string | ((actor: any, action: any, item: any) => any);
+    [key: string]: any;
+}
+
 interface SetEffectOptions {
     consumption?: { grouped?: boolean; groupId?: string;[key: string]: any };
     linkedBonusId?: string;
@@ -138,6 +149,7 @@ interface SetEffectOptions {
     grouped?: boolean;
     groupId?: string;
     changes?: any[];
+    grantActions?: GrantedAction[];
     [key: string]: any;
 }
 
@@ -145,6 +157,7 @@ interface SetEffectOptions {
 interface PathHexStep {
     x: number;
     y: number;
+    elevation: number;
     cx: number;
     cy: number;
     hexes: { x: number; y: number }[];

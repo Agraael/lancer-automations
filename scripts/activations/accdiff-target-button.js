@@ -8,32 +8,37 @@ import {
 import { rollHitCritChance } from '../interactive/canvas-helpers.js';
 import { getModuleSetting } from '../tools/settings-utils.js';
 import { htmlToElement } from '../tools/dom-utils.js';
-import { buildTargetingUI, aoeRanges, clearAllAttackShapes, injectWhenReady, targetInfoAllowed, targetInfoAllowedFor, UNKNOWN_CHANCE } from './targeting-ui.js';
+import { buildTargetingUI, aoeRanges, clearAllAttackShapes, injectWhenReady, targetInfoAllowed, targetInfoAllowedFor, UNKNOWN_CHANCE, TARGETING_SECTION_HTML } from './targeting-ui.js';
 import { weaponTypeIcon } from '../tah/item-helpers.js';
 import { accDiffTargetInvisible } from '../combat/grid-helpers.js';
 import { laInstallRollCardTags } from '../bonuses/roll-card-rows.js';
 import { laInstallRollCardHeader } from './roll-card-header.js';
+import { getPlacedAreas } from '../interactive/tools/pickAreaTargetToggle.js';
 
 function buildHitChanceFor(state)
 {
     if (!targetInfoAllowed())
         return null;
+
     return (token) =>
     {
         const accDiff = state?.data?.acc_diff;
         const base = accDiff?.base;
         const weapon = accDiff?.weapon;
         const actor = token?.actor;
+
         if (!base || !weapon || typeof weapon.total !== 'function' || !actor?.system)
             return null;
         if (!targetInfoAllowedFor(actor))
             return UNKNOWN_CHANCE;
+
         const isSmart = !!weapon.smart || !!state?.data?.is_smart;
         const bonus = (Number(base.grit) || 0) + (Number(base.flatBonus) || 0);
         const defense = isSmart ? (Number(actor.system.edef) || 8) : (Number(actor.system.evasion) || 5);
         const targetEntry = (accDiff.targets ?? []).find(entry => entry.targetUuid === token.document?.uuid);
         let netAcc;
         let invisible;
+
         if (targetEntry)
         {
             netAcc = Number(targetEntry.total) || 0;
@@ -47,12 +52,15 @@ function buildHitChanceFor(state)
             netAcc = (Number(weapon.total(cover)) || 0) + (Number(base.accuracy) || 0) - (Number(base.difficulty) || 0) + prone + lockOn;
             invisible = !!actor.statuses?.has?.('invisible');
         }
+
         const result = rollHitCritChance(bonus, netAcc, defense);
+
         if (invisible)
         {
             result.hit /= 2;
             result.crit /= 2;
         }
+
         if (weapon.tech)
             result.crit = 0;
         return result;
@@ -65,10 +73,13 @@ function swapHeaderIcon(state, $form)
     const icon = weaponTypeIcon(state.data?.lancerItem ?? state.item);
     if (!icon)
         return;
+
     const $host = $form.closest('.app, .sliding-hud');
     const $glyph = ($host.length ? $host : $form).find('i.cci-weapon').first();
+
     if (!$glyph.length)
         return;
+
     const url = foundry.utils.getRoute(icon);
     $glyph.css({
         fontSize: 0,
@@ -106,18 +117,21 @@ async function injectButton(state, $form)
 
     if (!$row.length)
     {
-        const $section = $(htmlToElement('<div class="accdiff-grid__section svelte-13q4b2q"><span class="accdiff-weight flex-center flexrow">Targeting</span><div class="accdiff-ranges flexrow svelte-13q4b2q"></div></div>'));
+        const $section = $(htmlToElement(TARGETING_SECTION_HTML));
         const $footer = $form.find('.accdiff-footer').first();
+
         if ($footer.length)
             $footer.before($section);
         else
             $form.append($section);
         $row = $section.find('.accdiff-ranges');
     }
+
     const $targetingSection = $row.closest('.accdiff-grid__section');
     ($targetingSection.length ? $targetingSection : $row).addClass('la-targeting-section');
 
     const targeting = state.la_extraData?.laTargeting ?? null;
+
     if (targeting && !state.__laAttackShape)
     {
         state.__laAttackShape = {
@@ -142,12 +156,14 @@ export function registerAccDiffTargetButton()
         {
             // Must schedule before awaiting; original returns only after the HUD closes.
             let attackerMark = null;
+
             try
             {
                 injectWhenReady(state, () => $(document.querySelectorAll('form[id^="accdiff"]')), injectButton, 'targeting');
                 injectWhenReady(state, () => $(document.querySelectorAll('form[id^="accdiff"]')), swapHeaderIcon, 'weapon header icon');
                 injectWhenReady(state, () => $(document.querySelectorAll('form[id^="accdiff"]')), laInstallRollCardTags, 'roll card tags');
                 injectWhenReady(state, () => $(document.querySelectorAll('form[id^="accdiff"]')), laInstallRollCardHeader, 'roll card header');
+
                 if (attackTargetingOn())
                 {
                     const attackerToken = state.actor?.getActiveTokens?.()[0] ?? null;
@@ -159,9 +175,11 @@ export function registerAccDiffTargetButton()
             {
                 // settings not ready
             }
+
             const hudResult = await original(state, options);
             // HUD closed (roll or cancel): stop the picker + drop shapes
             state.__laHudClosed = true;
+
             try
             {
                 attackerMark?.destroy();
@@ -169,15 +187,21 @@ export function registerAccDiffTargetButton()
                     cancelAreaPicker();
                 if (isSingleTargetPickerActive())
                     cancelSingleTargetPicker();
+
                 const blastCenters = getPlacedBlastCenters();
                 if (blastCenters.length && state.__laAttackShape)
                     state.__laAttackShape = { ...state.__laAttackShape, blastCenters };
+
+                const placedAreas = getPlacedAreas();
+                if (placedAreas.length && state.__laAttackShape)
+                    state.__laAttackShape = { ...state.__laAttackShape, placedAreas };
                 clearAllAttackShapes();
             }
             catch
             {
                 // ignore
             }
+
             return hudResult;
         });
 
@@ -191,6 +215,7 @@ export function registerAccDiffTargetButton()
             for (const target of [...(game.user.targets ?? [])])
                 target.setTarget(false, { releaseOthers: false });
         };
+
         for (const flowName of ['WeaponAttackFlow', 'BasicAttackFlow', 'TechAttackFlow'])
             Hooks.on(`lancer.postFlow.${flowName}`, clearTargetsAfterRoll);
 

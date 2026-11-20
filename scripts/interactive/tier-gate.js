@@ -13,12 +13,15 @@ export function tierGateApplies(target)
 {
     if (!target)
         return false;
+
     const doc = target.documentName ? target : (target.actor ?? target.document ?? target);
+
     if (doc.documentName === 'Item')
     {
         const owner = doc.parent;
         return !owner || owner.type === 'npc';
     }
+
     return doc.type === 'npc';
 }
 
@@ -44,6 +47,7 @@ export function bindTierGate($root, onChange)
         const gate = this.closest('.la-tier-gate');
         if (!gate)
             return;
+
         const clicked = Number(this.getAttribute('data-tier')) || 0;
         const cur = Number(gate.getAttribute('data-tier')) || 0;
         const next = clicked === cur ? 0 : clicked;
@@ -62,6 +66,7 @@ export function getOwnerTier(ownerActor, item = null)
 {
     if (ownerActor?.type !== 'npc')
         return null;
+
     const override = Number(item?.system?.tier_override ?? 0);
     const tier = override > 0 ? override : (Number(ownerActor.system?.tier) || 1);
     return Math.max(1, Math.min(3, tier));
@@ -73,6 +78,7 @@ export function linkTierGate(entry, ownerActor, item = null)
     const gate = Number(entry?.tier ?? 0);
     if (!gate)
         return true;
+
     const ownerTier = getOwnerTier(ownerActor, item);
     if (ownerTier == null)
         return true;

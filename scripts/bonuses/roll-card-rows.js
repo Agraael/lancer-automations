@@ -1,10 +1,6 @@
 import { escapeHtml } from "../tools/string-utils.js";
 import { htmlToElement } from "../tools/dom-utils.js";
-
-export function laSigned(value)
-{
-    return value > 0 ? `+${value}` : `${value}`;
-}
+import { thrownValue } from "../tools/weapon-bonus-utils.js";
 
 export function laValueTag(text, tone)
 {
@@ -15,6 +11,7 @@ export function laPills(parts = [], note = null)
 {
     if (!parts.length && !note)
         return '';
+
     const html = parts.map(part => `<span class="la2-pill${part.limit ? ' la2-pill-limit' : ''}">${part.limit ? '<i class="mdi mdi-timer-sand"></i>' : ''}${escapeHtml(part.text)}</span>`).join('');
     const noteHtml = note ? `<span class="la2-pill la2-pill-note">${escapeHtml(note)}</span>` : '';
     return `<span class="la2-pills">${html}${noteHtml}</span>`;
@@ -44,8 +41,10 @@ document.addEventListener('mouseenter', (event) =>
     const row = event.target instanceof Element ? event.target.closest('.la2-cardrows .la2-row') : null;
     const name = row?.querySelector(':scope > .la2-name');
     const text = name?.firstElementChild;
+
     if (!row || pannedRows.has(row) || !(name instanceof HTMLElement) || !(text instanceof HTMLElement))
         return;
+
     const overflow = text.scrollWidth - name.clientWidth;
     if (overflow <= 1)
         return;
@@ -55,12 +54,14 @@ document.addEventListener('mouseenter', (event) =>
     const endHold = 1200;
     const total = startHold + pan + endHold;
     const end = `translateX(${-overflow}px)`;
+
     const animation = text.animate([
         { transform: 'translateX(0)', offset: 0 },
         { transform: 'translateX(0)', offset: startHold / total, easing: 'ease-in-out' },
         { transform: end, offset: (startHold + pan) / total },
         { transform: end, offset: 1 }
     ], { duration: total });
+
     row.addEventListener('mouseleave', () =>
     {
         animation.cancel();
@@ -80,6 +81,7 @@ export function laDamageChips(entries = [])
         const type = escapeHtml(String(entry?.type ?? '').toLowerCase());
         return `<span class="la2-dmg" data-dmg-type="${escapeHtml(entry?.type ?? '')}" data-dmg-val="${escapeHtml(entry?.val ?? '')}"><i class="cci cci-${type} damage--${type}"></i>${escapeHtml(entry?.val ?? '')}</span>`;
     }).join('');
+
     return `<span class="la2-dmgtags">${chips}</span>`;
 }
 
@@ -92,6 +94,7 @@ export function laSplitGroupHtml(rows)
 {
     if (!rows.length)
         return '';
+
     const half = Math.ceil(rows.length / 2);
     const cols = [rows.slice(0, half), rows.slice(half)].map(list => `<div class="la2-col">${list.join('')}</div>`).join('');
     return `<div class="la2-group la2-split"><span class="la2-eyebrow">LA</span>${cols}</div>`;
@@ -100,11 +103,13 @@ export function laSplitGroupHtml(rows)
 export function laCardSlot($body, slot)
 {
     let $rows = $body.children('.la2-cardrows');
+
     if (!$rows.length)
     {
         $rows = $(htmlToElement('<div class="la2-cardrows"><div class="la2-slot" data-slot="state"></div><div class="la2-slot" data-slot="vis"></div><div class="la2-slot" data-slot="bonus"></div><div class="la2-slot" data-slot="mod"></div></div>'));
         $body.append($rows);
     }
+
     return $rows.children(`[data-slot="${slot}"]`);
 }
 
@@ -142,6 +147,7 @@ function svelteScope($form, selector)
         if (found)
             return found;
     }
+
     return '';
 }
 
@@ -152,20 +158,23 @@ function cardEntry($card, targets)
     return targets.find(entry => entry.targetUuid === forAttr || String(entry.targetUuid ?? '').split('.').pop() === tail) ?? null;
 }
 
-export function laTagLancerRows($form)
+export function laTagLancerRows($form, throwRange = 0)
 {
     for (const label of $form.find('label.container').toArray())
     {
         if (!isLancerLabel(label))
             continue;
+
         const text = lancerLabelText(label);
         const entry = LANCER_ROW_TAGS[text];
+
         if (!entry || label.dataset.laTag === text)
             continue;
         label.querySelectorAll(':scope > .la2-name, :scope > .la2-val').forEach(element => element.remove());
         label.classList.add('la2-row', 'b2t-row');
         label.dataset.laTag = text;
-        label.insertAdjacentHTML('beforeend', `${nameHtml(entry[0])}${laValueTag(entry[1], entry[2])}`);
+        const value = text === 'Thrown (*)' && throwRange > 0 ? `${entry[1]} ${throwRange}` : entry[1];
+        label.insertAdjacentHTML('beforeend', `${nameHtml(entry[0])}${laValueTag(value, entry[2])}`);
     }
 }
 
@@ -173,9 +182,12 @@ export function laSyncInvisibility(state)
 {
     const $form = $(document.querySelectorAll('form[id^="accdiff"]'));
     const targets = state?.data?.acc_diff?.targets ?? [];
+
     if ($form.length === 0 || targets.length === 0)
         return;
+
     const setBlur = ($scope, on) => $scope.find('.lancer-hit-thumb, .total-container').toggleClass('accdiff-total-invisibility', on);
+
     if (targets.length === 1)
     {
         const on = !!targets[0].plugins?.invisibility?.uiState;
@@ -186,11 +198,13 @@ export function laSyncInvisibility(state)
         setBlur($form.find('.accdiff-footer'), on);
         return;
     }
+
     $form.find('.accdiff-target').each(function ()
     {
         const entry = cardEntry($(this), targets);
         if (!entry)
             return;
+
         const on = !!entry.plugins?.invisibility?.uiState;
         setBlur($(this), on);
         $(this).find('.la2-vis-invis > input').prop('checked', on);
@@ -214,21 +228,25 @@ export function laSyncTargetCards(state, $form)
     const targets = state?.data?.acc_diff?.targets ?? [];
     if (targets.length < 2)
         return;
+
     const scope = svelteScope($form, 'label.container');
     $form.find('.accdiff-target').each(function ()
     {
         const $card = $(this);
         const entry = cardEntry($card, targets);
         const $body = $card.find('.accdiff-target-body').first();
+
         if (!entry || $body.length === 0)
             return;
 
         const stateHtml = laStatesHtml({ lockOn: entry.usingLockOn, prone: entry.prone, stunned: entry.stunned });
         const $stateSlot = laCardSlot($body, 'state');
+
         if ($stateSlot.data('laSig') !== stateHtml)
             $stateSlot.data('laSig', stateHtml).html(stateHtml);
 
         const $visSlot = laCardSlot($body, 'vis');
+
         if (entry.plugins?.invisibility && !$visSlot.children('.la2-vis-invis').length)
         {
             const $row = $(laRowHtml({ name: 'Invisible', tag: laValueTag('50% miss', 'mod'), on: !!entry.plugins.invisibility.uiState, scope, cls: 'la2-card la2-vis la2-vis-invis' }));
@@ -241,6 +259,7 @@ export function laSyncTargetCards(state, $form)
                 laSyncInvisibility(state);
             });
         }
+
         const $spotter = $visSlot.children('.la2-vis-spot');
         if (entry.plugins?.spotter && entry.usingLockOn)
         {
@@ -262,19 +281,24 @@ export function laInstallRollCardTags(state, $form)
     taggedForms.add(form);
     let queued = false;
     let observer = null;
+    const throwRange = thrownValue(state?.item?.system?.active_profile?.all_tags || state?.item?.system?.tags || []);
+
     const run = () =>
     {
         queued = false;
+
         if (!form.isConnected)
         {
             observer?.disconnect();
             return;
         }
+
         const $live = $(form);
-        laTagLancerRows($live);
+        laTagLancerRows($live, throwRange);
         laSyncTargetCards(state, $live);
         laSyncInvisibility(state);
     };
+
     const schedule = () =>
     {
         if (queued)
@@ -282,6 +306,7 @@ export function laInstallRollCardTags(state, $form)
         queued = true;
         requestAnimationFrame(run);
     };
+
     observer = new MutationObserver(schedule);
     observer.observe(form, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] });
     $(form).on('change.laRollTags', schedule);

@@ -168,6 +168,22 @@
  */
 
 /**
+ * @typedef {Object} RevivedEvent
+ * @property {'revived'} type
+ * @property {number} round
+ * @property {number|null} turn
+ * @property {string} tokenId
+ */
+
+/**
+ * @typedef {Object} LeftEvent
+ * @property {'left'} type
+ * @property {number} round
+ * @property {number|null} turn
+ * @property {string} tokenId
+ */
+
+/**
  * @typedef {Object} MeltdownEvent
  * @property {'meltdown'} type
  * @property {number} round
@@ -209,6 +225,8 @@
  *   | StressLossEvent
  *   | GearLostEvent
  *   | DestroyedEvent
+ *   | RevivedEvent
+ *   | LeftEvent
  *   | MeltdownEvent
  *   | StatusEvent
  *   | DeployEvent
@@ -237,4 +255,4 @@
 
 export const DOT_TYPES = /** @type {DamageType[]} */ (['burn', 'infection']);
 export const SAVE_KINDS = /** @type {const} */ (['hull', 'agi', 'sys', 'eng']);
-export const EVENT_TYPES = ['attack', 'damage', 'damage-undo', 'action', 'action-undo', 'move', 'stat-tick', 'structure-loss', 'stress-loss', 'gear-lost', 'destroyed', 'meltdown', 'status', 'deploy', 'dot-added', 'dot-change'];
+export const EVENT_TYPES = ['attack', 'damage', 'damage-undo', 'action', 'action-undo', 'move', 'stat-tick', 'structure-loss', 'stress-loss', 'gear-lost', 'destroyed', 'revived', 'left', 'meltdown', 'status', 'deploy', 'dot-added', 'dot-change'];

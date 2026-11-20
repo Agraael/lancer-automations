@@ -3,6 +3,7 @@ const _formulaBounds = new Map();
 export function formulaBounds(formula)
 {
     let bounds = _formulaBounds.get(formula);
+
     if (!bounds)
     {
         try
@@ -16,7 +17,9 @@ export function formulaBounds(formula)
         {
             bounds = { min: 0, max: 0 };
         }
+
         _formulaBounds.set(formula, bounds);
     }
+
     return bounds;
 }

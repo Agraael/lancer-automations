@@ -21,6 +21,7 @@ const FX_DEFAULTS = {
     master: true,
     // Swap heavy bloom/glow presets for outline-only variants.
     lowQuality: false,
+    legacyBurnInfection: false,
     // TokenMagic visual effects
     fx_dangerZone:  true,
     fx_burn:        true,
@@ -278,6 +279,34 @@ const burnEffect = [
     }
 ];
 
+const burnFlamesEffect = [
+    {
+        filterType: "toonFlames",
+        filterId: "BurnFlames",
+        stack: 7,
+        reach: 0.1,
+        thickness: 1,
+        scale: 14,
+        speed: 1.5,
+        sway: 0.2,
+        fall: 1.0,
+        baseCut: 0.3,
+        gapLo: 0.15,
+        gapSoft: 0.2,
+        hullLick: 0.15,
+        inkWidth: 0,
+        light: 0.4,
+        lightReach: 0.015,
+        deep: 0xb3200a,
+        mid: 0xff5a14,
+        core: 0xffd34d,
+        ink: 0x1c0904,
+        opacity: 1.0,
+        padding: 36,
+        timeSpeed: 1.0
+    }
+];
+
 const overshieldEffect = [
     {
         filterType: "doubleShell",
@@ -376,28 +405,28 @@ const braceEffect = [
 
 const jammedEffect = [
     {
-        filterType: "shadow",
-        filterId: "jammedShadow",
-        blur: 2,
-        quality: 3,
-        distance: 0,
-        alpha: 1,
-        padding: 20,
-        color: 0xFFFFFF,
-        animated: {
-            blur: { active: true, loopDuration: 500, animType: "syncCosOscillation", val1: 2, val2: 4 }
-        }
-    },
-    {
-        filterType: "electric",
-        filterId: "jammedElectric",
-        color: 0x0033FF,
-        time: 0,
-        blend: 2,
-        intensity: 1,
-        animated: {
-            time: { active: true, speed: 0.0020, animType: "move" }
-        }
+        filterType: "signalCut",
+        filterId: "JammedSignalCut",
+        charSize: 0.028,
+        bandW: 0.02,
+        blocks: 6,
+        fill: 0.5,
+        speed: 1.2,
+        plate: 0.85,
+        rimW: 0.01,
+        rimAlpha: 0.36,
+        period: 3.9,
+        spikeLen: 0.13,
+        bands: 26,
+        tear: 0.03,
+        split: 0.006,
+        tint: 0.45,
+        codeColor: 0x8affeb,
+        headColor: 0xdde6ff,
+        plateColor: 0x0c235a,
+        opacity: 0.64,
+        padding: 12,
+        timeSpeed: 1.0
     }
 ];
 
@@ -441,48 +470,17 @@ const intangibleEffect = [
 
 const exposedEffect = [
     {
-        filterType: "shatterSeams",
-        filterId: "ExposedShatter",
-        blocks: 10,
-        jitter: 0.85,
-        gapMin: 0.0,
-        gapMax: 0.1,
-        breathRate: 1.5,
-        misalignChance: 1,
-        seamColor: 0xff2d3c,
-        seamCore: 0xffb0a0,
-        seamGain: 1.0,
-        lipColor: 0xffeddb,
-        lipGain: 0.4,
-        lipW: 0.08,
-        lightAngle: 30,
-        opacity: 0.96,
+        filterType: "heatPurge",
+        filterId: "ExposedHeatPurge",
+        period: 6.6,
+        strength: 1.63,
+        heat: 0.8,
+        shards: 11,
+        spread: 0.86,
+        outline: 0.26,
+        opacity: 1,
+        padding: 12,
         timeSpeed: 1
-    },
-    {
-        filterType: "glow",
-        filterId: "ExposedGlow",
-        outerStrength: 1,
-        innerStrength: 0,
-        color: 0xff2d3c,
-        quality: 0.5,
-        padding: 10,
-        animated: {
-            outerStrength: { active: true, loopDuration: 3000, animType: "cosOscillation", val1: 0.5, val2: 1 }
-        }
-    },
-    {
-        filterType: "adjustment",
-        filterId: "ExposedAdjust",
-        saturation: 1.1,
-        brightness: 1,
-        contrast: 1,
-        red: 1.25,
-        green: 0.85,
-        blue: 0.85,
-        animated: {
-            brightness: { active: true, loopDuration: 2000, animType: "syncCosOscillation", val1: 0.9, val2: 1.15 }
-        }
     }
 ];
 
@@ -506,6 +504,34 @@ const infectionEffect = [
     }
 ];
 
+const infectionBleedEffect = [
+    {
+        filterType: "dataBleed",
+        filterId: "InfectionBleed",
+        stack: 1,
+        reach: 0.075,
+        upBias: 0.68,
+        cols: 21,
+        rise: 0.2,
+        density: 0.31,
+        gapLo: 0.15,
+        gapSoft: 0.2,
+        bandW: 0.035,
+        blockSize: 0.01,
+        amount: 0.65,
+        tickRate: 6,
+        rimWidth: 0.000,
+        light: 0.4,
+        lightReach: 0.03,
+        codeColor: 0x4dff3a,
+        headColor: 0xeaffd8,
+        backColor: 0x04210a,
+        opacity: 1,
+        padding: 16,
+        timeSpeed: 1.0
+    }
+];
+
 const fallingEffect = [
     {
         filterType: "smoke",
@@ -524,84 +550,78 @@ const fallingEffect = [
 
 const dazedEffect = [
     {
-        filterType: "oldfilm",
-        filterId: "DazedFilm",
-        sepia: 0,
-        noise: 0.3,
-        noiseSize: 1.0,
-        scratch: 0.9,
-        scratchDensity: 0.6,
-        scratchWidth: 1.2,
-        vignetting: 0.6,
-        vignettingAlpha: 0.5,
-        vignettingBlur: 0.2,
-        animated: {
-            seed: { active: true, animType: "randomNumber", val1: 0, val2: 1 },
-            vignetting: { active: true, animType: "syncCosOscillation", loopDuration: 2000, val1: 0.2, val2: 0.4 }
-        }
-    },
-    {
-        filterType: "outline",
-        filterId: "DazedOutline",
-        color: 0x000000,
-        thickness: 0,
-        zOrder: 61
+        filterType: "filmEcho",
+        filterId: "DazedFilmEcho",
+        tone: 0.46,
+        grain: 0.27,
+        grainSize: 220,
+        weave: 0,
+        scratches: 0.8,
+        flicker: 0.11,
+        vignette: 0.45,
+        radius: 0.035,
+        speed: 1.6,
+        echoes: 3,
+        fade: 0.55,
+        tintMix: 0.45,
+        sepiaColor: 0xd9b26a,
+        tintEcho: 0xffd27a,
+        opacity: 1.0,
+        padding: 8,
+        timeSpeed: 1.0
     }
 ];
 
 const stunnedEffect = [
     {
-        filterType: "oldfilm",
-        filterId: "StunnedFilm",
-        sepia: 0,
-        noise: 0.4,
-        noiseSize: 1.0,
-        scratch: 1.0,
-        scratchDensity: 0.8,
-        scratchWidth: 1.5,
-        vignetting: 0,
-        vignettingAlpha: 0,
-        vignettingBlur: 0,
-        animated: {
-            seed: { active: true, animType: "randomNumber", val1: 0, val2: 1 }
-        }
-    },
-    {
-        filterType: "outline",
-        filterId: "StunnedOutline",
-        color: 0x000000,
-        thickness: 0,
-        zOrder: 61
-    },
-    {
-        filterType: "electric",
-        filterId: "StunnedElectric",
-        color: 0xffdd33,
-        time: 0,
-        blend: 2,
-        intensity: 1,
-        animated: {
-            time: { active: true, speed: 0.0020, animType: "move" }
-        }
+        filterType: "teslaTremor",
+        filterId: "StunnedTesla",
+        tremor: 0.004,
+        rate: 14,
+        burstPeriod: 3.3,
+        burstLen: 0.3,
+        sparks: 1,
+        arcs: 16,
+        reach: 0.075,
+        drift: 0.55,
+        jag: 0.011,
+        bend: 0.56,
+        boltWidth: 0.008,
+        flicker: 19.5,
+        rim: 0.5,
+        hot: 1,
+        ink: 0.45,
+        idle: 0.8,
+        idleChance: 0.2,
+        idleReach: 0.6,
+        idleRate: 6,
+        boltColor: 0xf2fdff,
+        glowColor: 0x6188ff,
+        inkColor: 0x031820,
+        opacity: 1.0,
+        padding: 20,
+        timeSpeed: 1.0
     }
 ];
 
 const impairedEffect = [
     {
-        filterType: "chromaRot",
-        filterId: "ImpairedRot",
-        color: 0xb8bcc2,
-        blocks: 35,
-        drift: 0.115,
+        filterType: "chromaRotPlus",
+        filterId: "ImpairedRotPlus",
+        rotColor: 0xb8bcc2,
+        blocks: 28,
+        drift: 0.08,
         levels: 4,
-        strength: 0.62,
-        dropThreshold: 0.46,
-        rotThreshold: 0.9,
-        stepRate: 6,
-        lockPeriod: 2.7,
-        lockWidth: 0,
-        rollPeriod: 4,
-        opacity: 0.85,
+        strength: 0.43,
+        dropThreshold: 0.5,
+        edgeRot: 0.6,
+        coreRot: 0.08,
+        depth: 0.1,
+        flakes: 0.3,
+        shed: 0.08,
+        stepRate: 5,
+        opacity: 0.9,
+        padding: 8,
         timeSpeed: 1.0
     }
 ];
@@ -628,51 +648,18 @@ const lockOnEffect = [
 
 const vulnerableEffect = [
     {
-        filterType: "distortion",
-        filterId: "VulnerableDistortion",
-        maskPath: "modules/tokenmagic/fx/assets/distortion-1.png",
-        maskSpriteScaleX: 7,
-        maskSpriteScaleY: 7,
-        padding: 10,
-        animated: {
-            maskSpriteX: { active: true, speed: 0.02, animType: "move" },
-            maskSpriteY: { active: true, speed: 0.03, animType: "move" }
-        }
-    },
-    {
-        filterType: "thermalSplit",
-        filterId: "VulnerableCracks",
-        hotColor: 0xff1900,
-        charColor: 0x2a1410,
-        coreColor: 0xfef6de,
-        crackScale: 13.5,
-        breathPeriod: 2.6,
-        widthMin: 0.0,
-        widthMax: 0.04,
-        driftSpeed: 0.75,
-        writheAmp: 1.25,
-        writheRate: 0.18,
-        bloom: 0.95,
-        heat: 1.65,
-        coreAmt: 0.9,
-        charAmt: 0.75,
-        flowRate: 0.66,
-        flowDepth: 0.6,
-        opacity: 0.97,
-        timeSpeed: 1.0
-    },
-    {
-        filterType: "outline",
-        filterId: "VulnerableOutline",
-        padding: 10,
-        color: 0xff6600,
-        thickness: 1,
-        quality: 5,
-        zOrder: 10,
-        animated: {
-            thickness: { active: true, loopDuration: 3000, animType: "syncCosOscillation", val1: 0.5, val2: 2 }
-        }
-    },
+        filterType: "thermalScan",
+        filterId: "VulnerableThermalScan",
+        period: 3.2,
+        tilt: 180,
+        bandWidth: 0.15,
+        linger: 0.31,
+        strength: 1,
+        depth: 0.106,
+        grain: 1.21,
+        opacity: 1,
+        timeSpeed: 1
+    }
 ];
 
 const aidedEffect = [
@@ -696,15 +683,19 @@ const aidedEffect = [
 const proneEffect = [
     {
         filterType: "noDrift",
-        filterId: "ProneNoDrift",
-        ghostColor: 0x94a6b8,
-        snapColor: 0xe8f2ff,
+        filterId: "ProneNoDriftSnap",
+        ghostColor: 0x34465a,
+        snapColor: 0xffffff,
+        inkColor: 0x0b1016,
         bearing: 180,
         tryPeriod: 3.4,
         slip: 0.03,
-        ghostStrength: 0.3,
+        ghostStrength: 0.5,
         holdStrength: 0.15,
-        snapStrength: 0.75,
+        snapStrength: 0.9,
+        inkStrength: 0.75,
+        inkHold: 0,
+        inkW: 0.011,
         opacity: 1.0,
         padding: 16,
         timeSpeed: 1.0
@@ -729,20 +720,28 @@ const phasingEffect = [
 
 const resistAllEffect = [
     {
-        filterType: "ablativeCrust",
-        filterId: "ResistAllCrust",
-        crustColor: 0xc9a882,
-        coreColor: 0xffd8a0,
-        crustWidth: 0.012,
-        segments: 10,
-        shedPeriod: 3.2,
-        shedDrift: 0.09,
-        reverse: 1,
-        grainScale: 200,
-        lipStrength: 0.0,
-        opacity: 0.52,
-        padding: 32,
-        timeSpeed: 1.0
+        filterType: "crackShell",
+        filterId: "ResistAllShell",
+        reach: 0.09,
+        gap: 0.007,
+        thick: 0.02,
+        cells: 14,
+        shellA: 0.32,
+        crackW: 0.006,
+        period: 3.6,
+        breakChance: 0.15,
+        liftMax: 0.025,
+        flicker: 0.5,
+        shimmer: 0.8,
+        glowAmt: 0.7,
+        glowR: 0.014,
+        ink: 0.5,
+        shellColor: 0xcfdff0,
+        coreColor: 0xffffff,
+        inkColor: 0x0e1620,
+        opacity: 1,
+        padding: 24,
+        timeSpeed: 1
     }
 ];
 
@@ -772,95 +771,87 @@ const reactorMeltdownEffect = [
 
 const shreddedEffect = [
     {
-        filterType: "shatterSeams",
-        filterId: "ShreddedShatter",
-        blocks: 20,
-        jitter: 0.85,
-        gapMin: 0.0,
-        gapMax: 0.105,
-        breathRate: 3.5,
-        misalignChance: 1,
-        seamColor: 0x786559,
-        seamCore: 0xc4a98e,
-        seamGain: 1.0,
-        lipColor: 0xffeddb,
-        lipGain: 0.4,
-        lipW: 0.08,
-        lightAngle: 30,
-        opacity: 0.96,
-        timeSpeed: 1.0
-    },
-    {
-        filterType: "glow",
-        filterId: "ShreddedGlow",
-        outerStrength: 1,
-        innerStrength: 0,
-        color: 0x786559,
-        quality: 0.5,
-        padding: 10,
-        animated: {
-            outerStrength: { active: true, loopDuration: 3000, animType: "cosOscillation", val1: 0.5, val2: 1 }
-        }
-    },
-    {
-        filterType: "adjustment",
-        filterId: "ShreddedAdjust",
-        saturation: 1.1,
-        brightness: 1,
-        contrast: 1,
-        red: 1.1,
-        green: 1,
-        blue: 0.8,
-        animated: {
-            brightness: { active: true, loopDuration: 2000, animType: "syncCosOscillation", val1: 0.9, val2: 1.15 }
-        }
-    },
+        filterType: "grindSparks",
+        filterId: "ShreddedGrindSparks",
+        reach: 0.074,
+        fallReach: 0.02,
+        cols: 23,
+        rows: 15,
+        fallSpeed: 0.55,
+        density: 0.42,
+        slant: 0.3,
+        sparkW: 0.0022,
+        rimW: 0.012,
+        rimScale: 30,
+        rimSpeed: 1.2,
+        rimHeat: 1,
+        light: 0.45,
+        lightReach: 0.03,
+        poolR: 0.03,
+        poolAmt: 0.8,
+        points: 4,
+        drift: 0.07,
+        burst: 1.7,
+        duty: 0.7,
+        sparks: 12,
+        sparkLife: 0.3,
+        sparkSpeed: 0.45,
+        spread: 1,
+        lift: 0.6,
+        gravity: 1.4,
+        streak: 0.06,
+        sprayW: 0.003,
+        spotR: 0.016,
+        deep: 0x9a1f06,
+        mid: 0xff8a2a,
+        core: 0xfff4c8,
+        opacity: 1,
+        padding: 40,
+        timeSpeed: 1
+    }
 ];
 
 const strippedEffect = [
     {
-        filterType: "shatterSeams",
-        filterId: "StrippedShatter",
-        blocks: 20,
-        jitter: 0.85,
-        gapMin: 0.0,
-        gapMax: 0.105,
-        breathRate: 3.5,
-        misalignChance: 1,
-        seamColor: 0x786559,
-        seamCore: 0xc4a98e,
-        seamGain: 1.0,
-        lipColor: 0xffeddb,
-        lipGain: 0.4,
-        lipW: 0.08,
-        lightAngle: 30,
-        opacity: 0.96,
-        timeSpeed: 1.0
-    },
-    {
-        filterType: "glow",
-        filterId: "StrippedGlow",
-        outerStrength: 1,
-        innerStrength: 0,
-        color: 0x786559,
-        quality: 0.5,
-        padding: 10,
-        animated: {
-            outerStrength: { active: true, loopDuration: 3000, animType: "cosOscillation", val1: 0.5, val2: 1 }
-        }
-    },
-    {
-        filterType: "adjustment",
-        filterId: "StrippedAdjust",
-        saturation: 0.8,
-        brightness: 1,
-        contrast: 1,
-        red: 0.85,
-        green: 0.9,
-        blue: 1.1,
-        animated: {
-            brightness: { active: true, loopDuration: 2000, animType: "syncCosOscillation", val1: 0.9, val2: 1.1 }
-        }
+        filterType: "cutTorch",
+        filterId: "StrippedCutTorch",
+        heads: 3,
+        samples: 10,
+        speed: 0.06,
+        spacing: 0.016,
+        jump: 0.07,
+        cutW: 0.007,
+        cutReach: 0.013,
+        headR: 0.007,
+        glowR: 0.016,
+        glowAmt: 0.8,
+        lineW: 1.2,
+        edgeLo: 0.16,
+        edgeHi: 0.42,
+        seamR: 0.04,
+        seamAmt: 0.85,
+        scorchAmt: 0.3,
+        light: 0.6,
+        lightR: 0.05,
+        sparks: 7,
+        sparkLife: 0.4,
+        sparkSpeed: 0.3,
+        spread: 1.4,
+        gravity: 1.4,
+        streak: 0.035,
+        sparkW: 0.002,
+        dropGap: 0.14,
+        dropLife: 0.7,
+        dropKick: 0.04,
+        dropR: 0.0045,
+        dropChance: 0.6,
+        flareR: 0.02,
+        deep: 0x3a4c5c,
+        mid: 0x309acf,
+        core: 0xffffff,
+        opacity: 1,
+        padding: 40,
+        timeSpeed: 1
     }
 ];
 
@@ -871,7 +862,7 @@ const slowedEffect = [
         lineColor: 0x9e9e9e,
         period: 1.1,
         lines: 8,
-        thickness: 0.33,
+        thickness: 0.596,
         opacity: 1.0,
         timeSpeed: 1.0
     }
@@ -974,81 +965,58 @@ const throttledEffect = [
 
 const immobilizedEffect = [
     {
-        filterType: "chains",
-        filterId: "ImmobilizedChains",
+        filterType: "chainSets",
+        filterId: "ImmobilizedChainSets",
+        sets: 2,
+        spacing: 0.185,
+        pitch: 0.025,
+        speed: 0.06,
+        lineWidth: 0.002,
+        glowWidth: 0.016,
+        glow: 0.7,
+        intensity: 1.32,
+        halo: 1,
+        sway: 0.007,
+        speedVar: 0.7,
+        stutter: 0.75,
+        pullPeriod: 2.15,
+        fade: 0.55,
         color: 0xccaa66,
-        intensity: 1.6,
-        scale: 3,
-        linkWidth: 0.02,
-        linkGap: 1.5,
-        opacity: 0.5,
-        blend: 2,
-        timeSpeed: 0.5
-    },
-    {
-        filterType: "glow",
-        filterId: "ImmobilizedGlow",
-        outerStrength: 1.5,
-        innerStrength: 0,
-        color: 0xccaa66,
-        quality: 0.5,
-        padding: 10,
-        animated: {
-            outerStrength: { active: true, loopDuration: 3000, animType: "cosOscillation", val1: 0.5, val2: 2 }
-        }
+        opacity: 0.73,
+        padding: 12,
+        timeSpeed: 1.0
     }
 ];
 
 const staggeredEffect = [
     {
-        filterType: "chains",
-        filterId: "StaggeredChains",
-        color: 0x9944cc,
-        intensity: 1.6,
-        scale: 3,
-        linkWidth: 0.02,
-        linkGap: 1.5,
-        opacity: 0.5,
-        blend: 2,
-        timeSpeed: 0.5
-    },
-    {
-        filterType: "glow",
-        filterId: "StaggeredGlow",
-        outerStrength: 1.5,
-        innerStrength: 0,
-        color: 0x9944cc,
-        quality: 0.5,
-        padding: 10,
-        animated: {
-            outerStrength: { active: true, loopDuration: 3000, animType: "cosOscillation", val1: 0.5, val2: 2 }
-        }
+        filterType: "recoil",
+        filterId: "StaggeredRecoil",
+        period: 1.6,
+        recoil: 0.005,
+        streaks: 1.07,
+        reach: 0.108,
+        flash: 1.16,
+        hitColor: 0x9944cc,
+        coreColor: 0xe9d6ff,
+        opacity: 1.0,
+        padding: 24,
+        timeSpeed: 1.0
     }
 ];
 
 const blindedEffect = [
     {
-        filterType: "crt",
-        filterId: "BlindedCRT",
-        lineWidth: 3,
-        lineContrast: 0.4,
-        noise: 0.1,
-        noiseSize: 1.5,
-        curvature: 0,
-        verticalLine: false,
-        vignetting: 0,
-        time: 0,
-        animated: {
-            time: { active: true, speed: 0.004, animType: "move" },
-            lineContrast: { active: true, loopDuration: 2000, animType: "syncCosOscillation", val1: 0.2, val2: 0.5 }
-        }
-    },
-    {
-        filterType: "adjustment",
-        filterId: "BlindedAdjust",
-        saturation: 0.5,
-        brightness: 0.95,
-        contrast: 1.1
+        filterType: "outOfFocus",
+        filterId: "BlindedFocus",
+        minBlur: 0.004,
+        maxBlur: 0.02,
+        period: 4.5,
+        haze: 0.35,
+        hazeColor: 0xdfe6f0,
+        opacity: 1.0,
+        padding: 8,
+        timeSpeed: 1.0
     }
 ];
 
@@ -1161,22 +1129,9 @@ const corePowerEffectLite = [
     }
 ];
 
-const jammedEffectLite = [
-    {
-        filterType: "electric",
-        filterId: "jammedElectric",
-        color: 0x0033FF,
-        time: 0,
-        blend: 2,
-        intensity: 1,
-        animated: { time: { active: true, speed: 0.0020, animType: "move" } }
-    }
-];
-
 const LOW_QUALITY_PRESETS = {
     overheated: overheatedEffectLite,
     corePower: corePowerEffectLite,
-    jammed: jammedEffectLite,
 };
 
 // Effect Map
@@ -1184,40 +1139,48 @@ const LOW_QUALITY_PRESETS = {
 // staleFilterIds are cleaned up but never added, so a dropped filter is not orphaned on old tokens.
 const allFilterIds = entry => entry.staleFilterIds ? [...entry.filterIds, ...entry.staleFilterIds] : entry.filterIds;
 
+function resolveEntry(entry)
+{
+    if (!entry.legacy || !getConfig().legacyBurnInfection)
+        return entry;
+    const stale = [...entry.filterIds, ...(entry.staleFilterIds ?? [])].filter(filterId => !entry.legacy.filterIds.includes(filterId));
+    return { ...entry, preset: entry.legacy.preset, filterIds: entry.legacy.filterIds, staleFilterIds: stale };
+}
+
 const EFFECT_MAP = [
     { name: 'Danger Zone', key: 'dangerZone', preset: dangerZoneEffect, filterIds: ['DangerZoneVent'], staleFilterIds: ['DangerZoneGlow', 'DangerZoneBloom'] },
-    { name: 'Burn',        key: 'burn',       preset: burnEffect,       filterIds: ['BurnGlow'] },
+    { name: 'Burn',        key: 'burn',       preset: burnFlamesEffect, filterIds: ['BurnFlames'], staleFilterIds: ['BurnGlow'], legacy: { preset: burnEffect, filterIds: ['BurnGlow'] } },
     { name: 'Overshield',  key: 'overshield', preset: overshieldEffect, filterIds: ['OverShieldShell'], staleFilterIds: ['OverShieldGlow'] },
     { name: 'Cascading',   key: 'cascading',  preset: cascadingEffect,  filterIds: ['CascadingTear'], staleFilterIds: ['cascading1', 'cascading2'] },
     { name: 'Invisible',   key: 'invisible',  preset: invisibleEffect,  filterIds: ['invisible'] },
     { name: 'Hidden',      key: 'hidden',     preset: hiddenEffect,     filterIds: ['hidden'] },
     { name: 'Brace',       key: 'brace',      preset: braceEffect,      filterIds: ['brace'] },
-    { name: 'Jammed',      key: 'jammed',     preset: jammedEffect,     filterIds: ['jammedShadow', 'jammedElectric'] },
+    { name: 'Jammed',      key: 'jammed',     preset: jammedEffect,     filterIds: ['JammedSignalCut'], staleFilterIds: ['jammedShadow', 'jammedElectric'] },
     { name: 'Intangible',  key: 'intangible', preset: intangibleEffect, filterIds: ['intangible1', 'intangible2', 'intangible3'] },
-    { name: 'Infection',   key: 'infection',  preset: infectionEffect,  filterIds: ['InfectionGlow'] },
-    { name: 'Exposed',    key: 'exposed',   preset: exposedEffect,   filterIds: ['ExposedShatter', 'ExposedGlow', 'ExposedAdjust'], staleFilterIds: ['ExposedDistortion', 'ExposedCracks', 'ExposedOutline', 'ExposedSeams'] },
+    { name: 'Infection',   key: 'infection',  preset: infectionBleedEffect, filterIds: ['InfectionBleed'], staleFilterIds: ['InfectionGlow', 'InfectionSwarm', 'InfectionFever', 'InfectionCode'], legacy: { preset: infectionEffect, filterIds: ['InfectionGlow'] } },
+    { name: 'Exposed',    key: 'exposed',   preset: exposedEffect,   filterIds: ['ExposedHeatPurge'], staleFilterIds: ['ExposedForgeSeams', 'ExposedShatter', 'ExposedGlow', 'ExposedAdjust', 'ExposedDistortion', 'ExposedCracks', 'ExposedOutline', 'ExposedSeams'] },
     { name: 'Falling',    key: 'falling',   preset: fallingEffect,   filterIds: ['FallingSmoke'] },
-    { name: 'Dazed',      key: 'dazed',     preset: dazedEffect,     filterIds: ['DazedFilm', 'DazedOutline'] },
-    { name: 'Stunned',    key: 'stunned',   preset: stunnedEffect,   filterIds: ['StunnedFilm', 'StunnedOutline', 'StunnedElectric'] },
-    { name: 'Impaired',   key: 'impaired',  preset: impairedEffect,  filterIds: ['ImpairedRot'] },
-    { name: 'Vulnerable', key: 'vulnerable', preset: vulnerableEffect, filterIds: ['VulnerableDistortion', 'VulnerableCracks', 'VulnerableOutline'], staleFilterIds: ['VulnerableShatter', 'VulnerableGlow', 'VulnerableAdjust', 'VulnerableSeams'] },
+    { name: 'Dazed',      key: 'dazed',     preset: dazedEffect,     filterIds: ['DazedFilmEcho'], staleFilterIds: ['DazedFilm', 'DazedOutline'] },
+    { name: 'Stunned',    key: 'stunned',   preset: stunnedEffect,   filterIds: ['StunnedTesla'], staleFilterIds: ['StunnedFilm', 'StunnedOutline', 'StunnedElectric'] },
+    { name: 'Impaired',   key: 'impaired',  preset: impairedEffect,  filterIds: ['ImpairedRotPlus'], staleFilterIds: ['ImpairedRot'] },
+    { name: 'Vulnerable', key: 'vulnerable', preset: vulnerableEffect, filterIds: ['VulnerableThermalScan'], staleFilterIds: ['VulnerableDistortion', 'VulnerableCracks', 'VulnerableOutline', 'VulnerableShatter', 'VulnerableGlow', 'VulnerableAdjust', 'VulnerableSeams'] },
     { name: 'Lock On',    key: 'lockOn',     preset: lockOnEffect,     filterIds: ['LockOnGhost'] },
     { name: 'Aided',      key: 'aided',      preset: aidedEffect,      filterIds: ['AidedGleam'] },
-    { name: 'Resist All', key: 'resistAll',  preset: resistAllEffect,  filterIds: ['ResistAllCrust'] },
+    { name: 'Resist All', key: 'resistAll',  preset: resistAllEffect,  filterIds: ['ResistAllShell'], staleFilterIds: ['ResistAllCrust'] },
     { name: 'Phasing',    key: 'phasing',    preset: phasingEffect,    filterIds: ['PhasingSlice'] },
     { name: 'Overheated', key: 'overheated', preset: overheatedEffect, filterIds: ['OverheatedChurn', 'OverheatedGlow', 'OverheatedBloom'], staleFilterIds: ['OverheatedWave', 'OverheatedCracks'] },
     { name: 'Reactor Meltdown', key: 'reactorMeltdown', preset: reactorMeltdownEffect, filterIds: ['MeltdownSeams'] },
-    { name: 'Shredded',   key: 'shredded',  preset: shreddedEffect,  filterIds: ['ShreddedShatter', 'ShreddedGlow', 'ShreddedAdjust'], staleFilterIds: ['ShreddedCracks'] },
-    { name: 'Stripped',   key: 'shredded',  preset: strippedEffect,  filterIds: ['StrippedShatter', 'StrippedGlow', 'StrippedAdjust'], staleFilterIds: ['StrippedCracks'] },
-    { name: 'Prone',      key: 'prone',     preset: proneEffect,     filterIds: ['ProneNoDrift'], staleFilterIds: ['ProneWave', 'ProneGlow'] },
+    { name: 'Shredded',   key: 'shredded',  preset: shreddedEffect,  filterIds: ['ShreddedGrindSparks'], staleFilterIds: ['ShreddedPlatingDrip', 'ShreddedShedPlates', 'ShreddedShatter', 'ShreddedGlow', 'ShreddedAdjust', 'ShreddedCracks'] },
+    { name: 'Stripped',   key: 'shredded',  preset: strippedEffect,  filterIds: ['StrippedCutTorch'], staleFilterIds: ['StrippedPlatingDrip', 'StrippedShatter', 'StrippedGlow', 'StrippedAdjust', 'StrippedCracks'] },
+    { name: 'Prone',      key: 'prone',     preset: proneEffect,     filterIds: ['ProneNoDriftSnap'], staleFilterIds: ['ProneNoDriftInk', 'ProneNoDrift', 'ProneWave', 'ProneGlow'] },
     { name: 'Slowed',     key: 'slowed',    preset: slowedEffect,    filterIds: ['SlowedBands'], staleFilterIds: ['SlowedWave', 'SlowedGlow'] },
     { name: 'Bolster',    key: 'bolstered', preset: bolsteredEffect, filterIds: ['BolsteredBand'] },
     { name: 'Shut Down',  key: 'shutDown',  preset: shutDownEffect,  filterIds: ['ShutDownSoak'] },
     { name: 'Disengage',  key: 'disengage', preset: disengageEffect, filterIds: ['DisengageRounds'] },
     { name: 'Throttled',  key: 'throttled', preset: throttledEffect, filterIds: ['ThrottledCracks', 'ThrottledGlow', 'ThrottledAdjust'] },
-    { name: 'Immobilized', key: 'immobilized', preset: immobilizedEffect, filterIds: ['ImmobilizedChains', 'ImmobilizedGlow'] },
-    { name: 'Staggered',   key: 'immobilized', preset: staggeredEffect, filterIds: ['StaggeredChains', 'StaggeredGlow'] },
-    { name: 'Blinded',    key: 'blinded',     preset: blindedEffect,   filterIds: ['BlindedCRT', 'BlindedAdjust'] },
+    { name: 'Immobilized', key: 'immobilized', preset: immobilizedEffect, filterIds: ['ImmobilizedChainSets'], staleFilterIds: ['ImmobilizedChains', 'ImmobilizedGlow'] },
+    { name: 'Staggered',   key: 'immobilized', preset: staggeredEffect, filterIds: ['StaggeredRecoil'], staleFilterIds: ['StaggeredReeling', 'StaggeredChainSets', 'StaggeredChains', 'StaggeredGlow'] },
+    { name: 'Blinded',    key: 'blinded',     preset: blindedEffect,   filterIds: ['BlindedFocus'], staleFilterIds: ['BlindedCRT', 'BlindedAdjust'] },
     { name: 'Flying',    key: 'flying',      preset: flyingEffect,    filterIds: ['FlyingBob'] },
     { name: 'Hover',     key: 'flying',      preset: flyingEffect.map(filter => ({ ...filter, filterId: filter.filterId.replace('Flying', 'Hover') })), filterIds: ['HoverBob'] },
     { name: 'Core Power Active', key: 'corePower', preset: corePowerEffect, filterIds: ['CorePowerBloom'] },
@@ -1237,6 +1200,7 @@ async function autoStatusDangerZone(actor)
 {
     if (!isAutoEnabled('dangerZone'))
         return;
+
     const heat = actor.system?.heat;
     if (!heat)
         return;
@@ -1247,6 +1211,7 @@ async function autoStatusBurn(actor)
 {
     if (!isAutoEnabled('burn'))
         return;
+
     const burn = actor.system?.burn;
     if (burn == null)
         return;
@@ -1257,6 +1222,7 @@ async function autoStatusOvershield(actor)
 {
     if (!isAutoEnabled('overshield'))
         return;
+
     const overshield = actor.system?.overshield?.value;
     if (overshield == null)
         return;
@@ -1267,6 +1233,7 @@ async function autoStatusInfection(actor)
 {
     if (!isAutoEnabled('infection'))
         return;
+
     const infection = actor.system?.infection ?? 0;
     await actor.toggleStatusEffect('infection', { active: infection > 0 });
 }
@@ -1275,6 +1242,7 @@ async function autoStatusCascading(actor)
 {
     if (!isAutoEnabled('cascading'))
         return;
+
     const hasCascading = actor.items?.some?.(item => item.system?.cascading === true) ?? false;
     await actor.toggleStatusEffect('cascading', { active: hasCascading });
 }
@@ -1339,12 +1307,15 @@ async function clearValueOfRemovedStatus(effect)
     const actor = effect.parent;
     if (actor?.documentName !== 'Actor')
         return;
+
     const update = {};
+
     for (const [statusId, path] of Object.entries(VALUE_STATUS_PATHS))
     {
         if (effect.statuses?.has(statusId) && isAutoEnabled(statusId) && (Number(foundry.utils.getProperty(actor, path)) || 0) > 0)
             update[path] = 0;
     }
+
     if (Object.keys(update).length)
         await actor.update(update);
 }
@@ -1416,26 +1387,33 @@ function blockQoLEffects()
 
 // Our filters have no TMFX Anime puppet, so TMFX would push a fresh instance on every flag write.
 // A fake puppet in the anime map satisfies the dedupe (TMFX drops it with the filter). Every LA filter type must be listed here.
-const _NON_ANIME_FILTER_TYPES = new Set(['chains', 'fracture', 'chromaRot', 'openSeams', 'trackingGhost', 'seamBeat', 'doubleShell', 'ventColumn', 'guidingLight', 'ablativeCrust', 'noDrift', 'shatterSeams', 'thermalSplit', 'slicePlane', 'overflowWrap', 'errorCorrection', 'coldSoak', 'ricochetLip', 'convectionChurn', 'sliceTear']);
+const _NON_ANIME_FILTER_TYPES = new Set(['chains', 'fracture', 'chromaRot', 'openSeams', 'trackingGhost', 'seamBeat', 'doubleShell', 'ventColumn', 'guidingLight', 'ablativeCrust', 'noDrift', 'shatterSeams', 'thermalSplit', 'slicePlane', 'overflowWrap', 'errorCorrection', 'coldSoak', 'ricochetLip', 'convectionChurn', 'sliceTear', 'toonFlames', 'naniteSwarm', 'feverThrob', 'codeRain', 'dataBleed', 'filmEcho', 'teslaTremor', 'signalCut', 'outOfFocus', 'chromaRotPlus', 'chainSets', 'recoil', 'forgeSeams', 'heatPurge', 'thermalScan', 'shedPlates', 'platingDrip', 'wireFrame', 'grindSparks', 'cutTorch', 'crackShell']);
+
 function _ensureFakePuppetsForCustomFilters(token)
 {
     const tokenMagic = /** @type {any} */ (globalThis).TokenMagic;
     const animeMap = tokenMagic?._getAnimeMap?.();
+
     if (!animeMap)
         return;
+
     const flagFilters = token.document?.flags?.tokenmagic?.filters ?? [];
+
     for (const flagEntry of flagFilters)
     {
         const tmFilter = flagEntry?.tmFilters;
         if (!tmFilter || !_NON_ANIME_FILTER_TYPES.has(tmFilter.tmFilterType))
             continue;
+
         const placeableId = tmFilter.tmParams?.placeableId;
         const filterId = tmFilter.tmFilterId;
         const filterInternalId = tmFilter.tmFilterInternalId;
         let exists = false;
+
         for (const anime of animeMap.values())
         {
             const puppet = anime?.puppet;
+
             if (puppet?.placeableId === placeableId
                 && puppet?.filterId === filterId
                 && (!('filterInternalId' in puppet) || puppet.filterInternalId === filterInternalId))
@@ -1444,8 +1422,10 @@ function _ensureFakePuppetsForCustomFilters(token)
                 break;
             }
         }
+
         if (exists)
             continue;
+
         const id = foundry.utils.randomID();
         animeMap.set(id, {
             animeId: id,
@@ -1475,16 +1455,20 @@ async function _doReconcileStatusFX(actor)
 {
     if (!isMasterEnabled() || typeof TokenMagic === 'undefined' || !actor)
         return;
+
     const tokens = actor.getActiveTokens?.() ?? [];
     if (!tokens.length)
         return;
+
     const aeNames = new Set((actor.effects ?? []).map(effect => effect.name));
+
     for (const token of tokens)
     {
-        for (const entry of EFFECT_MAP)
+        for (const entry of EFFECT_MAP.map(resolveEntry))
         {
             const wantFilter = aeNames.has(entry.name) && isFXEnabled(entry.key);
             const hasFilter = entry.filterIds.some(filterId => TokenMagic.hasFilterId(token, filterId));
+
             if (wantFilter && !hasFilter)
             {
                 for (const filterId of entry.staleFilterIds ?? [])
@@ -1492,22 +1476,27 @@ async function _doReconcileStatusFX(actor)
                     if (TokenMagic.hasFilterId(token, filterId))
                         await _writeFilters(token, () => token.TMFXdeleteFilters(filterId));
                 }
+
                 let preset = entry.preset;
                 if (entry.key === 'overheated' && isEnkiduFrame(actor))
                     preset = enkiduOverheatedEffect;
+
                 if ((entry.name === 'Flying' || entry.name === 'Hover') && getIsoProvider(token.scene))
                 {
                     const base = entry.name === 'Hover'
                         ? flyingEffectIso.map(filter => ({ ...filter, filterId: filter.filterId.replace('Flying', 'Hover') }))
                         : flyingEffectIso;
+
                     preset = base;
                 }
+
                 if (getConfig().lowQuality && LOW_QUALITY_PRESETS[entry.key])
                 {
                     preset = (entry.key === 'overheated' && isEnkiduFrame(actor))
                         ? enkiduOverheatedEffectLite
                         : LOW_QUALITY_PRESETS[entry.key];
                 }
+
                 // TMFX stamps filterInternalId/rank/placeableId into what it is handed, so never the const.
                 await _writeFilters(token, () => token.TMFXaddUpdateFilters(foundry.utils.duplicate(preset)));
             }
@@ -1529,6 +1518,7 @@ function _dedupeMeshFilters(token)
     const mesh = token.mesh;
     if (!mesh?.filters?.length)
         return;
+
     const seenIds = new Set();
     mesh.filters = mesh.filters.filter(filter =>
     {
@@ -1543,12 +1533,15 @@ function _dedupeMeshFilters(token)
 }
 
 const _CUSTOM_FILTER_CLASSES = new Set(Object.values(customFilterClasses));
+
 function _pruneOrphanCustomFilters(token)
 {
     const mesh = token?.mesh;
     if (!mesh?.filters?.length)
         return;
+
     const flagIds = new Set((token.document?.flags?.tokenmagic?.filters ?? []).map(flagEntry => flagEntry?.tmFilters?.tmFilterId));
+
     const kept = mesh.filters.filter(filter =>
     {
         if (!_CUSTOM_FILTER_CLASSES.has(filter.constructor) || flagIds.has(filter.filterId))
@@ -1557,6 +1550,7 @@ function _pruneOrphanCustomFilters(token)
         filter.destroy();
         return false;
     });
+
     if (kept.length !== mesh.filters.length)
         mesh.filters = kept.length ? kept : null;
     _dedupeMeshFilters(token);
@@ -1571,20 +1565,24 @@ async function _writeFilters(token, write)
 }
 
 const _reconcileTimers = new Map();
+
 function reconcileStatusFX(actor)
 {
     if (!actor?.uuid)
         return;
     if (!actor.isOwner)
         return;
+
     const prev = _reconcileTimers.get(actor.uuid);
     if (prev)
         clearTimeout(prev);
+
     const timer = setTimeout(() =>
     {
         _reconcileTimers.delete(actor.uuid);
         _doReconcileStatusFX(actor);
     }, 50);
+
     _reconcileTimers.set(actor.uuid, timer);
 }
 
@@ -1593,19 +1591,24 @@ async function _reapplyCustomFiltersAfterLoad()
 {
     if (!isMasterEnabled() || typeof TokenMagic === 'undefined')
         return;
+
     const customEntries = EFFECT_MAP.filter(entry =>
         entry.preset?.some?.(filter => _NON_ANIME_FILTER_TYPES.has(filter.filterType)));
+
     for (const token of canvas?.tokens?.placeables ?? [])
     {
         const actor = token.actor;
         if (!actor?.isOwner)
             continue;
+
         const aeNames = new Set((actor.effects ?? []).map(effect => effect.name));
         let relevant = false;
+
         for (const entry of customEntries)
         {
             if (aeNames.has(entry.name) && isFXEnabled(entry.key))
                 relevant = true;
+
             for (const filterId of allFilterIds(entry))
             {
                 if (TokenMagic.hasFilterId(token, filterId))
@@ -1615,6 +1618,7 @@ async function _reapplyCustomFiltersAfterLoad()
                 }
             }
         }
+
         if (relevant)
             reconcileStatusFX(actor);
     }
@@ -1652,6 +1656,7 @@ export function initStatusFX()
         const tmfxChange = /** @type {any} */ (change.flags)?.tokenmagic;
         if (!tmfxChange || !('filters' in tmfxChange || '-=filters' in tmfxChange))
             return;
+
         const token = document.object;
         if (token)
             setTimeout(() => _pruneOrphanCustomFilters(token), 0);
@@ -1701,6 +1706,7 @@ Hooks.on('deleteActiveEffect', (effect, _options, userId) =>
 {
     if (userId !== game.user.id || !grantsCorePowerStatus(effect))
         return;
+
     const actor = effect.parent;
     if (!actor.effects.some(other => other.id !== effect.id && !other.disabled && other.statuses?.has('core_power_active')))
         setCoreActiveField(actor, false);

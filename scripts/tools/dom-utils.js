@@ -14,12 +14,14 @@ export function attachEditorResizeObserver(editor, windowEl, buttonReservedH = 4
 {
     if (!windowEl)
         return null;
+
     const updateSize = () =>
     {
         const headerH = /** @type {HTMLElement|null} */ (windowEl.querySelector('.window-header'))?.offsetHeight ?? 34;
         editor.setSize(null, windowEl.offsetHeight - headerH - buttonReservedH);
         editor.refresh();
     };
+
     setTimeout(updateSize, 50);
     const observer = new ResizeObserver(updateSize);
     observer.observe(windowEl);

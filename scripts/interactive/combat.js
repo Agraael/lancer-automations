@@ -6,9 +6,15 @@ import { localize, localizeFormat } from "../tools/string-utils.js";
 import { cancelButton } from "../tools/dialog-utils.js";
 import { MODULE_ID } from "../tools/constants.js";
 import { isWhiteSvgIcon } from "./cards.js";
+import { startPickCard, profileChips, pickRowsText } from "./pick-card.js";
+import { toggleDetailPopup } from "../tah/hud-popups.js";
+import { weaponPopupOptions } from "../tah/weapon-popup.js";
+import { weaponTypeIcon } from "../tah/item-helpers.js";
+import { mountLabel } from "../utils/lancer-token.js";
 import { resolveDeployable, getItemDeployables, getItemActions, pickItem } from "./deployables.js";
-import { laPositionPopup, laRenderTags, laRenderTextSection, laRenderActions, laRenderDeployables, laRenderWeaponBody, laDetailPopup } from "./detail-renderers.js";
-import { getWeaponProfiles_WithBonus, getActorActionItems } from "../tools/misc-tools.js";
+import { laPositionPopup, laRenderTags, laRenderTextSection, laRenderActions, laRenderDeployables, laDetailPopup } from "./detail-renderers.js";
+import { getWeaponProfiles_WithBonus, getActorActionItems, isItemUsable } from "../tools/misc-tools.js";
+import { plannedBonus, orderMount, bonusGoesToFirst } from "../tools/fire-chain.js";
 import { clearTokenMovementHistory, revertLastMovement, getRecordedWaypoints } from "../movement/history.js";
 
 /**
@@ -36,8 +42,10 @@ export async function openThrowMenu(actor)
             const profiles = item.system?.profiles ?? [];
             const activeProfileIndex = item.system?.selected_profile_index ?? 0;
             const activeProfile = profiles[activeProfileIndex];
+
             if (!activeProfile)
                 return false;
+
             const tags = activeProfile.tags ?? [];
             return tags.some(tag => tag.id === 'tg_thrown' || tag.lid === 'tg_thrown' || (typeof tag === 'string' && tag.toLowerCase().includes('throw')));
         }
@@ -46,6 +54,7 @@ export async function openThrowMenu(actor)
             const tags = item.system?.tags ?? [];
             return tags.some(tag => tag.id === 'tg_thrown' || tag.lid === 'tg_thrown' || (typeof tag === 'string' && tag.toLowerCase().includes('throw')));
         }
+
         return false;
     });
 
@@ -84,6 +93,7 @@ export async function openThrowMenu(actor)
             const throwRange = thrown?.val || thrown?.num_val || '?';
             const dmg = (profile?.damage ?? []).map(dmgPart => `${dmgPart.val} ${dmgPart.type}`).join(' + ');
             const parts = [];
+
             if (dmg)
                 parts.push(dmg);
             parts.push(`Throw ${throwRange}`);
@@ -95,6 +105,7 @@ export async function openThrowMenu(actor)
         return;
 
     const api = game.modules.get(MODULE_ID)?.api;
+
     if (api?.beginWeaponThrowFlow)
         await api.beginWeaponThrowFlow(weapon);
     else if (/** @type {any} */ (weapon).beginWeaponAttackFlow)
@@ -131,6 +142,7 @@ export async function revertMovement(token, destination = null)
     const sourceHistory = token.document._source?._movementHistory ?? [];
     const recorded = getRecordedWaypoints(token);
     const _laDebug = !!getModuleSetting('debugMovement');
+
     if (_laDebug)
     {
         console.log('lancer-automations | revertMovement', {
@@ -188,6 +200,7 @@ export async function clearMovementHistory(tokens, revert = false)
                 const before = token.document._source?._movementHistory?.length ?? 0;
                 const isClean = await revertMovement(token);
                 const after = token.document._source?._movementHistory?.length ?? 0;
+
                 if (isClean || after >= before)
                     break;
                 await new Promise(resolve => setTimeout(resolve, 250));
@@ -198,6 +211,7 @@ export async function clearMovementHistory(tokens, revert = false)
         lancerAutomations?.api?.clearMoveData?.(token.document.id);
         Hooks.callAll('lancer-automations.movementHistoryCleared', token);
     }
+
     const tokenNames = tokenList.map(token => token.name).join(", ");
     ui.notifications.info(localizeFormat('LA.notify.movementHistoryCleared', { names: tokenNames }));
 }
@@ -216,6 +230,7 @@ export async function resetMovementCap(token)
 export async function openChoiceMenu()
 {
     const activeUsers = game.users.filter(user => user.active);
+
     if (activeUsers.length === 0)
     {
         ui.notifications.warn(localize('LA.notify.noActiveUsersFound'));
@@ -226,6 +241,7 @@ export async function openChoiceMenu()
         { text: "Confirm" },
         { text: "Decline" }
     ];
+
     let selectedUserIds = [];
     let title = "CHOICE";
     let description = "Please select an option:";
@@ -247,6 +263,7 @@ export async function openChoiceMenu()
             </div>
         `;
         }).join('');
+
         html.find('.la-choice-users-grid').html(usersHtml);
 
         const modeHtml = `
@@ -260,6 +277,7 @@ export async function openChoiceMenu()
                 </select>
             </div>
         `;
+
         html.find('.la-choice-mode-container').html(modeHtml);
 
         const choicesHtml = choicesInfo.map((choice, idx) => `
@@ -269,6 +287,7 @@ export async function openChoiceMenu()
                 <button type="button" class="la-choice-remove" style="flex: 0 0 24px; height: 24px; padding: 0; background: none; border: none; color: #c33; cursor: pointer;"><i class="fas fa-times"></i></button>
             </div>
         `).join('');
+
         html.find('.la-choices-container').html(choicesHtml);
 
         html.find('.la-choice-user-card').off('click').on('click', function ()
@@ -284,6 +303,7 @@ export async function openChoiceMenu()
         html.find('.la-choice-remove').off('click').on('click', function ()
         {
             const idx = Number.parseInt($(this).closest('.la-choice-row').data('idx'));
+
             if (!Number.isNaN(idx))
             {
                 choicesInfo.splice(idx, 1);
@@ -364,6 +384,7 @@ export async function openChoiceMenu()
                         ui.notifications.warn(localize('LA.notify.noRecipientsSelected'));
                         return;
                     }
+
                     if (choicesInfo.length === 0)
                     {
                         ui.notifications.warn(localize('LA.notify.noOptionsProvided'));
@@ -450,6 +471,7 @@ export async function openChoiceMenu()
             });
         }
     }, { width: 400, height: "auto", classes: ['lancer-dialog-base', 'lancer-no-title'] });
+
     dialogObj.render(true);
 }
 
@@ -494,7 +516,9 @@ export function _buildChoiceDialog(choices, { title, titleHtml, subtitle, hint, 
             </div>
         </div>
     `;
+
     let selectedIndices = new Set();
+
     const dialog = new Dialog({
         title,
         content,
@@ -507,11 +531,13 @@ export function _buildChoiceDialog(choices, { title, titleHtml, subtitle, hint, 
             cancel: cancelButton(() => resolve(null))
         },
         default: "confirm",
+        close: () => resolve(null),
         render: (html) =>
         {
             const listItems = html.find('.la-choice-item');
             const confirmBtn = html.parent().find('button.confirm');
             const validationMsg = html.find('.la-selection-validation-msg');
+
             const updateValidation = () =>
             {
                 if (selectionValidator)
@@ -533,7 +559,9 @@ export function _buildChoiceDialog(choices, { title, titleHtml, subtitle, hint, 
                     validationMsg.text('');
                 }
             };
+
             updateValidation();
+
             if (onContextMenu)
             {
                 listItems.on('contextmenu', function(e)
@@ -542,9 +570,11 @@ export function _buildChoiceDialog(choices, { title, titleHtml, subtitle, hint, 
                     onContextMenu(choices[Number.parseInt($(this).data('idx'))], html);
                 });
             }
+
             listItems.filter(':not(.unselectable)').click(function()
             {
                 const idx = Number.parseInt($(this).data('idx'));
+
                 if (selectedIndices.has(idx))
                 {
                     selectedIndices.delete(idx);
@@ -559,6 +589,7 @@ export function _buildChoiceDialog(choices, { title, titleHtml, subtitle, hint, 
                         listItems.css({ 'border-color': '#444', 'background': 'rgba(255,255,255,0.03)' })
                             .find('.selection-check').css('visibility', 'hidden');
                     }
+
                     if (selectedIndices.size < numberToChoose)
                     {
                         selectedIndices.add(idx);
@@ -566,6 +597,7 @@ export function _buildChoiceDialog(choices, { title, titleHtml, subtitle, hint, 
                             .find('.selection-check').css('visibility', 'visible');
                     }
                 }
+
                 updateValidation();
             });
         }
@@ -575,7 +607,41 @@ export function _buildChoiceDialog(choices, { title, titleHtml, subtitle, hint, 
         top: 450,
         left: 150
     });
+
     dialog.render(true);
+}
+
+const mountPickTags = weapon => [
+    ...(weapon.destroyed ? [{ text: localize('LA.altStruct.badgeDestroyed'), tone: 'bad' }] : []),
+    ...(weapon.disabled ? [{ text: 'DISABLED', tone: 'warn' }] : []),
+    ...(weapon.mod ? [{ text: `MOD: ${weapon.mod}`, short: 'MOD' }] : []),
+    ...(weapon.loadStatus ? [{ text: weapon.loadStatus }] : []),
+    ...(weapon.chargeStatus ? [{ text: weapon.chargeStatus }] : []),
+    ...(weapon.usesText ? [{ text: weapon.usesText }] : []),
+];
+
+const MOUNT_DETAIL_HINT = 'Right-click a row for weapon details';
+
+function showWeaponDetail(actor, row, card, anchor)
+{
+    if (!row.weapon)
+        return;
+    toggleDetailPopup({ ...weaponPopupOptions(row.weapon, row.modItem ?? null, actor), row: null, showPopupAt: popup => laPositionPopup(popup, card.element, anchor) });
+}
+
+function mountRowLock(choices, chosenIds, selectionValidator, choice)
+{
+    if (!selectionValidator || chosenIds.includes(choice.id))
+        return '';
+
+    const chosen = chosenIds.map(id => choices[id].item);
+    const verdict = selectionValidator([...chosen, choice.item]);
+
+    if (verdict.level === 'error')
+        return verdict.message;
+
+    const canFinish = verdict.valid || choices.some(other => other !== choice && other.selectable && selectionValidator([...chosen, choice.item, other.item]).valid);
+    return canFinish ? '' : localize('LA.choiceCard.barrageNeedsSecond');
 }
 
 /**
@@ -585,15 +651,241 @@ export function _buildChoiceDialog(choices, { title, titleHtml, subtitle, hint, 
  * @param {Function} [filterPredicate] - Optional predicate to filter weapons
  * @param {string[]} [allowedMountTypes] - Optional list of allowed mount types (Mech only)
  * @param {string} [title] - Optional custom title
- * @param {Function} [selectionValidator] - Optional (selectedItems) => { valid, message }
+ * @param {Function} [selectionValidator] - Optional (selectedItems) => { valid, message, level }
+ * @param {Function} [filterReason] - Optional (weapon) => why the filter refused it
  * @returns {Promise<any[]|null>} Resolves to an array of selected mounts/items, or null if cancelled.
  */
-export async function choseMount(actorOrToken, numberToChoose = 1, filterPredicate = null, allowedMountTypes = null, title = null, selectionValidator = null)
+export async function choseMount(actorOrToken, numberToChoose = 1, filterPredicate = null, allowedMountTypes = null, title = null, selectionValidator = null, filterReason = null)
 {
     const actor = /** @type {Actor} */ ((/** @type {Token} */ (actorOrToken))?.actor || actorOrToken);
     if (!actor)
         return null;
 
+    const isMech = actor.type === 'mech' && actor.system.loadout?.weapon_mounts;
+    const choices = mountPickChoices(actor, filterPredicate, allowedMountTypes, filterReason);
+
+    if (choices.length === 0)
+    {
+        ui.notifications.warn(localizeFormat('LA.notify.noMountsOrWeapons', { kind: isMech ? 'mounts' : 'weapons' }));
+        return [];
+    }
+
+    return new Promise((resolve) =>
+    {
+        const selected = new Set();
+        const selectedItems = () => [...selected].map(id => choices[id].item);
+        const rowLock = choice => mountRowLock(choices, [...selected], selectionValidator, choice);
+
+        resolve(startPickCard({
+            title: title || `CHOOSE ${isMech ? 'MOUNT' : 'WEAPON'}`,
+            origin: actor.name,
+            description: selectionValidator
+                ? selectionValidator([]).message
+                : localizeFormat('LA.choiceCard.selectUpToKind', { count: numberToChoose, kind: isMech ? 'mount(s)' : 'weapon(s)' }),
+            hint: MOUNT_DETAIL_HINT,
+            fitRows: true,
+            confirmText: !selectionValidator && numberToChoose > 1 ? localize('LA.common.confirm') : '',
+            getRows: () => choices.flatMap((choice) =>
+            {
+                const lock = choice.selectable ? rowLock(choice) : '';
+                return choice.pickRows.map(row => ({ ...row, choice, off: !choice.selectable || !!lock, picked: selected.has(choice.id), why: lock || row.why }));
+            }),
+            onPick: ({ choice }, card) =>
+            {
+                if (choice.warn)
+                {
+                    ui.notifications.warn(choice.warn);
+                    return;
+                }
+
+                if (numberToChoose === 1)
+                {
+                    card.finish([choice.item]);
+                    return;
+                }
+
+                if (selected.has(choice.id))
+                    selected.delete(choice.id);
+                else if (selected.size < numberToChoose)
+                    selected.add(choice.id);
+
+                const verdict = selectionValidator?.(selectedItems());
+
+                if (verdict?.valid)
+                {
+                    card.finish(selectedItems());
+                    return;
+                }
+
+                if (verdict)
+                    card.setMessage(verdict.message);
+
+                card.refresh();
+            },
+            onConfirm: (card) =>
+            {
+                if (selected.size > 0)
+                    card.finish(selectedItems());
+            },
+            onContext: (row, card, element) => showWeaponDetail(actor, row, card, element),
+        }));
+    });
+}
+
+export function choseFiringOrder(actorOrToken, { count = 1, filterPredicate = null, title = null, selectionValidator = null, filterReason = null } = {})
+{
+    const actor = /** @type {Actor} */ ((/** @type {Token} */ (actorOrToken))?.actor || actorOrToken);
+    if (!actor)
+        return Promise.resolve(null);
+
+    const isMech = actor.type === 'mech' && actor.system.loadout?.weapon_mounts;
+    const choices = mountPickChoices(actor, filterPredicate, null, filterReason);
+
+    if (choices.length === 0)
+    {
+        ui.notifications.warn(localizeFormat('LA.notify.noMountsOrWeapons', { kind: isMech ? 'mounts' : 'weapons' }));
+        return Promise.resolve([]);
+    }
+
+    const picked = [];
+    const weaponsOf = choice => (choice.item.slots ? choice.item.slots.map(slot => slot.weapon?.value).filter(Boolean) : [choice.item]);
+    const groupOf = entry => orderMount(weaponsOf(entry.choice), entry.first);
+    const instruction = localize(count > 1 ? 'LA.fireChain.barragePick' : 'LA.fireChain.skirmishPick');
+    const verdict = () => selectionValidator?.(picked.map(entry => entry.choice.item)) ?? { valid: picked.length > 0, message: '' };
+
+    const bonusTags = bonus => (bonus ? [] : [{ text: localize('LA.fireChain.noBonus'), tone: 'nobonus', corner: true }]);
+
+    const skirmishMarks = (choice, row) =>
+    {
+        const weapons = weaponsOf(choice);
+        if (weapons.length < 2 || !row.weapon)
+            return {};
+
+        if (!bonusGoesToFirst(weapons))
+            return { tags: [...(row.tags ?? []), ...bonusTags(plannedBonus(weapons)[weapons.indexOf(row.weapon)])] };
+
+        return {
+            tags: [
+                ...(row.tags ?? []),
+                { text: localize('LA.fireChain.followNoBonus'), tone: 'nobonus', when: 'follow', corner: true },
+            ],
+        };
+    };
+
+    const firingMarks = (choice, row) =>
+    {
+        if (count === 1)
+            return skirmishMarks(choice, row);
+
+        const entry = picked.find(other => other.choice === choice);
+        if (!entry)
+            return {};
+
+        const group = groupOf(entry);
+        const position = group.indexOf(row.weapon);
+        const bonus = plannedBonus(group)[position];
+        const before = picked.slice(0, picked.indexOf(entry)).reduce((sum, other) => sum + groupOf(other).length, 0);
+
+        return {
+            badge: String(before + position + 1),
+            tags: [...(row.tags ?? []), ...bonusTags(bonus)],
+        };
+    };
+
+    const refreshFire = (card) =>
+    {
+        const check = verdict();
+        const shots = picked.reduce((sum, entry) => sum + groupOf(entry).length, 0);
+        card.setMessage(check.message ? `${instruction} ${check.message}` : instruction);
+        card.setConfirm(shots > 1 ? localizeFormat('LA.fireChain.fireCount', { count: shots }) : localize('LA.fireChain.fire'), check.valid);
+        card.refresh();
+    };
+
+    return startPickCard({
+        title: title || `CHOOSE ${isMech ? 'MOUNT' : 'WEAPON'}`,
+        origin: actor.name,
+        description: instruction,
+        hint: MOUNT_DETAIL_HINT,
+        fitRows: true,
+        confirmText: count > 1 ? localize('LA.fireChain.fire') : '',
+        confirmIcon: 'fas fa-crosshairs',
+        getRows: () => choices.flatMap((choice) =>
+        {
+            const lock = choice.selectable ? mountRowLock(choices, picked.map(entry => entry.choice.id), selectionValidator, choice) : '';
+            const isPicked = picked.some(entry => entry.choice === choice);
+            return choice.pickRows.map(row => ({ ...row, choice, off: !choice.selectable || !!lock, picked: isPicked, why: lock || row.why, ...firingMarks(choice, row) }));
+        }),
+        onPick: (row, card) =>
+        {
+            if (row.choice.warn)
+            {
+                ui.notifications.warn(row.choice.warn);
+                return;
+            }
+
+            if (count === 1)
+            {
+                card.finish([orderMount(weaponsOf(row.choice), row.weapon)]);
+                return;
+            }
+
+            const index = picked.findIndex(entry => entry.choice === row.choice);
+
+            if (index >= 0)
+                picked.splice(index, 1);
+            else if (picked.length < count)
+                picked.push({ choice: row.choice, first: row.weapon });
+
+            refreshFire(card);
+        },
+        onConfirm: (card) =>
+        {
+            if (verdict().valid)
+                card.finish(picked.map(groupOf));
+        },
+        onContext: (row, card, element) => showWeaponDetail(actor, row, card, element),
+        onReady: count > 1 ? refreshFire : undefined,
+    });
+}
+
+export async function choseBonusWeapons(actor, mounts)
+{
+    const groups = [];
+
+    for (const { label, weapons } of mounts)
+    {
+        const usable = weapons.filter(isItemUsable);
+
+        if (usable.length < 2 || !bonusGoesToFirst(weapons))
+        {
+            groups.push(weapons);
+            continue;
+        }
+
+        const first = await startPickCard({
+            title: localize('LA.fireChain.bonusPickTitle'),
+            origin: label ? `${actor.name} · ${label}` : actor.name,
+            description: localize('LA.fireChain.bonusPickHint'),
+            fitRows: true,
+            getRows: () => usable.map(weapon => ({
+                weapon,
+                icon: weaponTypeIcon(weapon),
+                name: weapon.name,
+                sub: [weapon.system?.size, weapon.system?.active_profile?.type ?? weapon.system?.weapon_type].filter(Boolean).join(' '),
+            })),
+            onPick: (row, card) => card.finish(row.weapon),
+        });
+
+        if (!first)
+            return null;
+        groups.push(orderMount(weapons, first));
+    }
+
+    return groups;
+}
+
+export function mountPickChoices(actor, filterPredicate = null, allowedMountTypes = null, filterReason = null)
+{
     const isMech = actor.type === 'mech' && actor.system.loadout?.weapon_mounts;
     let allItems = [];
 
@@ -609,12 +901,15 @@ export async function choseMount(actorOrToken, numberToChoose = 1, filterPredica
                 const weapon = slot.weapon?.value;
                 if (!weapon)
                     return null;
+
                 const sys = weapon.system;
                 const profiles = sys?.profiles || [];
                 const activeProfileIndex = sys?.selected_profile_index ?? 0;
                 let profileName = "";
+
                 if (profiles.length > 1 && profiles[activeProfileIndex])
                     profileName = profiles[activeProfileIndex].name;
+
                 const allTags     = [...(sys?.active_profile?.tags ?? []), ...(sys?.all_base_tags ?? [])];
                 const hasLoading  = allTags.some(tag => tag.lid === 'tg_loading'  || tag.id === 'tg_loading');
                 const hasRecharge = allTags.some(tag => tag.lid === 'tg_recharge' || tag.id === 'tg_recharge');
@@ -622,6 +917,7 @@ export async function choseMount(actorOrToken, numberToChoose = 1, filterPredica
                 const loadStatus   = hasLoading  ? (sys.loaded  === false ? 'UNLOADED'  : 'LOADED')   : '';
                 const chargeStatus = hasRecharge ? (sys.charged === false ? 'UNCHARGED' : 'CHARGED')  : '';
                 let usesText = '';
+
                 if (hasLimited)
                 {
                     const usesValue = sys.uses == null ? 0 : typeof sys.uses === 'number' ? sys.uses : (sys.uses.value ?? 0);
@@ -683,6 +979,7 @@ export async function choseMount(actorOrToken, numberToChoose = 1, filterPredica
             const profiles = sys?.profiles || [];
             const activeProfileIndex = sys?.selected_profile_index ?? 0;
             let profileName = "";
+
             if (item.type === 'npc_feature')
             {
                 const tierOverride = sys?.tier_override ?? 0;
@@ -691,6 +988,7 @@ export async function choseMount(actorOrToken, numberToChoose = 1, filterPredica
             }
             else if (profiles.length > 1 && profiles[activeProfileIndex])
                 profileName = profiles[activeProfileIndex].name;
+
             const allTagsNonMech  = [...(sys?.active_profile?.tags ?? []), ...(sys?.tags ?? [])];
             const hasLoading      = allTagsNonMech.some(tag => tag.lid === 'tg_loading');
             const hasRecharge   = allTagsNonMech.some(tag => tag.lid === 'tg_recharge');
@@ -698,6 +996,7 @@ export async function choseMount(actorOrToken, numberToChoose = 1, filterPredica
             const loadStatus    = hasLoading  ? (sys.loaded  === false ? 'UNLOADED'  : 'LOADED')  : '';
             const chargeStatus  = hasRecharge ? (sys.charged === false ? 'UNCHARGED' : 'CHARGED') : '';
             let usesText = '';
+
             if (hasLimited)
             {
                 const usesValue = sys.uses == null ? 0 : typeof sys.uses === 'number' ? sys.uses : (sys.uses.value ?? 0);
@@ -732,155 +1031,94 @@ export async function choseMount(actorOrToken, numberToChoose = 1, filterPredica
         });
     }
 
-    if (allItems.length === 0)
+    return allItems.map((choice, idx) =>
     {
-        ui.notifications.warn(localizeFormat('LA.notify.noMountsOrWeapons', { kind: isMech ? 'mounts' : 'weapons' }));
-        return [];
-    }
+        const weaponData = choice.weaponData;
+        const isMount = choice.isMount;
 
-    return new Promise((resolve) =>
-    {
-        const choices = allItems.map((choice, idx) =>
+        const sublabel = isMount ? `${choice.item.type} MOUNT` : (choice.item.type === 'npc_feature' ? choice.item.system.type : choice.item.type.replace('mech_', '').replace('pilot_', ''));
+
+        const weaponDetails = weaponData.map(wData =>
         {
-            const weaponData = choice.weaponData;
-            const isMount = choice.isMount;
+            const weaponItem = wData.value;
+            if (!weaponItem?.system)
+                return null;
 
-            // Group identical weapons for display
-            const counts = {};
-            const uniqueWeapons = [];
-            for (const weapon of weaponData)
+            const sys = weaponItem.system;
+            let allProfiles = [];
+
+            if (weaponItem.type === 'npc_feature')
             {
-                const key = `${weapon.name}|${weapon.mod || ""}|${weapon.destroyed}|${weapon.disabled}|${weapon.loadStatus}|${weapon.chargeStatus}|${weapon.usesText}`;
-                if (!counts[key])
+                // NPC weapon: show only the effective tier
+                const tierOverride = sys.tier_override ?? 0;
+                const actorTier = actor.system?.tier ?? 1;
+                const effectiveTier = tierOverride > 0 ? tierOverride : actorTier;
+                const tierIndex = Math.max(0, Math.min(2, effectiveTier - 1));
+                const tierDmg = (sys.damage ?? [])[tierIndex] ?? [];
+                const _tierRegex = /\{(\d+(?:\.\d+)?)\/(\d+(?:\.\d+)?)\/(\d+(?:\.\d+)?)\}/g;
+                const _resolveTier = str => String(str ?? '').replace(_tierRegex, (_, v1, v2, v3) => [v1, v2, v3][tierIndex] ?? v1);
+
+                const resolvedTags = (sys.tags ?? []).map(tag =>
                 {
-                    counts[key] = 0;
-                    uniqueWeapons.push({ ...weapon, key });
-                }
-                counts[key]++;
+                    const raw = tag.name ?? tag.lid ?? tag.id ?? '';
+                    const resolvedVal = _resolveTier(tag.val);
+                    const resolved = _resolveTier(raw).replace(/\{VAL\}/gi, resolvedVal);
+                    return { ...tag, _resolvedName: resolved };
+                });
+
+                allProfiles.push({ name: null, damage: tierDmg, range: sys.range ?? [], tags: resolvedTags, effect: sys.effect || '', on_hit: sys.on_hit || '' });
             }
+            else
+                allProfiles = getWeaponProfiles_WithBonus(weaponItem, actor);
+            if (allProfiles.length === 0)
+                return null;
+            return { name: weaponItem.name, img: weaponItem.img, size: wData.size, type: wData.type, mod: wData.mod || null, modItem: wData.modItem || null, profiles: allProfiles, actions: sys.actions ?? [], activeProfile: sys.selected_profile_index ?? 0 };
+        }).filter(Boolean);
 
-            const labelHtml = uniqueWeapons.map(weapon =>
-            {
-                let style = "display: block; margin-bottom: 2px;";
-                let nameStyle = "font-weight: bold;";
-                let statusTags = "";
+        const profileOf = (weapon) =>
+        {
+            const detail = weaponDetails.find(entry => entry.name === weapon.name);
+            return detail?.profiles?.[detail.activeProfile] ?? detail?.profiles?.[0];
+        };
 
-                if (weapon.disabled)
-                {
-                    nameStyle += " color: #ff9800;";
-                    statusTags += `<span style="font-size: 0.7em; background: #ff9800; color: #000; padding: 1px 4px; border-radius: 3px; margin-left: 5px; vertical-align: middle;">DISABLED</span>`;
-                }
+        const section = isMount ? mountLabel(actor, choice.item) : null;
 
-                const sizeTypeParts = [weapon.size, weapon.type].filter(Boolean);
-                let typeText = "";
-                if (sizeTypeParts.length > 0)
-                    typeText = `<span style="font-size: 0.8em; color: #888; margin-left: 6px; font-weight: normal;">${sizeTypeParts.join(' ')}</span>`;
+        const pickRows = weaponData.length
+            ? weaponData.map((weapon, rowIdx) => ({
+                group: idx,
+                weapon: weapon.value,
+                modItem: weapon.modItem ?? null,
+                section: rowIdx === 0 ? section : null,
+                icon: weaponTypeIcon(weapon.value),
+                name: weapon.name,
+                sub: `${[weapon.size, weapon.type].filter(Boolean).join(' ')}${weapon.profileName ? ` (${weapon.profileName})` : ''}`,
+                chips: profileChips(profileOf(weapon)),
+                tags: mountPickTags(weapon),
+                why: !choice.selectable && !choice.allDestroyed && !weapon.fitsFilter ? (filterReason?.(weapon.value) ?? localize('LA.choiceCard.notUsableHere')) : '',
+            }))
+            : [{
+                group: idx,
+                section,
+                icon: choice.item.bracing ? 'fas fa-lock' : 'fas fa-minus',
+                name: localize(choice.item.bracing ? 'LA.choiceCard.mountLocked' : 'LA.choiceCard.mountEmpty'),
+                why: choice.item.bracing ? localize('LA.choiceCard.mountBraces') : '',
+            }];
 
-                if (weapon.profileName)
-                    typeText += `<span style="font-size: 0.8em; color: #888; margin-left: 4px;">(${weapon.profileName})</span>`;
+        const warn = weaponData.length > 0 && weaponData.every(weapon => weapon.unloaded)
+            ? localizeFormat('LA.notify.mountUnloaded', { name: weaponData[0].name })
+            : '';
 
-                const countStr = counts[weapon.key] > 1 ? ` <span style="font-size: 0.9em; opacity: 0.8;">x${counts[weapon.key]}</span>` : "";
-                const tagStyle     = `font-size:0.8em;opacity:0.9;background:rgba(255,100,0,0.15);border:1px solid rgba(255,100,0,0.3);border-radius:4px;padding:1px 6px;display:inline-block;color:#ff6400;`;
-                const tagStyleRed = `font-size:0.8em;background:#b71c1c;border:1px solid #8b0000;border-radius:4px;padding:1px 6px;display:inline-block;color:#fff;`;
-                const bottomParts = [];
-                if (weapon.destroyed)
-                    bottomParts.push(`<span style="${tagStyleRed}">✕ DESTROYED</span>`);
-                if (weapon.mod)
-                    bottomParts.push(`<span style="${tagStyle}">MOD: ${weapon.mod}</span>`);
-                if (weapon.loadStatus)
-                    bottomParts.push(`<span style="${tagStyle}">${weapon.loadStatus}</span>`);
-                if (weapon.chargeStatus)
-                    bottomParts.push(`<span style="${tagStyle}">${weapon.chargeStatus}</span>`);
-                if (weapon.usesText)
-                    bottomParts.push(`<span style="${tagStyle}">${weapon.usesText}</span>`);
-                const modHtml = bottomParts.length ? `<div style="margin-top:2px;display:flex;gap:4px;flex-wrap:wrap;">${bottomParts.join('')}</div>` : "";
-
-                return `
-                    <div style="${style}">
-                        <span style="${nameStyle}">${weapon.name}${typeText}${countStr}${statusTags}</span>
-                        ${modHtml}
-                    </div>
-                `;
-            }).join('');
-
-            const sublabel = isMount ? `${choice.item.type} MOUNT` : (choice.item.type === 'npc_feature' ? choice.item.system.type : choice.item.type.replace('mech_', '').replace('pilot_', ''));
-            const img = weaponData[0]?.img || "icons/svg/item-bag.svg";
-
-            const weaponDetails = weaponData.map(wData =>
-            {
-                const weaponItem = wData.value;
-                if (!weaponItem?.system)
-                    return null;
-                const sys = weaponItem.system;
-                let allProfiles = [];
-                if (weaponItem.type === 'npc_feature')
-                {
-                    // NPC weapon: show only the effective tier
-                    const tierOverride = sys.tier_override ?? 0;
-                    const actorTier = actor.system?.tier ?? 1;
-                    const effectiveTier = tierOverride > 0 ? tierOverride : actorTier;
-                    const tierIndex = Math.max(0, Math.min(2, effectiveTier - 1));
-                    const tierDmg = (sys.damage ?? [])[tierIndex] ?? [];
-                    const _tierRegex = /\{(\d+(?:\.\d+)?)\/(\d+(?:\.\d+)?)\/(\d+(?:\.\d+)?)\}/g;
-                    const _resolveTier = str => String(str ?? '').replace(_tierRegex, (_, v1, v2, v3) => [v1, v2, v3][tierIndex] ?? v1);
-                    const resolvedTags = (sys.tags ?? []).map(tag =>
-                    {
-                        const raw = tag.name ?? tag.lid ?? tag.id ?? '';
-                        const resolvedVal = _resolveTier(tag.val);
-                        const resolved = _resolveTier(raw).replace(/\{VAL\}/gi, resolvedVal);
-                        return { ...tag, _resolvedName: resolved };
-                    });
-                    allProfiles.push({ name: null, damage: tierDmg, range: sys.range ?? [], tags: resolvedTags, effect: sys.effect || '', on_hit: sys.on_hit || '' });
-                }
-                else
-                    allProfiles = getWeaponProfiles_WithBonus(weaponItem, actor);
-                if (allProfiles.length === 0)
-                    return null;
-                return { name: weaponItem.name, img: weaponItem.img, size: wData.size, type: wData.type, mod: wData.mod || null, modItem: wData.modItem || null, profiles: allProfiles, actions: sys.actions ?? [], activeProfile: sys.selected_profile_index ?? 0 };
-            }).filter(Boolean);
-
-            return {
-                item: choice.item,
-                labelHtml,
-                sublabel,
-                img,
-                id: idx,
-                selectable: choice.selectable,
-                destroyed: choice.allDestroyed,
-                weaponDetails
-            };
-        });
-
-        _buildChoiceDialog(choices, {
-            title: title || `Choose ${isMech ? 'Mount' : 'Weapon'}`,
-            titleHtml: title || `CHOOSE ${isMech ? 'MOUNT' : 'WEAPON'}`,
-            subtitle: localizeFormat('LA.choiceCard.selectUpToKind', { count: numberToChoose, kind: isMech ? 'mount(s)' : 'weapon(s)' }),
-            hint: 'Right-click a row for weapon details',
-            numberToChoose,
-            selectionValidator,
-            onContextMenu: (choice, html) =>
-            {
-                document.querySelectorAll('.la-weapon-detail-popup').forEach(node => node.remove());
-                if (!choice.weaponDetails?.length)
-                    return;
-
-                const detailHtml = choice.weaponDetails.map(detail =>
-                {
-                    const wName = choice.weaponDetails.length > 1
-                        ? `<div style="font-size:0.8em;font-weight:bold;color:#ff6400;margin-bottom:6px;border-bottom:1px solid #333;padding-bottom:4px;">${detail.name}</div>`
-                        : '';
-                    return wName + laRenderWeaponBody(detail.profiles, { actions: detail.actions, modName: detail.mod, modItem: detail.modItem, activeProfileIndex: detail.activeProfile });
-                }).join('<hr style="border:0;border-top:1px solid #333;margin:6px 0;">');
-
-                const title = choice.weaponDetails.length > 1 ? choice.sublabel : (choice.weaponDetails[0]?.name ?? '');
-                const subtitle = choice.weaponDetails.length > 1
-                    ? choice.weaponDetails.map(detail => detail.name).join(' / ')
-                    : [choice.weaponDetails[0]?.size, choice.weaponDetails[0]?.type].filter(Boolean).join(' · ');
-                const popup = laDetailPopup('la-weapon-detail-popup', title, subtitle, detailHtml, 'weapon');
-                laPositionPopup(popup, html);
-            },
-            resolve
-        });
+        return {
+            item: choice.item,
+            sublabel,
+            id: idx,
+            selectable: choice.selectable,
+            weaponDetails,
+            pickRows,
+            warn,
+            text: pickRowsText(section, pickRows),
+            disabled: !choice.selectable || !!warn,
+        };
     });
 }
 
@@ -912,9 +1150,11 @@ export async function choseSystem(actorOrToken, numberToChoose = 1, filterPredic
             const item = slot?.value;
             if (!item)
                 continue;
+
             const sys = item.system;
             if (allowedSystemTypes && !allowedSystemTypes.includes(sys?.type))
                 continue;
+
             const destroyed = !!sys?.destroyed;
             const disabled = !!sys?.disabled;
             const uses = (sys?.uses?.max > 0) ? sys.uses : null;
@@ -947,6 +1187,7 @@ export async function choseSystem(actorOrToken, numberToChoose = 1, filterPredic
             {
                 if (allowedSystemTypes && !allowedSystemTypes.includes(item.system.type))
                     continue;
+
                 const sys = item.system;
                 const destroyed = !!sys?.destroyed;
                 const disabled = !!sys?.disabled;
@@ -982,6 +1223,7 @@ export async function choseSystem(actorOrToken, numberToChoose = 1, filterPredic
             const resolved = await Promise.all(
                 entry.deployableLids.map(lid => resolveDeployable(lid, actor))
             );
+
             entry.deployableActors = resolved.map(resolution => resolution.deployable).filter(Boolean);
         }
     }
@@ -1010,6 +1252,7 @@ export async function choseSystem(actorOrToken, numberToChoose = 1, filterPredic
             let infoTags = "";
             if (entry.sp > 0)
                 infoTags += `<span style="font-size: 0.7em; background: #1a3a5c; color: #7ec8e3; padding: 1px 4px; border-radius: 3px; margin-left: 5px; vertical-align: middle;">SP: ${entry.sp}</span>`;
+
             if (entry.uses)
             {
                 const usesColor = entry.uses.value <= 0 ? '#888' : '#e6a817';
@@ -1056,6 +1299,7 @@ export async function choseSystem(actorOrToken, numberToChoose = 1, filterPredic
                     + laRenderTags(choice.tags)
                     + laRenderActions(choice.actions)
                     + laRenderDeployables(choice.deployableActors);
+
                 const subtitle = [choice.systemType, choice.sp > 0 ? `${choice.sp} SP` : ''].filter(Boolean).join(' · ');
                 const popup = laDetailPopup('la-system-detail-popup', choice.item.name, subtitle, bodyHtml, 'system');
                 laPositionPopup(popup, html);
@@ -1090,10 +1334,12 @@ export async function choseTrait(actorOrToken, numberToChoose = 1, filterPredica
     const tier = actor.system?.tier ?? 1;
 
     const allItems = [];
+
     for (const item of actor.items)
     {
         if (item.type !== 'npc_feature' || item.system?.type !== 'Trait')
             continue;
+
         const sys = item.system;
         const destroyed = !!sys?.destroyed;
         const disabled = !!sys?.disabled;
@@ -1176,6 +1422,7 @@ export async function choseTrait(actorOrToken, numberToChoose = 1, filterPredica
                 const bodyHtml = laRenderTextSection('EFFECT', choice.effect, '#e65100', _resolveTierStr)
                     + laRenderTags(choice.tags, _resolveTierStr)
                     + laRenderActions(choice.actions, _resolveTierStr);
+
                 const popup = laDetailPopup('la-trait-detail-popup', choice.item.name, `TRAIT · T${tier}`, bodyHtml, 'trait');
                 laPositionPopup(popup, html);
             },
@@ -1205,6 +1452,7 @@ export async function chooseInvade(actorOrToken)
     const fragDetail = isNPC
         ? "Target becomes IMPAIRED until the end of their next turn."
         : "Target becomes IMPAIRED and SLOWED until the end of their next turn.";
+
     invades.push({
         name: isNPC ? "Fragment Signal (NPC)" : "Fragment Signal",
         detail: fragDetail,
@@ -1230,95 +1478,24 @@ export async function chooseInvade(actorOrToken)
         });
     }
 
-    return new Promise((resolve) =>
+    const showInvadeDetail = (inv, html) =>
     {
-        const content = `
-            <div class="lancer-dialog-header">
-                <div class="lancer-dialog-title">CHOOSE INVADE</div>
-                <div class="lancer-dialog-subtitle">Select an invade option.</div>
-            </div>
-            <div class="lancer-dialog-body" style="padding: 10px;">
-                <div style="font-size: 0.72em; color: #777; font-style: italic; margin-bottom: 6px;"><i class="fas fa-mouse-pointer"></i> Right-click a row for details</div>
-                <div class="la-invade-list" style="max-height: 350px; overflow-y: auto; padding-right: 5px;">
-                    ${invades.map((inv, idx) => `
-                        <div class="la-invade-item" data-idx="${idx}"
-                             style="display: flex; align-items: flex-start; padding: 10px; border: 1px solid #444;
-                                    margin-bottom: 6px; cursor: pointer; border-radius: 4px;
-                                    background: rgba(255,255,255,0.03); transition: all 0.2s;">
-                            <img src="${inv.img}" style="width: 40px; height: 40px; object-fit: contain; margin-right: 12px; border: 1px solid #222; flex-shrink: 0;">
-                            <div style="flex: 1; display: flex; flex-direction: column; min-width: 0;">
-                                <div style="margin-bottom: 4px;">
-                                    <span style="font-weight: bold;">${inv.name}</span>
-                                    <span style="font-size: 0.8em; color: #888; margin-left: 6px; font-weight: normal;">${inv.sourceItemName}</span>
-                                </div>
-                                <span style="font-size: 0.75em; opacity: 0.5; text-transform: uppercase; font-weight: bold; letter-spacing: 0.5px;">INVADE</span>
-                            </div>
-                            <i class="fas fa-check la-invade-check" style="color: #ff6400; margin-left: 8px; margin-top: 14px; visibility: hidden;"></i>
-                        </div>
-                    `).join('')}
-                </div>
-            </div>
-        `;
+        document.querySelectorAll('.la-invade-detail-popup').forEach(node => node.remove());
 
-        let selectedIdx = -1;
+        const bodyHtml = laRenderTextSection('EFFECT', inv.detail, '#e65100')
+            + laRenderTags(inv.tags);
 
-        const dialog = new Dialog({
-            title: localize('LA.dialogTitle.chooseInvade'),
-            content,
-            buttons: {
-                confirm: {
-                    icon: '<i class="fas fa-check"></i>',
-                    label: localize("LA.common.confirm"),
-                    callback: () =>
-                    {
-                        if (selectedIdx >= 0)
-                            resolve(invades[selectedIdx]);
-                        else
-                            resolve(null);
-                    }
-                },
-                cancel: cancelButton(() => resolve(null))
-            },
-            default: "confirm",
-            render: (html) =>
-            {
-                const listItems = html.find('.la-invade-item');
-                const confirmBtn = html.parent().find('button.confirm');
-                confirmBtn.prop('disabled', true);
+        const popup = laDetailPopup('la-invade-detail-popup', inv.name, inv.sourceItemName, bodyHtml, 'weapon');
+        laPositionPopup(popup, html);
+    };
 
-                const _showInvadeDetailPopup = (inv) =>
-                {
-                    document.querySelectorAll('.la-invade-detail-popup').forEach(node => node.remove());
-                    const bodyHtml = laRenderTextSection('EFFECT', inv.detail, '#e65100')
-                        + laRenderTags(inv.tags);
-                    const popup = laDetailPopup('la-invade-detail-popup', inv.name, inv.sourceItemName, bodyHtml, 'weapon');
-                    laPositionPopup(popup, html);
-                };
-
-                listItems.on('contextmenu', function(e)
-                {
-                    e.preventDefault();
-                    const idx = Number.parseInt($(this).data('idx'));
-                    _showInvadeDetailPopup(invades[idx]);
-                });
-
-                listItems.on('click', function()
-                {
-                    const idx = Number.parseInt($(this).data('idx'));
-                    listItems.css({ 'border-color': '#444', 'background': 'rgba(255,255,255,0.03)' })
-                        .find('.la-invade-check').css('visibility', 'hidden');
-                    selectedIdx = idx;
-                    $(this).css({ 'border-color': '#ff6400', 'background': 'rgba(255,100,0,0.05)' })
-                        .find('.la-invade-check').css('visibility', 'visible');
-                    confirmBtn.prop('disabled', false);
-                });
-            }
-        }, {
-            classes: ['lancer-dialog-base', 'lancer-no-title'],
-            width: 480,
-            top: 450,
-            left: 150
-        });
-        dialog.render(true);
+    return startPickCard({
+        title: 'CHOOSE INVADE',
+        origin: actor.name,
+        description: 'Select an invade option.',
+        hint: 'Right-click a row for details',
+        getRows: () => invades.map(inv => ({ inv, icon: inv.img, name: inv.name, sub: inv.sourceItemName, lines: inv.isFragmentSignal ? [inv.detail] : [] })),
+        onPick: ({ inv }, card) => card.finish(inv),
+        onContext: ({ inv }, card) => showInvadeDetail(inv, card.element),
     });
 }

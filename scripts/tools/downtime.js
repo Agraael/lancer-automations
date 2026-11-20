@@ -7,11 +7,13 @@ function generateId(length)
     const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
     const charactersLength = characters.length;
     let counter = 0;
+
     while (counter < length)
     {
         result += characters.charAt(Math.floor(Math.random() * charactersLength));
         counter += 1;
     }
+
     return result;
 }
 
@@ -303,7 +305,9 @@ export async function getDowntimeActivities()
     const merged = new Map();
     for (const activity of DEFAULT_ACTIVITIES)
         merged.set(activity.Name, activity);
+
     const pack = game.packs.get(`world.${DOWNTIME_PACK}`);
+
     if (pack)
     {
         for (const doc of await pack.getDocuments())
@@ -312,8 +316,10 @@ export async function getDowntimeActivities()
                 merged.set(doc.name, itemToActivity(doc));
         }
     }
+
     for (const item of game.items.filter(worldItem => worldItem.type === DOWNTIME_TYPE))
         merged.set(item.name, itemToActivity(item));
+
     const activities = [...merged.values()].filter(activity => !activity.Hidden);
     activities.push(CUSTOM_ACTIVITY);
     return activities;
@@ -410,9 +416,11 @@ export async function executeDowntime()
 
     const connectedOwner = (actor) => game.users.find(user =>
         user.active && !user.isGM && actor.testUserPermission(user, 'OWNER'));
+
     const online = pilots.filter(pilot => connectedOwner(pilot));
     const offline = pilots.filter(pilot => !connectedOwner(pilot));
     const option = (pilot) => `<option value="${pilot.id}">${pilot.name}</option>`;
+
     let pilotNames = online.length
         ? `<optgroup label="Connected Players">${online.map(option).join("")}</optgroup>`
             + (offline.length ? `<optgroup label="Others">${offline.map(option).join("")}</optgroup>` : "")
@@ -480,7 +488,7 @@ export async function executeDowntime()
                                 <div id="activityDescription" style="padding: 0.75rem; margin-bottom: 1rem; background-color: rgba(95, 158, 160, 0.2); border-left: 3px solid var(--primary-color, fuschia); font-style: italic; white-space: pre-line;"></div>
                                 <h3 class="lancer-border-primary" style="text-align: right; margin-bottom:1rem; border-bottom: none;">Downtime Objective<img style="height:35px; border: none; top:.5rem; position:relative" src="systems/lancer/assets/icons/deployable.svg"></h3>
                                 <p style="text-align: right; font-style:italic;">Describe what ${pilotData.name} is trying to achieve</p>
-                                <textarea placeholder="${localize('LA.downtime.ph.aim')}" style="display:inline; width: 100%; height: 100px; background-color: transparent; border: 1px #00000085 solid; border-radius: 3px;" type="text" id="objective"></textarea>
+                                <textarea placeholder="${localize('LA.downtime.ph.aim')}" style="display:inline; width: 100%; height: 100px; background-color: transparent; border: 1px var(--la-edge) solid; border-radius: 3px;" type="text" id="objective"></textarea>
                                 <h3 class="lancer-border-primary" style="text-align: right; margin-bottom:1rem; border-bottom: none;">Apply your skills<img style="height:35px; border: none; top:.5rem; position:relative" src="systems/lancer/assets/icons/skill.svg"></h3>
                                 <p style="text-align: right; font-style:italic;">Choose a relevant trigger for downtime activity</p>
                                 <select id='triggers' style="width:100%">${pilotSkillsHtml}</select>
@@ -502,15 +510,15 @@ export async function executeDowntime()
                                     <p><sub style="text-align: right;">For Administrative use only: leave blank unless otherwise instructed</sub></p>
                                     <div style="text-align: right;">
                                         <label for="flat_mod">Flat Modifier Value: </label><input id="flatMod" style="width:60px;" placeholder="${localize('LA.downtime.ph.anyInt')}" name="flat_mod" type="number" min="-20" max="20">
-                                        <textarea placeholder="${localize('LA.downtime.ph.coefficients')}" style="display:inline; width: 100%; height: 50px; background-color: transparent; border: 1px #00000085 solid; border-radius: 3px;margin-top:5px;" type="text" id="flatOverrideNote"></textarea>
+                                        <textarea placeholder="${localize('LA.downtime.ph.coefficients')}" style="display:inline; width: 100%; height: 50px; background-color: transparent; border: 1px var(--la-edge) solid; border-radius: 3px;margin-top:5px;" type="text" id="flatOverrideNote"></textarea>
                                         <p>Accuracy/Difficulty Modifier</p>
                                         <button style="width:45px; height: 45px;" id="plusAcc"><img style="height:35px; border: none; top:.25rem; position:relative" src="systems/lancer/assets/icons/accuracy.svg"></button>
                                         <button style="width:45px; height: 45px;" id="plusDiff"><img style="height:35px; border: none; top:.25rem; position:relative" src="systems/lancer/assets/icons/difficulty.svg"></button>
                                         <input type="number" name="modifier" id="modifierAcc" value=0 style="height:45px;margin-left:1rem;width:60px; position:relative; top:-10px;"></input><br/>
-                                        <textarea placeholder="${localize('LA.downtime.ph.coefficientsAdjusted')}" style="display:inline; width: 100%; height: 50px; background-color: transparent; border: 1px #00000085 solid; border-radius: 3px;" type="text" id="modifierNote"></textarea>
+                                        <textarea placeholder="${localize('LA.downtime.ph.coefficientsAdjusted')}" style="display:inline; width: 100%; height: 50px; background-color: transparent; border: 1px var(--la-edge) solid; border-radius: 3px;" type="text" id="modifierNote"></textarea>
                                         <p style="text-align:center; padding-top:.5rem;"> --- OR --- </p>
                                         <label for="default_override">Static Override Value: </label><input id="staticOverride" style="width:60px;" name="default_override" placeholder="1-100" type="number" min="1" max="100">
-                                        <textarea placeholder="${localize('LA.downtime.ph.fullOverride')}" style="display:inline; width: 100%; height: 50px; background-color: transparent; border: 1px #00000085 solid; border-radius: 3px;margin-top:5px;" type="text" id="staticOverrideNote"></textarea>
+                                        <textarea placeholder="${localize('LA.downtime.ph.fullOverride')}" style="display:inline; width: 100%; height: 50px; background-color: transparent; border: 1px var(--la-edge) solid; border-radius: 3px;margin-top:5px;" type="text" id="staticOverrideNote"></textarea>
                                     </div>
                                 </div>
                             </div>
@@ -595,6 +603,7 @@ export async function executeDowntime()
                                     let accRollTerm = /** @type {string | number} */ (0);
                                     if (Number(accOverride) !== 0)
                                         accRollTerm = `${accOverride}d6k`;
+
                                     let flatRollTerm = /** @type {string | number} */ (0);
                                     if (Number(flatOverride) !== 0)
                                         flatRollTerm = flatOverride;
@@ -617,6 +626,7 @@ export async function executeDowntime()
 
                                     let selectedActivity = Activities.find(candidateActivity => candidateActivity.Name === activity);
                                     const isRollable = selectedActivity.Rollable === true;
+
                                     if (isRollable)
                                     {
                                         if (manualRollEnabled && manualRollValue)
@@ -640,6 +650,7 @@ export async function executeDowntime()
                                             else if ((Number(flatOverride) !== 0 || Number(accOverride) !== 0) && Number(staticOverride) === 0)
                                             {
                                                 overrideRoll = true;
+
                                                 if (skillRank)
                                                 {
                                                     rollString = `1d20 + ${2 * (skillRank)} + ${flatRollTerm} + ${accRollTerm}`;
@@ -656,6 +667,7 @@ export async function executeDowntime()
                                                 overrideRoll = true;
                                                 rollString = staticOverride;
                                             }
+
                                             roll = await new Roll(rollString).evaluate();
 
                                             chatMessage.rolls = roll;
@@ -683,12 +695,12 @@ export async function executeDowntime()
                                     }
 
                                     let dialogContent = `
-                                    <div style="margin: 1rem 0; padding: 1rem 1rem 0; background: white; color: #1a1a1a; border: 3px dashed black; font-family: monospace; max-height: calc(85vh - 120px); overflow-y: auto;">
-                                        ${terms === 'diegetic' ? `<p style="margin-bottom: .5rem; margin-top: -10px; font-style:italic; font-size: 10px">Omninet session id: ${sessionId} <span style="color:green">(OPEN)</span></p>` : ''}
-                                        <h2 class="lancer-border-primary" style="color:#1a1a1a;">${pilotData.name}: Downtime Report</h2>
+                                    <div style="margin: 1rem 0; padding: 1rem 1rem 0; background: var(--la-plate); color: var(--la-ink); border: 3px dashed var(--la-ink); font-family: monospace; max-height: calc(85vh - 120px); overflow-y: auto;">
+                                        ${terms === 'diegetic' ? `<p style="margin-bottom: .5rem; margin-top: -10px; font-style:italic; font-size: 10px">Omninet session id: ${sessionId} <span style="color:color-mix(in srgb, green, var(--la-ink) 30%)">(OPEN)</span></p>` : ''}
+                                        <h2 class="lancer-border-primary" style="color:var(--la-ink);">${pilotData.name}: Downtime Report</h2>
                                         ${terms === 'diegetic' ? '<p style="text-align:right; font-style:italic; font-size: 10px">All data indexed and analyzed by UAD ARGUS class NHP</p>' : ''}
                                         <br />
-                                        <h3 class="lancer-border-primary" style="margin-bottom:1rem;color:#1a1a1a;">${missionTermName}: <b>${campaign || 'UNLISTED'}</b></h3>
+                                        <h3 class="lancer-border-primary" style="margin-bottom:1rem;color:var(--la-ink);">${missionTermName}: <b>${campaign || 'UNLISTED'}</b></h3>
                                         <div>
                                             <div style="border-left: 2px; border-left-style: dotted; border-color:var(--primary-color, fuschia); padding-left: .5rem;">
                                                 <p style="margin-bottom:1rem"><b>${locationTermName}</b>: ${location || '<i>unknown</i>'}</p>
@@ -698,7 +710,7 @@ export async function executeDowntime()
                                                 <p style="margin-bottom:1rem"><b>${objectiveTermName}</b>: ${objective || '<i>null</i>'}</p>
 
                                                 <p style="margin-bottom:1rem"><b>${skillTermName}</b>: ${selectedTrigger}</p>
-                                                ${overrideRoll ? '<p class = "horus--subtle" style="color: red"><b>**ALERT:</b> OVERRIDE ENABLED<b>**</b></p>' : ''}
+                                                ${overrideRoll ? '<p class = "horus--subtle" style="color:color-mix(in srgb, red, var(--la-ink) 20%)"><b>**ALERT:</b> OVERRIDE ENABLED<b>**</b></p>' : ''}
                                                 <p style="margin-bottom:1rem"><b>${rollTermName}</b>: <span class="horus--subtle">${rollResult || 'NaN'}</span></p>
                                             </div>
                                             <p><b>${pilotNoteTermName}</b>: <i>${activeOutcome["LongDesc"]}</i></p>
@@ -712,24 +724,25 @@ export async function executeDowntime()
                                                     ${staticOverrideNote && overrideRoll ? '<p style="border: 3px dashed cadetblue; background-color: #5f9ea070; padding:.5rem; margin-top: .5rem;"><b>Override Note:</b>' + staticOverrideNote + '</p>' : ''}
                                             </div>
                                             <br />
-                                            <h3 class="lancer-border-primary" style="color:#1a1a1a;">Downtime Activity Complete.</h3>
+                                            <h3 class="lancer-border-primary" style="color:var(--la-ink);">Downtime Activity Complete.</h3>
                                             <div style="margin-bottom:1rem">
                                                 <p><i>Record any resultant outcomes or consequences, if applicable.</i></p>
-                                                <textarea placeholder="${localize('LA.downtime.ph.summary')}" style="display:inline; width: 100%; height: 100px; background-color: transparent; border: 1px #00000085 solid; border-radius: 3px;" id="pilotEvaluate"></textarea>
+                                                <textarea placeholder="${localize('LA.downtime.ph.summary')}" style="display:inline; width: 100%; height: 100px; background-color: transparent; border: 1px var(--la-edge) solid; border-radius: 3px;" id="pilotEvaluate"></textarea>
                                             </div>
                                             <p style="text-align:center; padding-top:.5rem;"> --- OR --- </p>
                                             <label for="default_override">Static Override Value: </label><input id="staticOverride" style="width:60px;" name="default_override" placeholder="1-100" type="number" min="1" max="100">
-                                            <textarea placeholder="${localize('LA.downtime.ph.fullOverride')}" style="display:inline; width: 100%; height: 50px; background-color: transparent; border: 1px #00000085 solid; border-radius: 3px;margin-top:5px;" type="text" id="staticOverrideNote"></textarea>
+                                            <textarea placeholder="${localize('LA.downtime.ph.fullOverride')}" style="display:inline; width: 100%; height: 50px; background-color: transparent; border: 1px var(--la-edge) solid; border-radius: 3px;margin-top:5px;" type="text" id="staticOverrideNote"></textarea>
                                         </div>
                                     </div>
                                 `;
+
                                     let journalTemplate = `
-                                                        <div style="margin: 1rem 0; padding: 1rem 1rem 0; background: white; color: #1a1a1a; border: 3px dashed black; font-family: monospace; max-width: 800px;">
-                                                        ${terms === 'diegetic' ? `<p style="margin-bottom: .5rem; margin-top: -10px; font-style:italic; font-size: 10px">Omninet session id: ${sessionId} <span style="color: red;">(CLOSED)</span></p>` : ''}
-                                                        <h2 class="lancer-border-primary" style="color:#1a1a1a;">${pilotData.name}: Downtime Report</h2>
+                                                        <div style="margin: 1rem 0; padding: 1rem 1rem 0; background: var(--la-plate); color: var(--la-ink); border: 3px dashed var(--la-ink); font-family: monospace; max-width: 800px;">
+                                                        ${terms === 'diegetic' ? `<p style="margin-bottom: .5rem; margin-top: -10px; font-style:italic; font-size: 10px">Omninet session id: ${sessionId} <span style="color:color-mix(in srgb, red, var(--la-ink) 20%);">(CLOSED)</span></p>` : ''}
+                                                        <h2 class="lancer-border-primary" style="color:var(--la-ink);">${pilotData.name}: Downtime Report</h2>
                                                         ${terms === 'diegetic' ? '<p style="text-align:right; font-style:italic; font-size: 10px">All data indexed and analyzed by UAD ARGUS class NHP</p>' : ''}
                                                         <br />
-                                                        <h3 class="lancer-border-primary" style="margin-bottom:1rem;color:#1a1a1a;">${missionTermName}: <b>${campaign || 'UNLISTED'}</b></h3>
+                                                        <h3 class="lancer-border-primary" style="margin-bottom:1rem;color:var(--la-ink);">${missionTermName}: <b>${campaign || 'UNLISTED'}</b></h3>
                                                         <div>
                                                             <div style="border-left: 2px; border-left-style: dotted; border-color:var(--primary-color, fuschia); padding-left: .5rem;">
                                                                 <p style="margin-bottom:1rem"><b>${locationTermName}</b>: ${location || '<i>unknown</i>'}</p>
@@ -739,7 +752,7 @@ export async function executeDowntime()
                                                                 <p style="margin-bottom:1rem"><b>${objectiveTermName}</b>: ${objective || '<i>null</i>'}</p>
 
                                                                 <p style="margin-bottom:1rem"><b>${skillTermName}</b>: ${selectedTrigger}</p>
-                                                                ${overrideRoll ? '<p class = "horus--subtle" style="color: red"><b>**ALERT:</b> OVERRIDE ENABLED<b>**</b></p>' : ''}
+                                                                ${overrideRoll ? '<p class = "horus--subtle" style="color:color-mix(in srgb, red, var(--la-ink) 20%)"><b>**ALERT:</b> OVERRIDE ENABLED<b>**</b></p>' : ''}
                                                                 <p style="margin-bottom:1rem"><b>${rollTermName}</b>: <span class="horus--subtle">${rollResult || 'Indeterminate'}</span></p>
                                                             </div>
                                                             <p><b>${pilotNoteTermName}</b>: <i>${activeOutcome["LongDesc"]}</i></p>
@@ -753,12 +766,12 @@ export async function executeDowntime()
                                                             </div>
                                                             <br />
                                                             <div style="margin-bottom:1rem">
-                                                                <h3 class="lancer-border-primary" style="color:#1a1a1a;">NET ASSET REPORT</h3>
+                                                                <h3 class="lancer-border-primary" style="color:var(--la-ink);">NET ASSET REPORT</h3>
                                                                 <p><b>${outcomeTermName}</b>:</p>
                                                                 <div style="border-left: 2px; border-left-style: dotted; border-color:var(--primary-color, fuschia); padding-left: .5rem;">{{PILOT_EVALUATE}}</div>
                                                             </div>
                                                             <div style="margin-bottom: 1rem;">
-                                                                <h3 style="border:none;color:#1a1a1a;">Requisitions Evaluation</h3>
+                                                                <h3 style="border:none;color:var(--la-ink);">Requisitions Evaluation</h3>
                                                                 <p style="font-size:10px;" class="horus--subtle"><i>${gmNoteTermName}</i></p>
                                                                 <div style="min-height: 100px; border: 5px dashed cadetblue; background-color: #5f9ea070">
                                                                     <p style="margin: 1rem"><i>Enter evaluated asset losses or requisitions here. Include personnel assets, liquid assets, organization or institutional assets, and physical assets garnered from this activity. Also include intelligence on tracked projects (if applicable)${terms === 'diegetic' ? ' for classification by UAD Predictive Model NHPs.' : '.'}</i></p>
@@ -819,6 +832,7 @@ export async function createDowntimeJournalEntry(pilotName, pageContent, request
 {
     const journalFolderName = "Downtime Journal";
     let journalFolder = game.folders.getName(journalFolderName);
+
     if (!journalFolder)
     {
         try
@@ -831,8 +845,10 @@ export async function createDowntimeJournalEntry(pilotName, pageContent, request
             return;
         }
     }
+
     const journalName = `Downtime_Journal.LOG//${String(pilotName).replaceAll(' ', '-')}`;
     let journal = game.journal.getName(journalName);
+
     if (!journal)
     {
         try
@@ -848,6 +864,7 @@ export async function createDowntimeJournalEntry(pilotName, pageContent, request
     }
     else if (requestingUserId && (journal.ownership?.[requestingUserId] ?? 0) < 3)
         await journal.update({ [`ownership.${requestingUserId}`]: 3 });
+
     const pageName = `DOWNTIME-ENTRY.${journal.pages.size + 1}//${String(pilotName).replaceAll(' ', '-')}`;
     const page = await JournalEntryPage.create({ name: pageName, type: "text", text: { content: pageContent } }, { parent: journal });
 
@@ -882,6 +899,7 @@ export function showDowntimeJournalPopup(pageUuid, pageName)
         {
             const root = html?.[0] ?? html;
             const link = root?.querySelector?.('.la-dt-journal-link');
+
             if (link)
             {
                 link.addEventListener('click', async () =>
@@ -893,6 +911,7 @@ export function showDowntimeJournalPopup(pageUuid, pageName)
             }
         }
     }, { classes: ['lancer-dialog-base', 'lancer-no-title'] });
+
     dialog.render(true);
 }
 

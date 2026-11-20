@@ -96,6 +96,7 @@ nav:
       - Vision: feature/VISION.md
       - Wrecks: feature/WRECK.md
       - Battle Log: feature/BATTLE_LOG.md
+      - Clocks: feature/CLOCKS.md
       - System Additions: feature/SYSTEM_ADDITIONS.md
       - Setup & Tools: feature/SETUP_AND_TOOLS.md
       - Infection: feature/INFECTION.md
@@ -114,3 +115,4 @@ nav:
       - Movement: API_MOVEMENT.md
       - Token Display: API_TOKEN_DISPLAY.md
       - How-To: API_HOWTO.md
+  - Support & Credits: supporters.md

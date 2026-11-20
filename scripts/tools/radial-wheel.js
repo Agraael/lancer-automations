@@ -48,6 +48,7 @@ export function closeRadialWheel({ silent = false } = {})
         return;
     if (!silent)
         playUiSound('details');
+
     const el = _wheelEl;
     el.classList.add('closing');
     setTimeout(() => el.remove(), 120);
@@ -59,11 +60,13 @@ export function closeRadialWheel({ silent = false } = {})
     _onPageChange = null;
     if (_onKey)
         document.removeEventListener('keydown', _onKey, true);
+
     if (_onClickOutside)
     {
         document.removeEventListener('mousedown', _onClickOutside, true);
         document.removeEventListener('pointerdown', _onClickOutside, true);
     }
+
     if (_onMouseUp)
         document.removeEventListener('pointerup', _onMouseUp, true);
     if (_onMouseMove)
@@ -99,6 +102,7 @@ function layoutWheel()
 {
     if (!_wheelEl || (!_token && !_anchor))
         return;
+
     const { x: centerX, y: centerY } = _token ? tokenScreenCenter(_token) : _anchor;
     const scale = canvas.stage.scale.x || 1;
     const tokenDim = _token ? Math.max(_token.w ?? 0, _token.h ?? 0) * scale : 0;
@@ -124,6 +128,7 @@ function layoutWheel()
         button.style.transform = `translate(calc(${offsetX}px - 50%), calc(${offsetY}px - 50%))`;
         _positions.push({ x: offsetX, y: offsetY });
     });
+
     const ringRadius = outerCount > 0 ? outerRadius : innerRadius;
     _boundRadius = (ringRadius + SELECT_BOUND_EXTRA) * SELECT_BOUND_SCALE;
     if (_labelEl)
@@ -140,8 +145,10 @@ function buildChips()
     _chipsEl = null;
     if (!_wheelEl || _pageCount < 2)
         return;
+
     const chips = document.createElement('div');
     chips.className = 'lancer-rw-pages';
+
     for (let page = 1; page <= _pageCount; page++)
     {
         const chip = document.createElement('i');
@@ -149,6 +156,7 @@ function buildChips()
             chip.className = 'on';
         chips.appendChild(chip);
     }
+
     _wheelEl.appendChild(chips);
     _chipsEl = chips;
 }
@@ -157,6 +165,7 @@ function setHover(index)
 {
     if (index === _hoverIndex || !_wheelEl)
         return;
+
     const previous = _items[_hoverIndex];
     _hoverIndex = index;
     for (let btnIndex = 0; btnIndex < _buttons.length; btnIndex++)
@@ -164,6 +173,7 @@ function setHover(index)
     previous?.onHoverChange?.(false);
     const hovered = _items[index];
     hovered?.onHoverChange?.(true);
+
     if (_labelEl)
     {
         _labelEl.textContent = hovered?.title ?? '';
@@ -171,6 +181,7 @@ function setHover(index)
         if (hovered)
             shrinkLabelToLines();
     }
+
     if (index >= 0)
         playUiSound('statusHover');
 }
@@ -193,12 +204,14 @@ function commitItem(index)
         return;
     playUiSound('toggle');
     _buttons[index]?.classList.add('validated');
+
     // Wheels of toggles stay up so a handful can be set in one open.
     if (item.keepOpen)
     {
         item.onSelect();
         return;
     }
+
     setTimeout(() =>
     {
         closeRadialWheel({ silent: true });
@@ -260,23 +273,27 @@ export function refreshRadialWheel(items, { page = null, pageCount = null } = {}
 {
     if (!_wheelEl)
         return;
+
     if (!items?.length)
     {
         closeRadialWheel();
         return;
     }
+
     if (pageCount !== null)
         _pageCount = pageCount;
     if (page !== null)
         _page = page;
     if (page !== null || pageCount !== null)
         buildChips();
+
     const previousHover = _hoverIndex;
     _items[_hoverIndex]?.onHoverChange?.(false);
     // Existing buttons are repainted rather than replaced: fresh nodes replay the wheel's entry
     // animation and a refresh would look like a reopen.
     while (_buttons.length > items.length)
         _buttons.pop().remove();
+
     while (_buttons.length < items.length)
     {
         const button = createButton(items[_buttons.length], _buttons.length);
@@ -286,17 +303,20 @@ export function refreshRadialWheel(items, { page = null, pageCount = null } = {}
         else
             _wheelEl.appendChild(button);
     }
+
     _items = items;
     _hoverIndex = -1;
     _buttons.forEach((button, flatIndex) => paintButton(button, items[flatIndex]));
     if (_labelEl)
         _labelEl.style.display = 'none';
     layoutWheel();
+
     if (previousHover >= 0 && previousHover < _items.length)
     {
         _hoverIndex = previousHover;
         _buttons[previousHover].classList.add('hover');
         _items[previousHover]?.onHoverChange?.(true);
+
         if (_labelEl)
         {
             _labelEl.textContent = _items[previousHover]?.title ?? '';
@@ -306,7 +326,7 @@ export function refreshRadialWheel(items, { page = null, pageCount = null } = {}
     }
 }
 
-export function openRadialWheel({ token, anchor = null, items, rootClass = '', showLabel = false, onClose = null,
+export function openRadialWheel({ token = null, anchor = null, items, rootClass = '', showLabel = false, onClose = null,
     pageCount = 1, page = 1, onPageChange = null })
 {
     closeRadialWheel({ silent: true });
@@ -350,12 +370,14 @@ export function openRadialWheel({ token, anchor = null, items, rootClass = '', s
     {
         if (!_wheelEl)
             return;
+
         _onKey = (event) =>
         {
             if (event.key === 'Escape')
             {
                 event.preventDefault(); closeRadialWheel(); return;
             }
+
             // Tab belongs to the wheel for as long as it is open, so token cycling never sees it.
             if (event.key === 'Tab')
             {
@@ -365,6 +387,7 @@ export function openRadialWheel({ token, anchor = null, items, rootClass = '', s
                     _onPageChange?.(_page % _pageCount + 1);
             }
         };
+
         _onClickOutside = (event) =>
         {
             if (!_center)
@@ -374,6 +397,7 @@ export function openRadialWheel({ token, anchor = null, items, rootClass = '', s
                 return;
             if (/** @type {HTMLElement} */ (event.target)?.closest?.('.la-hud-popup, #la-hud'))
                 return;
+
             // Right button passes through untouched so canvas pan can start, close decided at release.
             if (event.button !== 0)
             {
@@ -381,57 +405,72 @@ export function openRadialWheel({ token, anchor = null, items, rootClass = '', s
                     _rightPress = { x: event.clientX, y: event.clientY, time: Date.now() };
                 return;
             }
+
             event.preventDefault();
             event.stopPropagation();
             event.stopImmediatePropagation();
+
             if (_hoverIndex >= 0 && _items[_hoverIndex])
             {
                 commitItem(_hoverIndex);
                 return;
             }
+
             closeRadialWheel();
         };
+
         _onMouseUp = (event) =>
         {
             if (event.button !== 2 || !_rightPress)
                 return;
+
             const press = _rightPress;
             _rightPress = null;
             const moved = Math.hypot(event.clientX - press.x, event.clientY - press.y);
             if (Date.now() - press.time >= SHORT_CLICK_MS || moved >= SHORT_CLICK_DIST)
                 return;
+
             if (_hoverIndex >= 0 && _items[_hoverIndex]?.onRightClick)
             {
                 rightClickItem(_hoverIndex);
                 return;
             }
+
             closeRadialWheel();
         };
+
         _onMouseMove = (event) =>
         {
             if (!_center)
                 return;
+
             const cursorX = event.clientX - _center.x;
             const cursorY = event.clientY - _center.y;
             const reach = Math.hypot(cursorX, cursorY);
+
             if (reach < HOVER_DEAD_ZONE || reach > _boundRadius)
             {
                 setHover(-1);
                 return;
             }
+
             let nearest = -1;
             let nearestDist = Infinity;
+
             for (let posIndex = 0; posIndex < _positions.length; posIndex++)
             {
                 const dist = Math.hypot(cursorX - _positions[posIndex].x, cursorY - _positions[posIndex].y);
+
                 if (dist < nearestDist)
                 {
                     nearestDist = dist;
                     nearest = posIndex;
                 }
             }
+
             setHover(nearest);
         };
+
         document.addEventListener('keydown', _onKey, true);
         document.addEventListener('mousedown', _onClickOutside, true);
         document.addEventListener('pointerdown', _onClickOutside, true);

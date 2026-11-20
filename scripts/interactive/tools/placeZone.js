@@ -15,6 +15,7 @@ import {
 } from "../canvas-helpers.js";
 import { playTargetingMove, playUiSound } from "../../tah/sound.js";
 import { getLAFlag, setLAFlag } from "../../tools/flag-utils.js";
+import { deleteRouted } from "../../tools/routed-update.js";
 import { rangePulse, RANGE_PULSE_PRIORITY } from "../range-pulse-manager.js";
 import { getHexGroundElevation } from "../../combat/terrain-utils.js";
 
@@ -35,6 +36,7 @@ export function tokensInTemplate(templateOrResult)
     const doc = templateOrResult?.template   // placeZone result: { x, y, template }
         ?? templateOrResult?.document        // placeable -> its document
         ?? templateOrResult;                 // already a document
+
     const tmApi = game.modules.get('templatemacro')?.api;
     if (!tmApi?.findContained || !doc)
         return [];
@@ -54,9 +56,57 @@ export function tokensInTemplate(templateOrResult)
  */
 export async function placeZone(casterToken, options = {})
 {
+    const { key = null, replace = false, expires } = /** @type {any} */ (options);
+    if (key && replace)
+        await clearZones(casterToken, key);
+
     const results = await _placeZoneInner(casterToken, options);
-    await _applyZoneExpiry(results, casterToken, /** @type {any} */ (options).expires);
+    await _applyZoneExpiry(results, casterToken, expires);
+    await _applyZoneKey(results, casterToken, key);
     return results;
+}
+
+async function _applyZoneKey(results, casterToken, key)
+{
+    if (!key || !casterToken?.id || !results?.length)
+        return;
+
+    for (const placed of results)
+    {
+        if (placed?.template?.setFlag)
+            await setLAFlag(placed.template,'zoneKey', { key, tokenId: casterToken.id });
+    }
+}
+
+/**
+ * Zones `owner` placed with `placeZone({ key })` on the current scene.
+ * @param {Token|TokenDocument} owner
+ * @param {string} key
+ * @returns {any[]} Template documents
+ */
+export function findZones(owner, key)
+{
+    if (!owner?.id || !key)
+        return [];
+    return Array.from(canvas.scene?.templates ?? []).filter(template =>
+    {
+        const zone = getLAFlag(template,'zoneKey');
+        return zone?.key === key && zone.tokenId === owner.id;
+    });
+}
+
+/**
+ * Delete the zones `findZones` returns.
+ * @param {Token|TokenDocument} owner
+ * @param {string} key
+ * @returns {Promise<number>} How many were deleted
+ */
+export async function clearZones(owner, key)
+{
+    const zones = findZones(owner, key);
+    for (const zone of zones)
+        await deleteRouted(zone);
+    return zones.length;
 }
 
 // expires: { on: 'ownerTurnStart' | 'ownerTurnEnd', originToken?, turns? } - template auto-deletes
@@ -65,8 +115,10 @@ async function _applyZoneExpiry(results, casterToken, expires)
 {
     if (!expires?.on || !results?.length)
         return;
+
     const originId = expires.originToken?.id ?? expires.originToken ?? casterToken?.id ?? null;
     const remaining = Math.max(1, Number(expires.turns) || 1);
+
     for (const placed of results)
     {
         if (placed?.template?.setFlag)
@@ -78,25 +130,31 @@ Hooks.on('combatTurnChange', async (combat, prior, current) =>
 {
     if (!isExecutorGM())
         return;
+
     const priorTokenId = prior?.combatantId ? combat.combatants.get(prior.combatantId)?.token?.id : null;
     const currentTokenId = current?.combatantId ? combat.combatants.get(current.combatantId)?.token?.id : null;
     const expired = [];
     const ticked = [];
+
     for (const template of (canvas.scene?.templates ?? []))
     {
         const expiry = getLAFlag(template,'zoneExpires');
         if (!expiry?.on)
             continue;
+
         const hit = (expiry.on === 'ownerTurnStart' && expiry.tokenId === currentTokenId)
             || (expiry.on === 'ownerTurnEnd' && expiry.tokenId === priorTokenId);
+
         if (!hit)
             continue;
+
         const remaining = (Number(expiry.remaining) || 1) - 1;
         if (remaining <= 0)
             expired.push(template);
         else
             ticked.push({ template, expiry: { ...expiry, remaining } });
     }
+
     for (const template of expired)
         await template.delete().catch(() => {});
     for (const entry of ticked)
@@ -112,6 +170,7 @@ async function _placeZoneInner(casterToken, options = {})
     {
         const library = /** @type {any[]} */ (game.settings.get('templatemacro', 'templateLibrary') ?? []);
         const entry = library.find(candidate => candidate.id === _opts.preset || candidate.name === _opts.preset);
+
         if (entry?.graphicsState)
             _opts.tmacGraphics = { ...foundry.utils.deepClone(entry.graphicsState), ..._opts.tmacGraphics };
         else
@@ -136,29 +195,36 @@ async function _placeZoneInner(casterToken, options = {})
     if (_opts.x !== undefined && _opts.y !== undefined)
     {
         const templateMacroApi = game.modules.get('templatemacro')?.api;
+
         if (templateMacroApi?.placeZone)
         {
             const result = await templateMacroApi.placeZone(options, _opts.hooks ?? {});
+
             if (result && _opts.attachToToken)
             {
                 const tokenDoc = _opts.attachToToken instanceof TokenDocument ? _opts.attachToToken : canvas.scene.tokens.get(_opts.attachToToken);
                 if (tokenDoc && templateMacroApi.attachTemplateToToken)
                     await templateMacroApi.attachTemplateToToken(result, tokenDoc);
             }
+
             return result ? [result] : null;
         }
+
         // Fallback: no templatemacro
         const templatePreview = game.lancer.canvas.WeaponRangeTemplate.fromRange({ type: _opts.type ?? "Blast", val: _opts.size ?? 1 });
         const baseData = templatePreview.document?.toObject() ?? {};
+
         const [created] = await canvas.scene.createEmbeddedDocuments("MeasuredTemplate", [{
             ...baseData,
             x: _opts.x,
             y: _opts.y,
             user: game.user.id
         }]);
+
         if (created && _opts.attachToToken)
         {
             const tokenDoc = _opts.attachToToken instanceof TokenDocument ? _opts.attachToToken : canvas.scene.tokens.get(_opts.attachToToken);
+
             if (tokenDoc)
             {
                 const tmApi = game.modules.get('templatemacro')?.api;
@@ -166,6 +232,7 @@ async function _placeZoneInner(casterToken, options = {})
                     await tmApi.attachTemplateToToken({ template: created }, tokenDoc);
             }
         }
+
         return created ? [{ x: created.x, y: created.y, template: created }] : null;
     }
 
@@ -196,20 +263,24 @@ async function _placeZoneInner(casterToken, options = {})
         let confirmed = false;
         let autoElev = autoElevation !== false;
         const casterElev = Number(casterToken?.document?.elevation) || 0;
+
         const groundAt = (x, y) =>
         {
             const terrainAPI = globalThis.terrainHeightTools;
             if (!terrainAPI)
                 return 0;
+
             const offset = pixelToOffset(x, y);
             return Number(getHexGroundElevation(offset.col, offset.row, terrainAPI)) || 0;
         };
+
         const zoneElevation = (x, y) => (autoElev ? groundAt(x, y) : casterElev);
 
         // rangeOrigin can be a {x, y} point to override the default casterToken origin
         const rangeAnchor = rangeOrigin || casterToken;
         const anchorIsPoint = rangeAnchor && !rangeAnchor.document && typeof rangeAnchor.x === 'number' && typeof rangeAnchor.y === 'number';
         let losOn = optLos === null ? true : !!optLos;
+
         const rebuildZonePulse = () =>
         {
             if (range === null || !rangeAnchor)
@@ -222,6 +293,7 @@ async function _placeZoneInner(casterToken, options = {})
                 ),
             });
         };
+
         rebuildZonePulse();
 
         const restoreLayerClick = suppressTokenLayerClick();
@@ -234,6 +306,7 @@ async function _placeZoneInner(casterToken, options = {})
         };
 
         const templateMacroApi = game.modules.get('templatemacro')?.api;
+
         const doCleanup = () =>
         {
             templateMacroApi?.setPreviewElevationBase?.(null);
@@ -288,12 +361,15 @@ async function _placeZoneInner(casterToken, options = {})
         {
             const view = /** @type {any} */ (canvas.app?.view);
             const lancerCancel = view?.oncontextmenu;
+
             if (!view || typeof lancerCancel !== 'function')
                 return placePromise;
+
             view.oncontextmenu = (ev) =>
             {
                 ev?.preventDefault?.();
             };
+
             const onKey = (ev) =>
             {
                 if (ev.key !== 'Escape')
@@ -303,6 +379,7 @@ async function _placeZoneInner(casterToken, options = {})
                 globalThis.removeEventListener('keydown', onKey, true);
                 lancerCancel(ev);
             };
+
             globalThis.addEventListener('keydown', onKey, true);
             return placePromise.finally(() => globalThis.removeEventListener('keydown', onKey, true));
         };
@@ -321,6 +398,7 @@ async function _placeZoneInner(casterToken, options = {})
                 onDeleteZone: async (idx) =>
                 {
                     const removed = placedZones.splice(idx, 1);
+
                     if (removed[0]?.template)
                     {
                         try
@@ -330,6 +408,7 @@ async function _placeZoneInner(casterToken, options = {})
                         catch (_)
                         { /* ignore */ }
                     }
+
                     refreshZoneCard();
                 }
             });
@@ -339,16 +418,20 @@ async function _placeZoneInner(casterToken, options = {})
         const placeOne = async () =>
         {
             templateMacroApi?.setPreviewElevationBase?.((doc) => zoneElevation(doc.x, doc.y));
+
             const onMove = (e) =>
             {
                 const { x, y } = pointerToWorld(e);
                 const offset = pixelToOffset(x, y);
                 playTargetingMove(offset.col, offset.row);
             };
+
             canvas.stage.on('pointermove', onMove);
+
             try
             {
                 const templateMacroApi = game.modules.get('templatemacro')?.api;
+
                 if (templateMacroApi?.placeZone)
                 {
                     const zoneResult = await withEscOnlyCancel(templateMacroApi.placeZone(options, hooks));
@@ -356,8 +439,10 @@ async function _placeZoneInner(casterToken, options = {})
                         playUiSound('targetingConfirm');
                     return zoneResult;
                 }
+
                 const templatePreview = game.lancer.canvas.WeaponRangeTemplate.fromRange({ type, val: size });
                 const template = await withEscOnlyCancel(templatePreview.placeTemplate());
+
                 if (!template)
                     return null;
                 playUiSound('targetingConfirm');
@@ -400,12 +485,14 @@ async function _placeZoneInner(casterToken, options = {})
                     resolve(null);
                     return;
                 }
+
                 if (confirmed)
                 {
                     doCleanup();
                     resolve(placedZones);
                     return;
                 }
+
                 // Idle: nothing to place right now, wait for Place / Confirm / Cancel.
                 if (!placing || !canPlaceMore())
                 {
@@ -437,11 +524,13 @@ async function _placeZoneInner(casterToken, options = {})
                         catch (_)
                         { /* ignore */ }
                     }
+
                     await deleteAll();
                     doCleanup();
                     resolve(null);
                     return;
                 }
+
                 if (confirmed)
                 {
                     doCleanup();
@@ -460,11 +549,13 @@ async function _placeZoneInner(casterToken, options = {})
                 {
                     const origin = rangeOrigin || casterToken;
                     let dist;
+
                     if (origin.document)
                     {
                         // Token origin: measure from nearest occupied hex (matches highlight)
                         const pointOffset = pixelToOffset(result.x, result.y);
                         const offsets = getOccupiedOffsets(origin);
+
                         if (isHexGrid())
                         {
                             const pointCube = offsetToCube(pointOffset.col, pointOffset.row);
@@ -478,6 +569,7 @@ async function _placeZoneInner(casterToken, options = {})
                         // Point origin: simple grid distance
                         dist = Math.round(canvas.grid.measurePath([origin, { x: result.x, y: result.y }]).distance / canvas.dimensions.distance);
                     }
+
                     if (dist > range)
                     {
                         await result.template.delete();
@@ -491,6 +583,7 @@ async function _placeZoneInner(casterToken, options = {})
                 if (_opts.attachToToken && result.template)
                 {
                     const tokenDoc = _opts.attachToToken instanceof TokenDocument ? _opts.attachToToken : canvas.scene.tokens.get(_opts.attachToToken);
+
                     if (tokenDoc)
                     {
                         const tmApi = game.modules.get('templatemacro')?.api;

@@ -46,6 +46,7 @@ Hooks.on('deleteCombat', (combat) =>
         return;
     if (!battleLogEnabled())
         return;
+
     const telemetry = consumeCombatTelemetry(combat.id);
     if (!telemetry)
         return;

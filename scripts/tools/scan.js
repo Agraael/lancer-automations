@@ -2,7 +2,7 @@
 
 import * as actionFX from '../fx/actionFX.js';
 import { getModuleSetting } from './settings-utils.js';
-import { localize, localizeFormat } from './string-utils.js';
+import { localize, localizeFormat, signedNumber } from './string-utils.js';
 import { cancelButton } from './dialog-utils.js';
 import { getLAFlags } from './flag-utils.js';
 import { MODULE_ID } from './constants.js';
@@ -44,11 +44,14 @@ function _fmtTags(tags)
     return tags.map((tag) =>
     {
         const baseName = tag.name ?? tag.lid?.replace(/^tg_/, '') ?? '';
+
         const name = tag.val !== undefined && tag.val !== null && String(tag.val).length
             ? baseName.replace('{VAL}', tag.val)
             : baseName;
+
         if (!name)
             return null;
+
         const rawDesc = String(tag.description ?? '').replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
         const description = rawDesc.replace('{VAL}', tag.val ?? '');
         return { name, description, lid: tag.lid ?? '' };
@@ -86,9 +89,11 @@ function _buildMechWeapon(slot)
     const weaponData = slot.weapon?.value;
     if (!weaponData)
         return null;
+
     const profile = weaponData.system.profiles?.[weaponData.system.selected_profile_index || 0];
     if (!profile)
         return null;
+
     const weaponEntry = {
         name: weaponData.name,
         subtitle: [weaponData.system.size, profile.type].filter(Boolean).join(' · '),
@@ -101,6 +106,7 @@ function _buildMechWeapon(slot)
         unloaded: weaponData.system.tags?.some((tag) => tag.is_loading) && !weaponData.system.loaded,
         uses: weaponData.system.uses?.max > 0 ? `${weaponData.system.uses.value}/${weaponData.system.uses.max}` : null,
     };
+
     if (slot.mod?.value)
     {
         const modItem = slot.mod.value;
@@ -111,6 +117,7 @@ function _buildMechWeapon(slot)
             actions: _formatActions(modItem.system.actions),
         };
     }
+
     return weaponEntry;
 }
 
@@ -169,6 +176,7 @@ function _buildTalent(talent)
 {
     const talentSystem = talent.system ?? {};
     const currRank = talentSystem.curr_rank ?? 0;
+
     const ranks = (talentSystem.ranks ?? []).map((rank, i) => ({
         index: i + 1,
         name: rank?.name || '',
@@ -176,6 +184,7 @@ function _buildTalent(talent)
         actions: _formatActions(rank?.actions ?? []),
         acquired: i < currRank,
     }));
+
     return {
         name: talent.name,
         currRank,
@@ -188,6 +197,7 @@ function _buildNpcFeature(item, tier)
     const isExoticUnknown = item.system.origin?.name === 'EXOTIC' && !item.system.origin.base;
     if (isExoticUnknown)
         return { isExoticUnknown: true, name: 'UNKNOWN EXOTIC SYSTEM', description: '???' };
+
     let desc = item.system.effect || 'No description given.';
     if (item.system.trigger)
         desc = `<strong>Trigger:</strong> ${item.system.trigger}<br>${desc}`;
@@ -204,6 +214,7 @@ function _buildNpcWeapon(item, tier)
     const isExoticUnknown = item.system.origin?.name === 'EXOTIC' && !item.system.origin.base;
     if (isExoticUnknown)
         return { isExoticUnknown: true, name: 'UNKNOWN EXOTIC WEAPON' };
+
     const tierIdx = (tier || 1) - 1;
     const attackBonus = item.system.attack_bonus?.[tierIdx];
     const accuracy = item.system.accuracy?.[tierIdx];
@@ -211,7 +222,7 @@ function _buildNpcWeapon(item, tier)
         isExoticUnknown: false,
         name: item.name,
         attackBonus: attackBonus !== undefined ? `+${attackBonus}` : '',
-        accuracyText: accuracy ? `${accuracy > 0 ? '+' : ''}${accuracy} ${accuracy > 0 ? 'ACC' : 'DIFF'}` : '',
+        accuracyText: accuracy ? `${signedNumber(accuracy)} ${accuracy > 0 ? 'ACC' : 'DIFF'}` : '',
         ranges: _fmtRanges(item.system.range),
         damages: _fmtDamages(item.system.damage?.[tierIdx]),
         tags: _fmtTags(item.system.tags),
@@ -233,12 +244,15 @@ function _scanningUserFromToken(token)
     const actor = token?.actor;
     if (!actor)
         return null;
+
     const OWNER = CONST.DOCUMENT_OWNERSHIP_LEVELS.OWNER;
     const ownership = actor.ownership ?? {};
+
     const candidates = Object.entries(ownership)
         .filter(([uid, lvl]) => uid !== 'default' && Number(lvl) >= OWNER)
         .map(([uid]) => game.users.get(uid))
         .filter((user) => user && !user.isGM);
+
     if (!candidates.length)
         return null;
     return candidates.find((user) => user.active) ?? candidates[0];
@@ -248,6 +262,7 @@ function _defaultOwnershipForScan(user = game.user, scanningToken = null)
 {
     const OWNER = CONST.DOCUMENT_OWNERSHIP_LEVELS.OWNER;
     const NONE = CONST.DOCUMENT_OWNERSHIP_LEVELS.NONE;
+
     // GM with a player-owned token controlled: treat that player as the scanner
     if (user?.isGM && scanningToken)
     {
@@ -255,15 +270,19 @@ function _defaultOwnershipForScan(user = game.user, scanningToken = null)
         if (tokenOwner)
             user = tokenOwner;
     }
+
     if (user?.isGM)
         return { default: OWNER };
+
     const mode = getModuleSetting('scanPlayerOwnershipMode') || 'all';
     if (mode === 'all')
         return { default: OWNER };
+
     if (mode === 'group' && game.modules.get('player-groups')?.active)
     {
         const ownership = { default: NONE };
         const groups = game.settings.get('player-groups', 'groups') ?? {};
+
         for (const group of Object.values(groups))
         {
             if (!Array.isArray(group?.members) || !group.members.includes(user?.id))
@@ -271,10 +290,12 @@ function _defaultOwnershipForScan(user = game.user, scanningToken = null)
             for (const uid of group.members)
                 ownership[uid] = OWNER;
         }
+
         if (user?.id)
             ownership[user.id] = OWNER;
         return ownership;
     }
+
     const ownership = { default: NONE };
     if (user?.id)
         ownership[user.id] = OWNER;
@@ -288,14 +309,18 @@ function _ownershipSummary(ownership)
         return 'No ownership set.';
     if (ownership.default === OWNER)
         return 'Owner: all players';
+
     const ownerIds = Object.entries(ownership)
         .filter(([uid, lvl]) => uid !== 'default' && lvl === OWNER)
         .map(([uid]) => uid);
+
     if (!ownerIds.length)
         return 'Owner: nobody (GM only)';
+
     const names = ownerIds
         .map((id) => game.users.get(id)?.name)
         .filter(Boolean);
+
     if (!names.length)
         return 'Owner: (unknown)';
     if (names.length === 1)
@@ -308,15 +333,18 @@ function _getOwnerRows()
     const rows = [
         { kind: 'all', id: 'default', key: 'default', name: 'All Players', isAll: true },
     ];
+
     if (game.modules.get('player-groups')?.active)
     {
         const groups = game.settings.get('player-groups', 'groups') ?? {};
+
         for (const group of Object.values(groups))
         {
             if (group?.id)
                 rows.push({ kind: 'group', id: group.id, key: `g-${group.id}`, name: group.name || 'Unnamed Group', isGroup: true });
         }
     }
+
     for (const user of game.users.filter((candidateUser) => !candidateUser.isGM))
         rows.push({ kind: 'user', id: user.id, key: `u-${user.id}`, name: user.name });
     return rows;
@@ -332,9 +360,11 @@ function _buildOwnershipFromForm(html)
         const raw = String(this.value ?? '');
         if (raw === '')
             return;
+
         const lvl = Number(raw);
         const kind = this.dataset.kind;
         const id = this.dataset.id;
+
         if (kind === 'all')
             ownership.default = lvl;
         else if (kind === 'group')
@@ -342,9 +372,11 @@ function _buildOwnershipFromForm(html)
         else if (kind === 'user')
             userPicks[id] = lvl;
     });
+
     if (groupPicks.length)
     {
         const groups = game.settings.get('player-groups', 'groups') ?? {};
+
         for (const { id, lvl } of groupPicks)
         {
             for (const uid of groups[id]?.members ?? [])
@@ -354,6 +386,7 @@ function _buildOwnershipFromForm(html)
             }
         }
     }
+
     for (const [uid, lvl] of Object.entries(userPicks))
         ownership[uid] = lvl;
     return ownership;
@@ -402,6 +435,7 @@ function _buildScanData(target, customName = '', scanIndex = '')
 
         scanData.coreBonuses = [];
         scanData.talents = [];
+
         if (pilotActor?.items)
         {
             for (const coreBonus of pilotActor.items.filter((item) => item.type === 'core_bonus'))
@@ -415,29 +449,35 @@ function _buildScanData(target, customName = '', scanIndex = '')
 
         scanData.weapons = [];
         scanData.mounts = [];
+
         for (const mount of actor.system.loadout.weapon_mounts ?? [])
         {
             const mountWeapons = [];
+
             for (const slot of mount.slots ?? [])
             {
                 const builtWeapon = _buildMechWeapon(slot);
+
                 if (builtWeapon)
                 {
                     scanData.weapons.push(builtWeapon);
                     mountWeapons.push(builtWeapon);
                 }
             }
+
             if (mountWeapons.length)
                 scanData.mounts.push({ type: mount.type || 'Mount', weapons: mountWeapons });
         }
 
         const allSystems = [];
+
         for (const sysSlot of actor.system.loadout.systems ?? [])
         {
             const builtSystem = _buildMechSystem(sysSlot);
             if (builtSystem)
                 allSystems.push(builtSystem);
         }
+
         scanData.systems = allSystems.filter((entry) => !entry.isTech);
         scanData.techSystems = allSystems.filter((entry) => entry.isTech);
 
@@ -460,12 +500,14 @@ function _buildScanData(target, customName = '', scanIndex = '')
         const features = items.filter((item) => item.is_npc_feature());
         const tier = actor.system.tier;
         const origins = [];
+
         for (const feature of features)
         {
             const originName = feature.system.origin?.name;
             if (originName && !origins.includes(originName))
                 origins.push(originName);
         }
+
         scanData.npcFeatureGroups = origins.map((origin) =>
         {
             const inOrigin = features.filter((feature) => feature.system.origin?.name === origin);
@@ -528,6 +570,7 @@ function _buildScanData(target, customName = '', scanIndex = '')
         pct: opts.max ? Math.max(0, Math.min(100, ((Number(value) || 0) / opts.max) * 100)) : 0,
         icon: getStatIcon(label),
     });
+
     // Lancer caps live on either .max or .value; take the larger.
     const cap = (statField) => Math.max(Number(statField?.max) || 0, Number(statField?.value) || 0);
     scanData.journalStats = [
@@ -566,12 +609,15 @@ export async function performSystemScan(target, createJournal = false, customNam
     const actor = target.actor;
     if (!actor)
         return;
+
     const Flow = /** @type {any} */ (game).lancer?.flows?.get('ScanFlow');
+
     if (!Flow)
     {
         ui.notifications.error(localize('LA.notify.scanFlowNotRegistered'));
         return;
     }
+
     const flow = new Flow(actor.uuid, { target });
     flow.state.data.la_customName = customName;
     flow.state.data.la_ownership = ownership;
@@ -589,15 +635,19 @@ export async function createScanJournalEntry(target, customName = '', ownership 
         ui.notifications.error(localizeFormat('LA.notify.scanJournalNoPermission', { name: game.user.name }));
         return null;
     }
+
     const actor = target.actor;
     if (!actor)
         return null;
+
     const Flow = /** @type {any} */ (game).lancer?.flows?.get('ScanFlow');
+
     if (!Flow)
     {
         ui.notifications.error(localize('LA.notify.scanFlowNotRegistered'));
         return null;
     }
+
     const flow = new Flow(actor.uuid, { target });
     flow.state.data.la_customName = customName;
     flow.state.data.la_ownership = ownership;
@@ -609,12 +659,15 @@ export async function createScanJournalEntry(target, customName = '', ownership 
     // LA-mode stashes the index/uuid directly on state from _createLAJournalEntry
     if (flow.state.data.la_useCustomJournal && flow.state.data.la_journalUuid)
         return { scanIndex: flow.state.data.la_scanIndex || '', uuid: flow.state.data.la_journalUuid };
+
     const folder = game.folders.getName(FOLDER_NAME);
     if (!folder)
         return null;
+
     const matching = _getAllJournalsInFolder(folder).filter((entry) => entry.name.includes(actor.name) && entry.name.startsWith(NAME_PREFIX));
     if (!matching.length)
         return null;
+
     const entry = matching.sort((a, b) => (b._stats?.modifiedTime ?? 0) - (a._stats?.modifiedTime ?? 0))[0];
     const nameMatch = entry.name.match(/SCAN:\s*(\d+)/i);
     return { scanIndex: nameMatch ? nameMatch[1] : '', uuid: entry.uuid };
@@ -626,12 +679,14 @@ async function laPrintScanCard(state)
     const allowChat = state.data?.la_chatCard ?? null;
     if (allowChat === false)
         return true;
+
     if (allowChat === null)
     {
         const scanOutputs = game.settings.get(game.system.id, 'scanOutputs');
         if (!['both', 'chat'].includes(scanOutputs))
             return true;
     }
+
     if (!state.data?.target)
         throw new TypeError('Scan flow requires a target.');
 
@@ -656,14 +711,17 @@ async function laPostProcessScanJournal(state)
     // LA-mode already wrote the page in _createLAJournalEntry; skip post-process
     if (state.data?.la_useCustomJournal)
         return true;
+
     if (allowJournal === null)
     {
         const scanOutputs = game.settings.get(game.system.id, 'scanOutputs');
         if (!['both', 'journal'].includes(scanOutputs))
             return true;
     }
+
     if (!state.data?.target)
         return true;
+
     const actor = state.data.target.actor;
     if (!actor)
         return true;
@@ -671,9 +729,11 @@ async function laPostProcessScanJournal(state)
     const folder = game.folders.getName(FOLDER_NAME);
     if (!folder)
         return true;
+
     const matching = _getAllJournalsInFolder(folder).filter((entry) => entry.name.includes(actor.name) && entry.name.startsWith(NAME_PREFIX));
     if (!matching.length)
         return true;
+
     const entry = matching.sort((a, b) => (b._stats?.modifiedTime ?? 0) - (a._stats?.modifiedTime ?? 0))[0];
 
     const nameMatch = entry.name.match(/SCAN:\s*(\d+)/i);
@@ -685,6 +745,7 @@ async function laPostProcessScanJournal(state)
     const page = entry.pages.contents[0];
     if (page)
         await page.update({ text: { content: html } });
+
     const finalOwnership = state.data.la_ownership ?? _defaultOwnershipForScan(game.user);
     await entry.update({
         ownership: finalOwnership,
@@ -706,7 +767,9 @@ async function _createLAJournalEntry(target, customName = '', ownership = null)
         ui.notifications.error(localizeFormat('LA.notify.scanJournalNoPermission', { name: game.user.name }));
         return null;
     }
+
     let folder = game.folders.getName(FOLDER_NAME);
+
     if (!folder)
     {
         try
@@ -719,6 +782,7 @@ async function _createLAJournalEntry(target, customName = '', ownership = null)
             return null;
         }
     }
+
     const allJournals = _getAllJournalsInFolder(folder);
     const actor = target.actor;
     const matching = allJournals.filter((journalEntry) => journalEntry.name.includes(actor.name));
@@ -726,6 +790,7 @@ async function _createLAJournalEntry(target, customName = '', ownership = null)
     let scanIndex;
     let entry;
     let entryName;
+
     if (matching.length === 1)
     {
         entry = matching[0];
@@ -747,6 +812,7 @@ async function _createLAJournalEntry(target, customName = '', ownership = null)
     if (matching.length === 1)
     {
         const pages = entry.pages.contents;
+
         if (pages.length === 0)
             await entry.createEmbeddedDocuments('JournalEntryPage', [{ name: entryName, type: 'text', text: { content: html }, sort: 0 }]);
         else
@@ -789,11 +855,13 @@ function _wrapInitScanData(flowSteps)
     const original = flowSteps.get('initScanData');
     if (!original || original.__laWrapped)
         return;
+
     const wrapped = async function laInitScanDataGate(state)
     {
         const actor = state.data?.target?.actor;
         if (!actor || actor.is_npc?.())
             return original(state);
+
         const sys = actor.system ?? {};
         Object.assign(state.data, {
             name: state.data.target.name,
@@ -825,6 +893,7 @@ function _wrapInitScanData(flowSteps)
         });
         return true;
     };
+
     wrapped.__laWrapped = true;
     flowSteps.set('initScanData', wrapped);
 }
@@ -834,15 +903,18 @@ function _wrapPrintScanCard(flowSteps)
     const original = flowSteps.get('printScanCard');
     if (!original || original.__laWrapped)
         return;
+
     const wrapped = async function laPrintScanCardGate(state)
     {
         if (state.data?.la_chatCard === false)
             return true;
+
         const useLA = state.data?.la_useCustomJournal ?? _useLAJournal();
         if (useLA)
             return laPrintScanCard(state);
         return original(state);
     };
+
     wrapped.__laWrapped = true;
     flowSteps.set('printScanCard', wrapped);
 }
@@ -852,18 +924,23 @@ function _wrapCreateScanJournal(flowSteps)
     const original = flowSteps.get('createScanJournal');
     if (!original || original.__laWrapped)
         return;
+
     const wrapped = async function laCreateScanJournalGate(state)
     {
         if (state.data?.la_createJournal === false)
             return true;
+
         // system-triggered scans don't set la_useCustomJournal, so fall back to the setting
         const useCustom = state.data?.la_useCustomJournal ?? _useLAJournal();
+
         if (useCustom)
         {
             const target = state.data?.target;
+
             if (target)
             {
                 const result = await _createLAJournalEntry(target, state.data?.la_customName || '', state.data?.la_ownership ?? null);
+
                 if (result)
                 {
                     state.data.la_useCustomJournal = true;
@@ -871,10 +948,13 @@ function _wrapCreateScanJournal(flowSteps)
                     state.data.la_journalUuid = result.uuid;
                 }
             }
+
             return true;
         }
+
         return original(state);
     };
+
     wrapped.__laWrapped = true;
     flowSteps.set('createScanJournal', wrapped);
 }
@@ -911,6 +991,7 @@ export async function performGMInputScan(targets, scanTitle, requestingUserName 
                 callback: async (html) =>
                 {
                     const gmNotes = String(html.find('[name="scan-info"]').val()).trim();
+
                     const chat = await renderTemplate(TPL.chat, {
                         name: targetNames,
                         subtitle: scanTitle,
@@ -918,6 +999,7 @@ export async function performGMInputScan(targets, scanTitle, requestingUserName 
                         isGmInput: true,
                         section: SECTION_COLORS,
                     });
+
                     ChatMessage.create({
                         author: game.user.id,
                         content: chat,
@@ -947,9 +1029,11 @@ export async function showSystemScanDialog(targets)
                     targetName: target.name,
                     requestingUserId: game.user.id,
                     requestingUserName: game.user.name,
+                    sceneId: canvas.scene?.id ?? null,
                 },
             });
         }
+
         ui.notifications.info(localizeFormat('LA.notify.scanRequestSent', { count: targetArray.length, plural: targetArray.length > 1 ? 's' : '' }));
         return;
     }
@@ -994,9 +1078,11 @@ export async function showSystemScanDialog(targets)
                                     ownership,
                                     requestingUserId: game.user.id,
                                     requestingUserName: game.user.name,
+                                    sceneId: canvas.scene?.id ?? null,
                                 },
                             });
                         }
+
                         ui.notifications.info(localizeFormat('LA.notify.journalRequestSent', { count: targetArray.length, plural: targetArray.length > 1 ? 's' : '' }));
                     }
 
@@ -1034,9 +1120,11 @@ export async function showSystemScanDialog(targets)
             const root = html[0];
             const groupSels = Array.from(root.querySelectorAll('.la-scan-owner-select[data-kind="group"]'));
             const userSels = Array.from(root.querySelectorAll('.la-scan-owner-select[data-kind="user"]'));
+
             const groups = game.modules.get('player-groups')?.active
                 ? (game.settings.get('player-groups', 'groups') ?? {})
                 : {};
+
             const membersByGroup = new Map(groupSels.map((sel) => [sel.dataset.id, groups[sel.dataset.id]?.members ?? []]));
 
             const refreshGroup = (gid) =>
@@ -1044,13 +1132,16 @@ export async function showSystemScanDialog(targets)
                 const gSel = groupSels.find((sel) => sel.dataset.id === gid);
                 if (!gSel)
                     return;
+
                 const members = membersByGroup.get(gid) ?? [];
                 let shared;
+
                 for (const uid of members)
                 {
                     const uSel = userSels.find((sel) => sel.dataset.id === uid);
                     if (!uSel)
                         continue;
+
                     if (shared === undefined)
                         shared = uSel.value;
                     else if (shared !== uSel.value)
@@ -1058,6 +1149,7 @@ export async function showSystemScanDialog(targets)
                         shared = null; break;
                     }
                 }
+
                 gSel.value = shared == null ? '' : shared;
             };
 
@@ -1067,6 +1159,7 @@ export async function showSystemScanDialog(targets)
                 {
                     if (gSel.value === '')
                         return;
+
                     for (const uid of membersByGroup.get(gSel.dataset.id) ?? [])
                     {
                         const uSel = userSels.find((sel) => sel.dataset.id === uid);
@@ -1075,11 +1168,13 @@ export async function showSystemScanDialog(targets)
                     }
                 });
             }
+
             for (const uSel of userSels)
             {
                 uSel.addEventListener('change', () =>
                 {
                     const uid = uSel.dataset.id;
+
                     for (const [gid, members] of membersByGroup)
                     {
                         if (members.includes(uid))
@@ -1089,6 +1184,7 @@ export async function showSystemScanDialog(targets)
             }
         },
     }, { classes: ['lancer-dialog-base', 'lancer-no-title'], width: 480 });
+
     dlg.render(true);
 }
 
@@ -1101,6 +1197,7 @@ export async function executeScanOnActivation(reactorToken)
     if (!targets.length && api?.chooseToken && reactorToken)
     {
         const sensorRange = reactorToken.actor?.system?.sensor_range ?? 10;
+
         const chosen = await api.chooseToken(reactorToken, {
             range: sensorRange,
             glow: 'sensor',
@@ -1109,6 +1206,7 @@ export async function executeScanOnActivation(reactorToken)
             description: localizeFormat('LA.scanUi.chooseWithinSensors', { range: sensorRange }),
             filter: (token) => token.actor?.type !== 'deployable',
         });
+
         if (chosen?.length)
             targets = chosen;
     }
@@ -1144,12 +1242,15 @@ export async function executeScanOnActivation(reactorToken)
                 {
                     const $sel = html.find('.lancer-scaling-card.selected');
                     const scanType = ($sel.data('scan-type')) || 'system';
+
                     if (scanType === 'system')
                     {
                         showSystemScanDialog(targets);
                         return;
                     }
+
                     const scanTitle = scanType === 'hidden' ? 'Hidden Information' : 'Generic/Public Information';
+
                     if (game.user.isGM)
                         performGMInputScan(targets, scanTitle);
                     else
@@ -1164,9 +1265,11 @@ export async function executeScanOnActivation(reactorToken)
                                     scanTitle,
                                     requestingUserId: game.user.id,
                                     requestingUserName: game.user.name,
+                                    sceneId: canvas.scene?.id ?? null,
                                 },
                             });
                         }
+
                         ui.notifications.info(localizeFormat('LA.notify.scanRequestSentNoDot', { count: targets.length, plural: targets.length > 1 ? 's' : '' }));
                     }
                 },
@@ -1192,22 +1295,28 @@ function _bindOwnerGroupSync(html)
     const root = html[0] ?? html;
     const groupSels = Array.from(root.querySelectorAll('.la-scan-owner-select[data-kind="group"]'));
     const userSels = Array.from(root.querySelectorAll('.la-scan-owner-select[data-kind="user"]'));
+
     const groups = game.modules.get('player-groups')?.active
         ? (game.settings.get('player-groups', 'groups') ?? {})
         : {};
+
     const membersByGroup = new Map(groupSels.map((sel) => [sel.dataset.id, groups[sel.dataset.id]?.members ?? []]));
+
     const refreshGroup = (gid) =>
     {
         const gSel = groupSels.find((sel) => sel.dataset.id === gid);
         if (!gSel)
             return;
+
         const members = membersByGroup.get(gid) ?? [];
         let shared;
+
         for (const uid of members)
         {
             const uSel = userSels.find((sel) => sel.dataset.id === uid);
             if (!uSel)
                 continue;
+
             if (shared === undefined)
                 shared = uSel.value;
             else if (shared !== uSel.value)
@@ -1216,14 +1325,17 @@ function _bindOwnerGroupSync(html)
                 break;
             }
         }
+
         gSel.value = shared == null ? '' : shared;
     };
+
     for (const gSel of groupSels)
     {
         gSel.addEventListener('change', () =>
         {
             if (gSel.value === '')
                 return;
+
             for (const uid of membersByGroup.get(gSel.dataset.id) ?? [])
             {
                 const uSel = userSels.find((sel) => sel.dataset.id === uid);
@@ -1232,11 +1344,13 @@ function _bindOwnerGroupSync(html)
             }
         });
     }
+
     for (const uSel of userSels)
     {
         uSel.addEventListener('change', () =>
         {
             const uid = uSel.dataset.id;
+
             for (const [gid, members] of membersByGroup)
             {
                 if (members.includes(uid))
@@ -1253,13 +1367,16 @@ function _bindOwnerGroupSync(html)
 export async function executeGenerateScan(targetsArg)
 {
     const targetArray = Array.isArray(targetsArg) ? targetsArg : [targetsArg];
+
     if (!targetArray.length)
     {
         ui.notifications.warn(localize('LA.notify.noTargetsSelectedForGenerateScan'));
         return;
     }
+
     const targetNames = targetArray.map((target) => target.name).join(', ');
     const defaultOwnership = _defaultOwnershipForScan(game.user, canvas.tokens?.controlled?.[0]);
+
     const content = await renderTemplate(TPL.generate, {
         targetNames,
         isMulti: targetArray.length > 1,
@@ -1281,6 +1398,7 @@ export async function executeGenerateScan(targetsArg)
                     const customName = String(html.find('[name="custom-journal-name"]').val() ?? '').trim();
                     const useCustom = html.find('.la-scan-owner-grid-wrap').is(':visible');
                     const ownership = useCustom ? _buildOwnershipFromForm(html) : defaultOwnership;
+
                     for (const target of targetArray)
                     {
                         if (mode === 'chat')
@@ -1317,6 +1435,7 @@ export async function executeGenerateScan(targetsArg)
             _bindOwnerGroupSync(html);
         },
     }, { classes: ['lancer-dialog-base', 'lancer-no-title'], width: 580 });
+
     dlg.render(true);
 }
 
@@ -1329,6 +1448,7 @@ Hooks.on('renderChatMessageHTML', (_msg, htmlOrEl) =>
         const uuid = ev.currentTarget.dataset.journalUuid;
         if (!uuid)
             return;
+
         const doc = await fromUuid(uuid);
         if (doc?.sheet)
             doc.sheet.render(true);
@@ -1354,6 +1474,7 @@ export async function regenerateScans(opts = {})
 
         const flag = getLAFlags(entry)?.scan;
         let actor = null;
+
         if (flag?.actorUuid)
         {
             try
@@ -1365,8 +1486,10 @@ export async function regenerateScans(opts = {})
                 // ignore
             }
         }
+
         if (!actor && flag?.actorName)
             actor = game.actors.find((candidate) => candidate.name === flag.actorName);
+
         if (!actor)
         {
             const nameMatch = entry.name.match(/^SCAN:\s*\d+\s*-\s*(.+)$/);
@@ -1394,6 +1517,7 @@ export async function regenerateScans(opts = {})
             const html = await renderTemplate(TPL.overview, scanData);
 
             const pages = entry.pages.contents;
+
             if (pages.length === 0)
             {
                 await entry.createEmbeddedDocuments('JournalEntryPage', [{

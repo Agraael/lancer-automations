@@ -22,25 +22,31 @@ export async function lockActorAction(target, actionName, sourceIdOrOpts = null,
             ui.notifications.error(localize('LA.notify.lockActorActionNameRequired'));
             return null;
         }
+
         const reason = (typeof sourceIdOrOpts === 'string' ? sourceIdOrOpts : sourceIdOrOpts?.reason) ?? null;
         const locks = /** @type {any[]} */ (getLAFlag(target,'actionLocks') ?? []);
+
         if (locks.some(lock => lock?.actionName === actionName))
             return target;
         await setLAFlag(target,'actionLocks', [...locks, { actionName, ...(reason ? { reason } : {}), ...(kind ? { kind } : {}) }]);
         return target;
     }
+
     const actor = _resolveActor(target);
     const sourceId = typeof sourceIdOrOpts === 'string' ? sourceIdOrOpts : null;
+
     if (!actor || !actionName || !sourceId)
     {
         ui.notifications.error(localize('LA.notify.lockActorActionArgs'));
         return null;
     }
+
     const reason = opts?.reason ?? null;
     const current = /** @type {Record<string,any[]>} */(getLAFlag(actor,'lockedActions')) ?? {};
     const entries = Array.isArray(current[actionName]) ? current[actionName].slice() : [];
     const idx = entries.findIndex(entry => lockEntryId(entry) === sourceId);
     const entry = (reason || kind) ? { id: sourceId, ...(reason ? { reason } : {}), ...(kind ? { kind } : {}) } : sourceId;
+
     if (idx === -1)
         entries.push(entry);
     else if (reason)
@@ -60,11 +66,13 @@ export async function lockActorAction(target, actionName, sourceIdOrOpts = null,
 export async function lockActorActionTypes(target, activationTypes, sourceIdOrOpts = null, opts = null, kind = null)
 {
     const types = (Array.isArray(activationTypes) ? activationTypes : [activationTypes]).filter(Boolean).map(type => String(type));
+
     if (!types.length)
     {
         ui.notifications.error(localize('LA.notify.lockActorActionTypesEmpty'));
         return null;
     }
+
     const settings = (typeof sourceIdOrOpts === 'object' && sourceIdOrOpts !== null ? sourceIdOrOpts : opts) ?? {};
     const except = (Array.isArray(settings.except) ? settings.except : [settings.except]).filter(Boolean).map(name => String(name));
     const reason = settings.reason ?? null;
@@ -74,6 +82,7 @@ export async function lockActorActionTypes(target, activationTypes, sourceIdOrOp
         const locks = /** @type {any[]} */ (getLAFlag(target,'actionTypeLocks') ?? []);
         const kept = locks.filter(lock => String(lock?.types) !== String(types));
         const entry = /** @type {any} */ ({ types, except });
+
         if (reason)
             entry.reason = reason;
         if (kind)
@@ -84,24 +93,29 @@ export async function lockActorActionTypes(target, activationTypes, sourceIdOrOp
 
     const actor = _resolveActor(target);
     const sourceId = typeof sourceIdOrOpts === 'string' ? sourceIdOrOpts : null;
+
     if (!actor || !sourceId)
     {
         ui.notifications.error(localize('LA.notify.lockActorActionTypesArgs'));
         return null;
     }
+
     const current = /** @type {Record<string,any[]>} */(getLAFlag(actor,'lockedActionTypes')) ?? {};
     const next = { ...current };
+
     for (const type of types)
     {
         const entries = Array.isArray(next[type]) ? next[type].slice() : [];
         const idx = entries.findIndex(entry => lockEntryId(entry) === sourceId);
         const entry = { id: sourceId, except, ...(reason ? { reason } : {}), ...(kind ? { kind } : {}) };
+
         if (idx === -1)
             entries.push(entry);
         else
             entries[idx] = entry;
         next[type] = entries;
     }
+
     await addActorFlags(actor, { lockedActionTypes: next });
     return actor;
 }
@@ -122,23 +136,28 @@ export async function unlockActorActionTypes(target, activationTypes = null, sou
                 await unsetLAFlag(target,'actionTypeLocks');
                 return target;
             }
+
             const all = /** @type {any[]} */ (getLAFlag(target,'actionTypeLocks') ?? []);
             await setLAFlag(target,'actionTypeLocks', all.filter(lock => (lock?.kind ?? null) !== kind));
             return target;
         }
+
         const locks = /** @type {any[]} */ (getLAFlag(target,'actionTypeLocks') ?? []);
         await setLAFlag(target,'actionTypeLocks', locks.filter(lock => String(lock?.types) !== String(types) || (lock?.kind ?? null) !== kind));
         return target;
     }
 
     const actor = _resolveActor(target);
+
     if (!actor || !types || !sourceId)
     {
         ui.notifications.error(localize('LA.notify.unlockActorActionTypesArgs'));
         return null;
     }
+
     const current = /** @type {Record<string,any[]>} */(getLAFlag(actor,'lockedActionTypes')) ?? {};
     const next = { ...current };
+
     for (const type of types)
     {
         const entries = Array.isArray(next[type]) ? next[type].filter(entry => lockEntryId(entry) !== sourceId || (entry?.kind ?? null) !== kind) : [];
@@ -147,6 +166,7 @@ export async function unlockActorActionTypes(target, activationTypes = null, sou
         else
             delete next[type];
     }
+
     await addActorFlags(actor, { lockedActionTypes: next });
     return actor;
 }
@@ -158,19 +178,24 @@ export async function unlockActorAction(target, actionName, sourceId = null, kin
     {
         const locks = /** @type {any[]} */ (getLAFlag(target,'actionLocks') ?? []);
         const kept = locks.filter(lock => lock?.actionName !== actionName || (lock?.kind ?? null) !== kind);
+
         if (kept.length !== locks.length)
             await setLAFlag(target,'actionLocks', kept);
         return target;
     }
+
     const actor = _resolveActor(target);
+
     if (!actor || !actionName || !sourceId)
     {
         ui.notifications.error(localize('LA.notify.unlockActorActionArgs'));
         return null;
     }
+
     const current = /** @type {Record<string,any[]>} */(getLAFlag(actor,'lockedActions')) ?? {};
     const entries = Array.isArray(current[actionName]) ? current[actionName].filter(entry => lockEntryId(entry) !== sourceId || (entry?.kind ?? null) !== kind) : [];
     const next = { ...current };
+
     if (entries.length)
         next[actionName] = entries;
     else
@@ -235,6 +260,7 @@ export function isActionLocked(target, actionName)
     const actor = _resolveActor(target);
     if (!actor || !actionName)
         return false;
+
     const current = /** @type {Record<string,any[]>} */(getLAFlag(actor,'lockedActions')) ?? {};
     if (Array.isArray(current[actionName]) && current[actionName].length > 0)
         return true;
@@ -246,6 +272,7 @@ export function getLockedActions(target)
     const actor = _resolveActor(target);
     if (!actor)
         return [];
+
     const current = /** @type {Record<string,any[]>} */(getLAFlag(actor,'lockedActions')) ?? {};
     const names = new Set(Object.keys(current).filter(key => Array.isArray(current[key]) && current[key].length > 0));
     for (const lock of getItemActionLocks(actor))

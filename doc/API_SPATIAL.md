@@ -147,18 +147,27 @@ const others = api.getEngagedTokens(targetToken, { filter: t => t.id !== attacke
 </details>
 
 <details id="getTokenPosition">
-<summary><b><code>getTokenPosition</code></b> → <code>{ x, y, elevation }</code><br><b><code>samePosition</code></b> → <code>boolean</code></summary>
+<summary><b><code>getTokenPosition</code></b> → <code>{ x, y, elevation }</code><br><b><code>samePosition</code></b> → <code>boolean</code><br><b><code>isPositionChange</code></b> → <code>boolean</code></summary>
 
 <br>
 
 ```js
 api.getTokenPosition(tokenLike)   // → { x, y, elevation }
 api.samePosition(a, b)            // same x / y / elevation
+api.isPositionChange(change)      // an update diff moves the token
 ```
 
 Snapshot a token's position and compare it later ("has it moved since?"). `tokenLike` is a Token or TokenDocument, `a`/`b` are position objects.
 
 `getTokenPosition` returns the token's top-left corner (`doc.x` / `doc.y`), not its center. It is not a drop-in destination for `moveToken`, which expects a center point.
+
+`isPositionChange` is true when an update diff carries `x`, `y` or `elevation`, the gate for an `onUpdate` automation. It checks that the keys are there, not that the values differ.
+
+**Params:** <kbd>change</kbd> `Object` the update diff, `triggerData.change` on `onUpdate`
+
+```js
+if (!api.isPositionChange(triggerData.change)) return false;
+```
 
 </details>
 
@@ -203,7 +212,7 @@ Square + hex. "Center" points drop straight into `moveToken({ destination })`.
 
 ## Line of Sight
 
-**Beta.** Wall-based, height-aware line of sight - the same test the Lancer LOS detection mode runs. Only meaningful with **Lancer Line of Sight** enabled in the [Vision tab](feature/VISION.md).
+**Beta.** Wall-based, height-aware line of sight, the same test the Lancer LOS detection mode runs. Only meaningful with **Lancer Line of Sight** enabled in the [Vision tab](feature/VISION.md).
 
 <details id="hasLineOfSight">
 <summary><b><code>hasLineOfSight</code></b> → <code>boolean</code></summary>
@@ -264,7 +273,7 @@ if (!api.isHostile(reactorToken, moverToken)) return false;
 api.canProvokeReaction(triggering, reactor, reasonOut?)
 ```
 
-`false` when the triggering token cannot provoke: it is `hidden`, took `disengage`, carries the `provoke` immunity, or is `intangible` while the reactor is not. A token paired with itself always provokes. This is the same gate the engine applies before offering a reaction, exposed for your own filters.
+`false` when the triggering token cannot provoke: it is `hidden`, took `disengage`, carries the `provoke` immunity, or is `intangible` while the reactor is not. A token paired with itself always provokes. This is the same gate the engine applies for `requireCanProvoke`, exposed for your own filters.
 
 | Param | Type | Default | Description |
 |:------|:-----|:--------|:------------|
@@ -289,7 +298,7 @@ if (!api.canProvokeReaction(moverToken, reactorToken, reasons) && reasons.includ
 api.isFriendly(token1, token2)
 ```
 
-True when both sides sit on the same side of the line: both friendly, or both hostile. NEUTRAL counts as friendly, SECRET counts as hostile. Two mutually hostile tokens are therefore friendly to each other, so this is not the inverse of `isHostile`. Compatible with the Token Factions module, which answers the question itself when active.
+True when both sides sit on the same side of the line: both friendly, or both hostile. NEUTRAL counts as friendly, SECRET counts as hostile. Two hostile tokens are therefore friendly to each other, so this is not the inverse of `isHostile`. Compatible with the Token Factions module, which answers the question itself when active.
 
 | Param | Type | Description |
 |:------|:-----|:------------|
@@ -361,7 +370,7 @@ api.laTokenGameplayHeight(tokenDoc)
 |:------|:-----|:------------|
 | <kbd>tokenDoc</kbd> | `TokenDocument` | The token to measure |
 
-`laTokenHeight`: sight height, wall-height flag or SIZE + 0.1. `laTokenGameplayHeight`: the same snapped to the closest SIZE (0.5, 1, 2, 3...).
+`laTokenHeight`: sight height (wall-height flag or SIZE + 0.1). `laTokenGameplayHeight`: the same snapped to the closest SIZE (0.5, 1, 2, 3...).
 
 </details>
 
@@ -374,7 +383,7 @@ api.laTokenGameplayHeight(tokenDoc)
 api.getMaxGroundHeightUnderToken(token, terrainAPI)
 ```
 
-Highest terrain top (`elevation + height`) under any cell the token occupies, in scene units. Only terrain types that are both solid and height-using count, so decorative or non-solid terrain is skipped. Returns `0` with no terrain or no Terrain Height Tools.
+Highest ground top under any cell the token occupies: solid, height-using terrain (`elevation + height`) and other [solid tokens](#isSolidToken). Decorative or non-solid terrain is skipped. Returns `0` when there is nothing under it. Solid tokens count without Terrain Height Tools.
 
 | Param | Type | Description |
 |:------|:-----|:------------|
@@ -384,6 +393,54 @@ Highest terrain top (`elevation + height`) under any cell the token occupies, in
 ```js
 const tht = game.modules.get("terrain-height-tools")?.api;
 const ground = api.getMaxGroundHeightUnderToken(token, tht);
+```
+
+</details>
+
+<details id="getHexGroundElevation">
+<summary><b><code>getHexGroundElevation</code></b> → <code>number</code><br><b><code>isHexUnderTerrain</code></b> → <code>boolean</code></summary>
+
+<br>
+
+```js
+api.getHexGroundElevation(col, row, terrainAPI?, options?)
+api.isHexUnderTerrain(col, row, elevation, terrainAPI?, excludeTokenId?)
+```
+
+`getHexGroundElevation` is the ground top of one cell: the highest solid, height-using terrain or solid token on it. `isHexUnderTerrain` is true when a solid token or solid terrain on the cell starts above `elevation`. Solid tokens count without Terrain Height Tools.
+
+| Param | Type | Default | Description |
+|:------|:-----|:--------|:------------|
+| <kbd>col</kbd> / <kbd>row</kbd> | `number` | *required* | Grid offset of the cell |
+| <kbd>elevation</kbd> | `number` | *required* | `isHexUnderTerrain` only. Elevation to test, in grid units |
+| <kbd>terrainAPI</kbd> | `Object` | `globalThis.terrainHeightTools` | Pass `undefined` to keep the default and still give the next argument |
+| <kbd>excludeTokenId</kbd> | `string` | `null` | `isHexUnderTerrain` only, 5th argument. Ignore this token's own solid band |
+| **inside `options`** | | | |
+| <kbd>excludeTokenId</kbd> | `string` | `null` | Ignore this token's own solid band |
+| <kbd>solidTokens</kbd> | `boolean` | `true` | `false` reads terrain only |
+
+```js
+const ground = api.getHexGroundElevation(gridOffset.j, gridOffset.i, terrainAPI, { excludeTokenId: mover.id });
+```
+
+</details>
+
+<details id="isSolidToken">
+<summary><b><code>isSolidToken</code></b> → <code>boolean</code><br><b><code>solidTokenTopAt</code></b> → <code>number</code></summary>
+
+<br>
+
+```js
+api.isSolidToken(token)
+api.solidTokenTopAt(x, y, excludeTokenId?)
+```
+
+**Params:** <kbd>token</kbd> `Token|TokenDocument` · <kbd>x</kbd> / <kbd>y</kbd> `number` canvas pixels · <kbd>excludeTokenId</kbd> `string` optional
+
+`isSolidToken` reads the token's **Solid** checkbox (Token Config, L.A tab). `solidTokenTopAt` is the highest top of a visible solid token at that point, `0` when there is none. A solid token's top is its elevation plus its [gameplay height](#laTokenHeight).
+
+```js
+const top = api.solidTokenTopAt(token.center.x, token.center.y, token.id);
 ```
 
 </details>
@@ -399,7 +456,10 @@ await api.triggerDangerousZoneFlow(token, damageType, damageValue)
 
 Rolls an ENG check on the token's actor. On a result below 10 the token is targeted and a damage roll is performed. Dedupes to once per combat round per actor (uses an actor flag in the `lancer-automations` namespace). Outside combat, fires every call.
 
-If the actor is terrain-immune (the `terrain_immunity` status or a `terrain` immunity bonus), a "TERRAIN IMMUNITY" choice card goes to the GM first: ignore the terrain, which consumes an immunity use when the immunity came from a bonus, or apply it anyway and run the check.
+If the actor is terrain-immune (the `terrain_immunity` status or a `terrain` immunity bonus), a "TERRAIN IMMUNITY" choice card goes to the GM first:
+
+- Ignore the terrain. This consumes an immunity use when the immunity came from a bonus.
+- Apply the terrain anyway and run the check.
 
 Body for a "dangerous terrain" trigger, e.g. a Terrain Height Tools on-enter callback:
 

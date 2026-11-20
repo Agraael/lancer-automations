@@ -2,37 +2,40 @@ import { moveTokenTo } from "./move-api.js";
 import { getModuleSetting } from "../tools/settings-utils.js";
 import { getLAFlag, getLAFlags } from "../tools/flag-utils.js";
 import { MODULE_ID, BOOST_DETAIL } from "../tools/constants.js";
-import { isForceFreeMovement } from "./keybindings.js";
+import { isForceFreeMovement, straightFlipFor } from "./keybindings.js";
 import { parseAction } from "./movement-actions.js";
 import { consumeAction, executeSimpleActivation } from "../tools/misc-tools.js";
-import { recordAction, currentTurnChips, settleMoveChips } from "../tah/action-tape.js";
+import { recordAction, moverTurnChips, settleMoveChips } from "../tah/action-tape.js";
+import { movesOnItsOwn, ownMoveCapOf } from "../interactive/deployable-owner.js";
 import * as actionFX from "../fx/actionFX.js";
-import { handleTrigger } from "../activations/reactions-engine.js";
+import { handleTrigger } from "../activations/automation-engine.js";
 import { cancelRulerDrag, startChoiceCard, getTokenOwnerUserId, drawMovementTrace } from "../interactive/index.js";
-import { splitPathAtCosts, legUsable, measurePathCost } from "./path-replay.js";
+import { splitPathAtCosts, legUsable, measurePathCost, trimPathToPosition } from "./path-replay.js";
+import { straightLineBlock } from "./straight-line.js";
 import { findEffectOnToken } from "../bonuses/flagged-effects.js";
 import { getBoostOfferMode } from "../setup/settings-register.js";
 
 import { localize, localizeFormat } from '../tools/string-utils.js';
-import { getV3DataBonuses } from '../bonuses/genericBonuses.js';
+import { getV3DataBonuses, flattenBonuses } from '../bonuses/genericBonuses.js';
 import { resolvePilot } from '../utils/lancer-token.js';
 // Bridges multi-segment moves where preUpdateToken fires per-segment.
 export const _moveHistoryCache = new Map();
 const _pendingMoveChips = new Map();
 /** @type {Record<string, string>} */
-const MOVE_CHIP_NAMES = { move: 'Move', free: 'Free Movement', forced: 'Forced Movement' };
+const MOVE_CHIP_NAMES = { move: 'Move', free: 'Free Movement', forced: 'Forced Movement', manual: 'Manual Move' };
 
 Hooks.on('updateToken', (document, change, options, userId) =>
 {
     const updateOptions = /** @type {any} */ (options);
     if (userId === game.user.id && !updateOptions?.isUndo && !updateOptions?.laResetMoveCache)
         return;
+
     const flags = getLAFlags(change);
     if (flags && ('moveHistory' in flags || '-=moveHistory' in flags))
         _moveHistoryCache.delete(document.id);
 });
 
-// Per-mover action stack for chained move/activation sequences. New push wipes the previous one.
+// Per-mover action stack for chained move/activation sequences. New push wipes that token's previous one.
 /**
  * @typedef {Object} MoveStackFrame
  * @property {'awaitMove'|'awaitActivation'} kind
@@ -46,8 +49,8 @@ Hooks.on('updateToken', (document, change, options, userId) =>
  * @property {MoveStackFrame[]} frames
  * @property {ReturnType<typeof setTimeout>} [_timer]
  */
-/** @type {MoveStack | null} */
-let _activeMoveStack = null;
+/** @type {Map<string, MoveStack>} */
+const _activeMoveStacks = new Map();
 const _MOVE_STACK_TIMEOUT_MS = 5000;
 const _MOVE_STACK_INTER_DELAY_MS = 1000;
 // Auto boost has no card to wait behind, so it needs its own pause for the cancelled drag to settle.
@@ -55,66 +58,77 @@ const _AUTO_ACCEPT_DELAY_MS = 300;
 
 export function _isActiveMoveStackFor(tokenId)
 {
-    return !!(_activeMoveStack && _activeMoveStack.tokenId === tokenId);
+    return _activeMoveStacks.has(tokenId);
 }
 
-export function _wipeMoveStack()
+export function _wipeMoveStack(tokenId)
 {
-    if (!_activeMoveStack)
+    const stack = _activeMoveStacks.get(tokenId);
+    if (!stack)
         return;
-    if (/** @type {any} */ (globalThis)._laStackDebug && _activeMoveStack.cursor < _activeMoveStack.frames.length)
-        console.log('lancer-automations | laStack | wiped early', { cursor: _activeMoveStack.cursor, frames: _activeMoveStack.frames.length, at: new Error().stack?.split('\n')[2]?.trim() });
-    if (_activeMoveStack._timer)
-        clearTimeout(_activeMoveStack._timer);
-    _activeMoveStack = null;
+    if (/** @type {any} */ (globalThis)._laStackDebug && stack.cursor < stack.frames.length)
+        console.log('lancer-automations | laStack | wiped early', { tokenId, cursor: stack.cursor, frames: stack.frames.length, at: new Error().stack?.split('\n')[2]?.trim() });
+    if (stack._timer)
+        clearTimeout(stack._timer);
+    _activeMoveStacks.delete(tokenId);
 }
 
 function _pushMoveStack(tokenId, frames)
 {
-    _wipeMoveStack();
-    _activeMoveStack = { tokenId, cursor: 0, frames };
-    _activeMoveStack._timer = setTimeout(() => _wipeMoveStack(), _MOVE_STACK_TIMEOUT_MS);
+    _wipeMoveStack(tokenId);
+    /** @type {MoveStack} */
+    const stack = { tokenId, cursor: 0, frames };
+    stack._timer = setTimeout(() => _wipeMoveStack(tokenId), _MOVE_STACK_TIMEOUT_MS);
+    _activeMoveStacks.set(tokenId, stack);
 }
 
 export async function _advanceMoveStack(kind, tokenId, cancelled, ctx = {})
 {
     const stackDebug = /** @type {any} */ (globalThis)._laStackDebug;
-    const stack = _activeMoveStack;
-    if (!stack || stack.tokenId !== tokenId)
+    const stack = _activeMoveStacks.get(tokenId);
+
+    if (!stack)
     {
         if (stackDebug)
-            console.log('lancer-automations | laStack | skip', { kind, tokenId, reason: stack ? 'other-token' : 'no-stack', actionName: ctx.actionName });
+            console.log('lancer-automations | laStack | skip', { kind, tokenId, reason: 'no-stack', actionName: ctx.actionName });
         return;
     }
+
     const frame = stack.frames[stack.cursor];
+
     if (!frame || frame.kind !== kind)
     {
         if (stackDebug)
             console.log('lancer-automations | laStack | skip', { kind, cursor: stack.cursor, frameKind: frame?.kind, actionName: ctx.actionName });
         return;
     }
+
     if (frame.matchActionName && ctx.actionName !== frame.matchActionName)
     {
         if (stackDebug)
             console.log('lancer-automations | laStack | skip', { kind, cursor: stack.cursor, want: frame.matchActionName, got: ctx.actionName });
         return;
     }
+
     if (cancelled)
     {
         if (stackDebug)
             console.log('lancer-automations | laStack | wipe-on-cancel', { kind, cursor: stack.cursor });
-        _wipeMoveStack(); return;
+        _wipeMoveStack(tokenId); return;
     }
+
     if (stackDebug)
         console.log('lancer-automations | laStack | advance', { kind, cursor: stack.cursor, actionName: ctx.actionName, hasSatisfy: !!frame.onSatisfy });
+
     const onSatisfy = frame.onSatisfy;
     stack.cursor++;
     // Wall-clock safety timer: reset on progress.
     if (stack._timer)
         clearTimeout(stack._timer);
-    stack._timer = setTimeout(() => _wipeMoveStack(), _MOVE_STACK_TIMEOUT_MS);
+    stack._timer = setTimeout(() => _wipeMoveStack(tokenId), _MOVE_STACK_TIMEOUT_MS);
     if (stack.cursor >= stack.frames.length)
-        _wipeMoveStack();
+        _wipeMoveStack(tokenId);
+
     if (onSatisfy)
     {
         try
@@ -127,7 +141,7 @@ export async function _advanceMoveStack(kind, tokenId, cancelled, ctx = {})
         }
         catch (err)
         {
-            console.error('lancer-automations | move stack onSatisfy failed', err); _wipeMoveStack();
+            console.error('lancer-automations | move stack onSatisfy failed', err); _wipeMoveStack(tokenId);
         }
     }
 }
@@ -145,25 +159,36 @@ function _getMoveHistoryData(tokenOrId)
     return getLAFlag(doc,'moveHistory') ?? { moves: [] };
 }
 
-function _writeMoveHistory(tokenDoc, data)
+function _writeMoveHistory(tokenDoc, data, capOf = null)
 {
     if (!tokenDoc)
         return;
+
     const tokenId = tokenDoc.id ?? tokenDoc._id;
     if (tokenId)
         _moveHistoryCache.set(tokenId, data);
     foundry.utils.setProperty(tokenDoc.flags, 'lancer-automations.moveHistory', data);
+    const update = { 'flags.lancer-automations.moveHistory': data };
+    if (capOf)
+        Object.assign(update, _capUpdate(tokenDoc, capOf(tokenDoc)));
     if (tokenDoc.isOwner)
-        tokenDoc.update({ 'flags.lancer-automations.moveHistory': data });
+        tokenDoc.update(update);
+}
+
+function _capUpdate(tokenDoc, value)
+{
+    foundry.utils.setProperty(tokenDoc.flags, 'lancer-automations.movementCap', value);
+    return { 'flags.lancer-automations.movementCap': value };
 }
 
 function _writeMovementCap(tokenDoc, value)
 {
     if (!tokenDoc)
         return;
-    foundry.utils.setProperty(tokenDoc.flags, 'lancer-automations.movementCap', value);
+
+    const update = _capUpdate(tokenDoc, value);
     if (tokenDoc.isOwner)
-        tokenDoc.update({ 'flags.lancer-automations.movementCap': value });
+        tokenDoc.update(update);
 }
 
 export function clearMoveData(tokenOrId)
@@ -171,13 +196,16 @@ export function clearMoveData(tokenOrId)
     const doc = _getMoveHistoryDoc(tokenOrId);
     if (!doc)
         return;
+
     const tokenId = doc.id ?? doc._id;
     if (tokenId)
         _moveHistoryCache.delete(tokenId);
     foundry.utils.setProperty(doc.flags, 'lancer-automations.moveHistory', null);
+    const update = { 'flags.lancer-automations.-=moveHistory': null };
+    if (_isCombatant(doc))
+        Object.assign(update, _capUpdate(doc, _turnStartCap(doc, doc)));
     if (doc.isOwner)
-        doc.update({ 'flags.lancer-automations.-=moveHistory': null });
-    initMovementCap(doc);
+        doc.update(update);
 }
 
 export async function clearMoveTracking(tokenOrId)
@@ -185,13 +213,16 @@ export async function clearMoveTracking(tokenOrId)
     const doc = _getMoveHistoryDoc(tokenOrId);
     if (!doc)
         return;
+
     const tokenId = doc.id ?? doc._id;
     if (tokenId)
         _moveHistoryCache.delete(tokenId);
+
     const hadHistory = getLAFlag(doc,'moveHistory') != null;
     const hadCap = getLAFlag(doc,'movementCap') != null;
     foundry.utils.setProperty(doc.flags, 'lancer-automations.moveHistory', null);
     foundry.utils.setProperty(doc.flags, 'lancer-automations.movementCap', null);
+
     if ((hadHistory || hadCap) && doc.isOwner)
     {
         await doc.update({
@@ -207,14 +238,16 @@ export function recordBoostCast(tokenOrId, speed, tapeId = null)
     const doc = _getMoveHistoryDoc(tokenOrId);
     if (!doc)
         return;
+
     const data = getLAFlag(doc,'moveHistory') ?? { moves: [] };
     const pending = Number(data.pendingExtra) || 0;
     const cast = { atMoveIndex: (data.moves ?? []).length, speed, extra: pending };
+
     if (tapeId)
         cast.tapeId = tapeId;
+
     const boostCasts = [...(data.boostCasts ?? []), cast];
-    _writeMoveHistory(doc, { ...data, boostCasts, pendingExtra: 0 });
-    _cacheMovementCap(doc);
+    _writeMoveHistory(doc, { ...data, boostCasts, pendingExtra: 0 }, getMovementCap);
 }
 
 export function removeBoostCast(tokenOrId, tapeId)
@@ -222,16 +255,17 @@ export function removeBoostCast(tokenOrId, tapeId)
     const doc = _getMoveHistoryDoc(tokenOrId);
     if (!doc || !tapeId)
         return null;
+
     const data = getLAFlag(doc,'moveHistory') ?? { moves: [] };
     const cast = (data.boostCasts ?? []).find(candidate => candidate.tapeId === tapeId);
+
     if (!cast)
         return null;
     _writeMoveHistory(doc, {
         ...data,
         boostCasts: data.boostCasts.filter(candidate => candidate !== cast),
         pendingExtra: (Number(data.pendingExtra) || 0) + (Number(cast.extra) || 0),
-    });
-    _cacheMovementCap(doc);
+    }, getMovementCap);
     return cast;
 }
 
@@ -240,10 +274,13 @@ export function boostBandUsed(tokenOrId, tapeId)
     const castIndex = (_getMoveHistoryData(tokenOrId).boostCasts ?? []).findIndex(cast => cast.tapeId === tapeId);
     if (castIndex < 0)
         return false;
+
     const granted = getMovementBands(tokenOrId).filter(band => band.granted);
     const band = granted[1 + castIndex];
+
     if (!band)
         return false;
+
     const total = granted.at(-1)?.max ?? 0;
     return getIntentionalMoveData(tokenOrId).cost > total - band.size + 1e-9;
 }
@@ -273,8 +310,10 @@ export function recordMovementExtra(tokenOrId, value, options = {})
 {
     const doc = _getMoveHistoryDoc(tokenOrId);
     const amount = Number(value) || 0;
+
     if (!doc || !amount)
         return;
+
     const leg = options.leg ?? 'current';
     const data = getLAFlag(doc,'moveHistory') ?? { moves: [] };
     const boostCasts = [...(data.boostCasts ?? [])];
@@ -287,13 +326,12 @@ export function recordMovementExtra(tokenOrId, value, options = {})
     {
         const last = boostCasts.length - 1;
         boostCasts[last] = { ...boostCasts[last], extra: (Number(boostCasts[last].extra) || 0) + amount };
-        _writeMoveHistory(doc, { ...data, boostCasts });
+        _writeMoveHistory(doc, { ...data, boostCasts }, getMovementCap);
     }
     else if (target === 'boost')
-        _writeMoveHistory(doc, { ...data, pendingExtra: (Number(data.pendingExtra) || 0) + amount });
+        _writeMoveHistory(doc, { ...data, pendingExtra: (Number(data.pendingExtra) || 0) + amount }, getMovementCap);
     else
-        _writeMoveHistory(doc, { ...data, standardExtra: (Number(data.standardExtra) || 0) + amount });
-    _cacheMovementCap(doc);
+        _writeMoveHistory(doc, { ...data, standardExtra: (Number(data.standardExtra) || 0) + amount }, getMovementCap);
 }
 
 // Which granted leg kind a distance falls in. Past the last granted leg counts as that leg.
@@ -302,6 +340,7 @@ function _grantedLegAt(tokenOrId, distance)
     const granted = getMovementBands(tokenOrId).filter(band => band.granted);
     if (!granted.length)
         return 'standard';
+
     const band = granted.find(entry => distance < entry.max) ?? granted[granted.length - 1];
     return band.name === 'standard' ? 'standard' : 'boost';
 }
@@ -312,23 +351,28 @@ function _standingExtras(actor)
     const totals = { standard: 0, boost: 0 };
     if (!actor)
         return totals;
+
     const dataRows = getV3DataBonuses(actor, ['movement_extra']);
     totals.boost = _nerveweaveBoost(actor, dataRows);
     const api = game.modules.get(MODULE_ID)?.api;
-    const all = [
+
+    const all = flattenBonuses([
         ...(api?.getGlobalBonuses?.(actor) ?? []),
         ...(api?.getConstantBonuses?.(actor) ?? []),
         ...dataRows.map(row => row.bonus)
-    ];
+    ]);
+
     for (const bonus of all)
     {
         const isLegacyBoost = bonus.type === 'speed_boost_extra';
         if (!isLegacyBoost && bonus.type !== 'movement_extra')
             continue;
+
         const scope = isLegacyBoost ? 'boost' : (bonus.subtype ?? 'boost');
         if (scope === 'standard' || scope === 'boost')
             totals[scope] += Number(bonus.val) || 0;
     }
+
     return totals;
 }
 
@@ -336,6 +380,7 @@ function _nerveweaveBoost(actor, dataRows = [])
 {
     if (!actor?.is_mech?.())
         return 0;
+
     const pilot = resolvePilot(actor);
     const nerveweave = pilot?.items?.find(item => item.system?.lid === 'cb_integrated_nerveweave');
     return nerveweave && !dataRows.some(row => row.item?.id === nerveweave.id) ? 2 : 0;
@@ -357,15 +402,18 @@ export function canOvercharge(actor)
             return true;
         return !!actor.itemTypes?.npc_feature?.some(feature => LIMITLESS_LIDS.has(feature.system?.lid));
     }
+
     return !!actor?.is_mech?.();
 }
 
-const STUNNED_SET = ['stunned', 'immobilized', 'shutdown', 'downandout', 'dazed'];
+const STUNNED_SET = ['stunned', 'immobilized', 'shutdown', 'downandout', 'dazed', 'preparing'];
+const NO_BOOST_SET = ['prone', 'slow', 'grappling', 'grappled'];
 
 function _hasLiveStatus(actor, statusId)
 {
     if (!actor?.statuses?.has(statusId))
         return false;
+
     const api = game.modules.get(MODULE_ID)?.api;
     return !api?.checkEffectImmunities?.(actor, statusId)?.length;
 }
@@ -374,7 +422,8 @@ function _hasLiveStatus(actor, statusId)
 export function tokenSpeed(token)
 {
     const actor = token?.actor ?? token;
-    let speed = actor?.system?.speed ?? 0;
+    let speed = ownMoveCapOf(token) ?? actor?.system?.speed ?? 0;
+
     if (actor?.statuses?.has('prone'))
         speed = Math.floor(speed / 2);
     return speed;
@@ -388,10 +437,12 @@ export function getNextBoostSize(tokenOrId)
 {
     const token = typeof tokenOrId === 'string' ? canvas.tokens?.get(tokenOrId) : tokenOrId;
     const actor = token?.actor;
+
     if (!actor || STUNNED_SET.some(statusId => _hasLiveStatus(actor, statusId)))
         return 0;
-    if (_hasLiveStatus(actor, 'prone') || _hasLiveStatus(actor, 'slow'))
+    if (NO_BOOST_SET.some(statusId => _hasLiveStatus(actor, statusId)))
         return 0;
+
     const data = _getMoveHistoryData(tokenOrId);
     return tokenSpeed(token) + _standingExtras(actor).boost + (Number(data.pendingExtra) || 0);
 }
@@ -405,6 +456,7 @@ export function getMovementBands(tokenOrId)
 {
     const token = typeof tokenOrId === 'string' ? canvas.tokens?.get(tokenOrId) : tokenOrId;
     const actor = token?.actor;
+
     if (!actor)
         return [];
     if (STUNNED_SET.some(statusId => _hasLiveStatus(actor, statusId)))
@@ -412,11 +464,11 @@ export function getMovementBands(tokenOrId)
 
     const speed = tokenSpeed(token);
     const data = _getMoveHistoryData(tokenOrId);
-    const prone = _hasLiveStatus(actor, 'prone');
-    const slowed = prone || _hasLiveStatus(actor, 'slow');
+    const slowed = NO_BOOST_SET.some(statusId => _hasLiveStatus(actor, statusId));
 
     const bands = [];
     let acc = 0;
+
     const push = (name, size, granted) =>
     {
         acc += Math.max(0, size);
@@ -439,29 +491,28 @@ export function getMovementBands(tokenOrId)
     return bands;
 }
 
-function _cacheMovementCap(tokenDoc)
-{
-    _writeMovementCap(tokenDoc, getMovementCap(tokenDoc));
-}
-
 export function undoMoveData(tokenOrId, _distance, movementId = null)
 {
     const doc = _getMoveHistoryDoc(tokenOrId);
     if (!doc)
         return;
+
     const data = getLAFlag(doc,'moveHistory') ?? { moves: [] };
     const moves = data.moves || [];
+
     const removed = movementId
         ? moves.flatMap((move, index) => (move.movementId === movementId ? [index] : []))
         : (moves.length ? [moves.length - 1] : []);
+
     if (!removed.length)
         return;
+
     let boostCasts = data.boostCasts ?? [];
     for (const index of [...removed].reverse())
         boostCasts = boostCasts.map(cast => (cast.atMoveIndex > index ? { ...cast, atMoveIndex: cast.atMoveIndex - 1 } : cast));
+
     const remaining = moves.filter((move, index) => !removed.includes(index));
-    _writeMoveHistory(doc, { ...data, moves: remaining, boostCasts });
-    _cacheMovementCap(doc);
+    _writeMoveHistory(doc, { ...data, moves: remaining, boostCasts }, getMovementCap);
     const token = doc.object ?? canvas.tokens?.get(doc.id);
     if (!token)
         return Promise.resolve();
@@ -524,6 +575,7 @@ export function getMovementCap(tokenOrId)
     // No resolvable actor (token off-canvas) leaves the cached number as the only answer.
     if (!doc.actor)
         return getLAFlag(doc,'movementCap') ?? 0;
+
     const granted = getMovementBands(tokenOrId).filter(band => band.granted);
     const total = granted.length ? granted[granted.length - 1].max : 0;
     return Math.max(total, _sanctionedSpend(tokenOrId));
@@ -552,8 +604,10 @@ export function getMovementHistory(tokenOrId)
 {
     const data = _getMoveHistoryData(tokenOrId);
     const moves = data.moves || [];
+
     if (moves.length === 0)
         return { exists: false };
+
     let totalMoved = 0;
     let totalCost = 0;
     let intentionalRegularMoved = 0;
@@ -570,6 +624,7 @@ export function getMovementHistory(tokenOrId)
         const cost = move.movementCost ?? move.distanceMoved;
         totalMoved += moved;
         totalCost += cost;
+
         if (move.isDrag)
         {
             if (move.isFreeMovement)
@@ -614,17 +669,25 @@ export function getMovementHistory(tokenOrId)
 export function initMovementCap(token)
 {
     const doc = _getMoveHistoryDoc(token);
-    if (!doc)
+    if (!doc || !_isCombatant(doc))
         return;
-    const tokenId = doc.id ?? doc._id;
-    const isInCombat = !!game.combat?.combatants.find(combatant => combatant.token?.id === tokenId);
-    if (!isInCombat)
-        return;
+
     const data = getLAFlag(doc,'moveHistory');
     if (data?.boostCasts?.length || data?.standardExtra || data?.pendingExtra)
-        _writeMoveHistory(doc, { ...data, boostCasts: [], standardExtra: 0, pendingExtra: 0 });
-    const isImmobilized = !!findEffectOnToken(token, 'immobilized');
-    _writeMovementCap(doc, isImmobilized ? 0 : getMovementCap(doc));
+        _writeMoveHistory(doc, { ...data, boostCasts: [], standardExtra: 0, pendingExtra: 0 }, tokenDoc => _turnStartCap(tokenDoc, token));
+    else
+        _writeMovementCap(doc, _turnStartCap(doc, token));
+}
+
+function _isCombatant(doc)
+{
+    const tokenId = doc.id ?? doc._id;
+    return !!game.combat?.combatants.find(combatant => combatant.token?.id === tokenId) || movesOnItsOwn(doc);
+}
+
+function _turnStartCap(doc, effectSource)
+{
+    return findEffectOnToken(effectSource, 'immobilized') ? 0 : getMovementCap(doc);
 }
 
 export function increaseMovementCap(tokenOrId, value)
@@ -642,6 +705,7 @@ function _clearCapRuler(token)
     {
         console.warn('lancer-automations | stopMovement after cap cancel failed', err);
     }
+
     try
     {
         token.ruler?.clear?.();
@@ -650,6 +714,7 @@ function _clearCapRuler(token)
     {
         console.warn('lancer-automations | ruler clear after cap cancel failed', err);
     }
+
     token.document.update({}, { animate: false, diff: false, noHook: true })
         .then(() => token.renderFlags?.set?.({ refreshRuler: true, refreshState: true }))
         .catch(err => console.warn('lancer-automations | ruler teardown after cap cancel failed', err));
@@ -663,6 +728,7 @@ export function _handleMovementCapExceeded(token, ctx)
     const boostOffer = boostMode === 'yes' || boostMode === 'auto';
     const autoBoost = boostMode === 'auto';
     const isTokenInCombat = !!game.combat?.combatants.find(combatant => combatant.token?.id === token.id);
+
     if (options.ignoreMovementCap
         || boostMode === 'off'
         || !isTokenInCombat || moveIsFreeMovement || moveToMovementCost <= 0)
@@ -674,27 +740,36 @@ export function _handleMovementCapExceeded(token, ctx)
     const spent = history.exists ? history.intentional.regularCost : 0;
     // the gate stays armed past bypass walks even though the cap itself excludes them
     const cap = Math.max(getMovementCap(token), spent);
+
     if (!(spent <= cap && spent + moveToMovementCost > cap))
         return;
 
     let freeKey = '[free movement key]';
+
     try
     {
-        freeKey = game.keybindings.get(MODULE_ID,'freeMovement')?.[0]?.key ?? freeKey;
+        const freeCode = game.keybindings.get(MODULE_ID,'freeMovement')?.[0]?.key;
+        if (freeCode)
+            freeKey = foundry.helpers?.interaction?.KeyboardManager?.getKeycodeDisplayString?.(freeCode) ?? freeCode.replace(/^Key/, '');
     }
     catch
     { /* not registered yet */ }
+
     const isMech = token.actor?.type === 'mech';
     // Limitless NPCs store the extra action on the feature item, not the actor
     const findOverchargeExtra = (holder) => (getLAFlag(holder,'extraActions') || []).find(action => action.name === 'Overcharge (NPC)');
+
     const npcOvercharge = !isMech && token.actor?.type === 'npc'
         ? findOverchargeExtra(token.actor) ?? token.actor.items.map(findOverchargeExtra).find(Boolean) ?? null
         : null;
+
     // tier-split judges per tier leg. Otherwise regions/trigger silents may chunk the commit, so the whole remaining intent decides
     const tierSplit = !!getModuleSetting('splitMovementAtSpeedTiers');
+
     const lastLegOpts = tierSplit
         ? { isDrag: true, useRuler: true }
         : { _skipBoostOffer: true, ignoreMovementCap: true, isDrag: true, useRuler: true };
+
     const intentCost = tierSplit ? null : measurePathCost(token, intentPath ?? [], startPos);
     const need = spent + (intentCost ?? moveToMovementCost);
     const bands = getMovementBands(token);
@@ -704,8 +779,10 @@ export function _handleMovementCapExceeded(token, ctx)
     const overBoostSize = overBoostBand?.size ?? 0;
     const boostReach = cap + boostSize;
     const canBoost = boostSize > 0 && need <= boostReach;
+
     const canOvercharge = overBoostSize > 0
         && need > boostReach && need <= boostReach + overBoostSize;
+
     const overchargeActionName = isMech ? 'Overcharge' : 'Overcharge (NPC)';
 
     options.ignoreMovementCap = true;
@@ -727,18 +804,22 @@ export function _handleMovementCapExceeded(token, ctx)
         action: { name: 'Boost', activation: 'Quick' },
         detail: BOOST_DETAIL,
     });
+
     const fireOvercharge = async () =>
     {
         if (isMech)
         {
             const OverchargeFlow = game.lancer?.flows?.get?.('OverchargeFlow');
+
             if (OverchargeFlow)
             {
                 const flow = new OverchargeFlow(token.actor.uuid);
                 await flow.begin();
             }
+
             return;
         }
+
         // NPC path: fire 'Overcharge (NPC)' action; its built-in reaction handles it.
         await executeSimpleActivation(token.actor, {
             title: 'Overcharge (NPC)',
@@ -746,6 +827,7 @@ export function _handleMovementCapExceeded(token, ctx)
             detail: npcOvercharge?.detail || '',
         });
     };
+
     // Auto picks the first choice, but only after yielding: the legs must not fire inside preUpdateToken.
     const offerChoice = async (cardOptions) =>
     {
@@ -758,10 +840,12 @@ export function _handleMovementCapExceeded(token, ctx)
     const computeMid = (/** @type {number} */ cost) =>
     {
         const ratio = moveToMovementCost > 0 ? Math.max(0, cost / moveToMovementCost) : 0;
+
         const snapped = token.getSnappedPosition({
             x: startPos.x + (endPos.x - startPos.x) * ratio,
             y: startPos.y + (endPos.y - startPos.y) * ratio,
         });
+
         if (capOriginalAction)
             snapped.action = capOriginalAction;
         return snapped;
@@ -770,16 +854,19 @@ export function _handleMovementCapExceeded(token, ctx)
     if (canBoost && boostOffer && !options._skipBoostOffer)
     {
         const remaining = cap - spent;
-        const snapMid = remaining > 0 ? computeMid(remaining) : null;
+        const sameHex = Math.round(endPos.x) === Math.round(startPos.x) && Math.round(endPos.y) === Math.round(startPos.y);
+        const snapMid = remaining > 0 && !sameHex ? computeMid(remaining) : null;
         const capLegs = remaining > 0 ? splitPathAtCosts(token, origWaypoints, startPos, [remaining], capOriginalAction) : null;
         const splitTail = !!(capLegs && capLegs[1]?.length);
         const usePathSplit = splitTail && legUsable(capLegs[0], startPos);
         const midLeg = usePathSplit ? capLegs[0] : (splitTail ? null : snapMid);
-        const finalLeg = splitTail ? capLegs[1] : (remaining > 0 ? finalDest : finalPath);
+        const finalLeg = splitTail ? capLegs[1] : (snapMid ? finalDest : finalPath);
+
         (async () =>
         {
             const moveTrace = drawMovementTrace(token, finalDest, null, { path: origWaypoints });
             let result;
+
             try
             {
                 result = await offerChoice({
@@ -801,19 +888,24 @@ export function _handleMovementCapExceeded(token, ctx)
                     moveTrace.parent.removeChild(moveTrace);
                 moveTrace?.destroy();
             }
+
             const choiceIdx = /** @type {any} */ (result)?.choiceIdx;
+
             if (choiceIdx === 1)
             {
                 // Ignore: do the move anyway, bypassing the cap (and any further offer).
                 await _rulerMove(token, finalPath, { _skipBoostOffer: true, ignoreMovementCap: true, isDrag: true, useRuler: true });
                 return;
             }
+
             if (choiceIdx !== 0)
             {
                 _clearCapRuler(token);
                 return;
             }
+
             const fireFinalLeg = () => _rulerMove(token, finalLeg, lastLegOpts);
+
             if (midLeg)
             {
                 // Cap not yet exhausted: leg1 -> Boost -> leg2.
@@ -838,10 +930,12 @@ export function _handleMovementCapExceeded(token, ctx)
     else if (canOvercharge && boostOffer && !options._skipBoostOffer)
     {
         const remaining = cap - spent;
+
         const askOverchargeChoice = async () =>
         {
             const moveTrace = drawMovementTrace(token, finalDest, null, { path: origWaypoints });
             let result;
+
             try
             {
                 result = await offerChoice({
@@ -863,19 +957,24 @@ export function _handleMovementCapExceeded(token, ctx)
                     moveTrace.parent.removeChild(moveTrace);
                 moveTrace?.destroy();
             }
+
             const choiceIdx = /** @type {any} */ (result)?.choiceIdx;
+
             if (choiceIdx === 1)
             {
                 await _rulerMove(token, finalPath, { _skipBoostOffer: true, ignoreMovementCap: true, isDrag: true, useRuler: true });
                 return false;
             }
+
             if (choiceIdx !== 0)
             {
                 _clearCapRuler(token);
                 return false;
             }
+
             return true;
         };
+
         if (boostSize > 0)
         {
             // 3-leg: leg1 -> Boost -> leg2 -> Overcharge -> Boost -> leg3; skip leg1 if cap exhausted.
@@ -889,12 +988,15 @@ export function _handleMovementCapExceeded(token, ctx)
             const ocFirstLeg = useOcLegs ? (remaining > 0 && legUsable(ocLegs[0], startPos) ? ocLegs[0] : null) : mid1;
             const ocSecondLeg = useOcLegs ? ocSecondRaw : mid2;
             const ocFinalLeg = useOcLegs ? ocThirdRaw : finalDest;
+
             (async () =>
             {
                 if (!await askOverchargeChoice())
                     return;
+
                 const mid2Move = () => _rulerMove(token, ocSecondLeg, { _skipBoostOffer: true, ignoreMovementCap: true, isDrag: true, useRuler: true });
                 const finalMove = () => _rulerMove(token, ocFinalLeg, lastLegOpts);
+
                 const tailFrames = [
                     { kind: 'awaitActivation', matchActionName: 'Boost', onSatisfy: mid2Move },
                     { kind: 'awaitMove', onSatisfy: fireOvercharge },
@@ -902,6 +1004,7 @@ export function _handleMovementCapExceeded(token, ctx)
                     { kind: 'awaitActivation', matchActionName: 'Boost', onSatisfy: finalMove },
                     { kind: 'awaitMove' }
                 ];
+
                 if (ocFirstLeg)
                 {
                     _pushMoveStack(token.id, [
@@ -923,17 +1026,22 @@ export function _handleMovementCapExceeded(token, ctx)
             {
                 if (!await askOverchargeChoice())
                     return;
+
                 // gold spent: legToCap -> Overcharge -> Boost -> rest
                 const twoLegSplit = remaining > 0 ? splitPathAtCosts(token, origWaypoints, startPos, [remaining], capOriginalAction) : null;
                 const twoLegTail = !!(twoLegSplit && twoLegSplit[1]?.length);
-                const twoLegFirst = (twoLegTail && legUsable(twoLegSplit[0], startPos)) ? twoLegSplit[0] : (twoLegTail ? null : (remaining > 0 ? computeMid(remaining) : null));
-                const twoLegRest = twoLegTail ? twoLegSplit[1] : (remaining > 0 ? finalDest : finalPath);
+                const sameHex = Math.round(endPos.x) === Math.round(startPos.x) && Math.round(endPos.y) === Math.round(startPos.y);
+                const twoLegMid = remaining > 0 && !sameHex ? computeMid(remaining) : null;
+                const twoLegFirst = (twoLegTail && legUsable(twoLegSplit[0], startPos)) ? twoLegSplit[0] : (twoLegTail ? null : twoLegMid);
+                const twoLegRest = twoLegTail ? twoLegSplit[1] : (twoLegMid ? finalDest : finalPath);
                 const restMove = () => _rulerMove(token, twoLegRest, lastLegOpts);
+
                 const twoLegFrames = [
                     { kind: 'awaitActivation', matchActionName: overchargeActionName, onSatisfy: fireBoost },
                     { kind: 'awaitActivation', matchActionName: 'Boost', onSatisfy: restMove },
                     { kind: 'awaitMove' }
                 ];
+
                 if (twoLegFirst)
                 {
                     _pushMoveStack(token.id, [
@@ -958,23 +1066,84 @@ export function _handleMovementCapExceeded(token, ctx)
         }
         catch
         { /* idle */ }
-        triggerData.cancelTriggeredMove(
-            `Movement exceeds cap (${need} > ${cap}) and cannot be covered by Boost or Overcharge. ` +
-            `Hold <b>${freeKey}</b> for free movement.`
-        );
+
+        triggerData.cancelTriggeredMove(localizeFormat(canBoost || canOvercharge ? 'LA.movement.exceedsCapNoOffer' : 'LA.movement.exceedsCapNoCover', { need, cap, key: freeKey }));
     }
+}
+
+export function _handleLineBlocked(token, { options, startPos, moveInfo, triggerData, intentPath, intentEndPos })
+{
+    if (options.lancerLineBlockChecked || options._skipBoostOffer || options.ignoreMovementCap || !intentPath?.length)
+        return false;
+
+    const doc = token.document;
+    const action = intentPath.find(waypoint => waypoint?.action)?.action;
+    const startWaypoint = { x: startPos.x, y: startPos.y, elevation: startPos.elevation, width: doc.width, height: doc.height, shape: doc.shape, action, checkpoint: true };
+    const block = straightLineBlock(doc, [startWaypoint, ...intentPath]);
+
+    if (!block)
+        return false;
+
+    triggerData.cancel();
+    cancelRulerDrag(token, moveInfo);
+
+    const stopsAtStart = Math.round(block.free.x) === Math.round(startPos.x) && Math.round(block.free.y) === Math.round(startPos.y);
+    const stopPath = stopsAtStart ? null : (trimPathToPosition(token, intentPath, startPos, block.free, action) ?? [{ ...block.free, action }]);
+    const { _movement, _movementArguments, movement, _laTeleFxPlayed, ...cleanOptions } = options;
+    const replayOptions = { ...cleanOptions, isDrag: true, useRuler: true, lancerLineBlockChecked: true };
+
+    (async () =>
+    {
+        const trace = drawMovementTrace(token, intentEndPos, block.free, { path: intentPath, newPath: stopPath ?? [] });
+        let result;
+
+        try
+        {
+            result = await startChoiceCard({
+                title: localize('LA.dialogTitle.lineBlocked'),
+                icon: 'fas fa-ban',
+                description: localize('LA.movement.lineBlocked'),
+                originToken: token,
+                userIdControl: getTokenOwnerUserId(token),
+                traceData: { tokenId: token.id, endPos: intentEndPos, newEndPos: block.free, path: intentPath, newPath: stopPath ?? [] },
+                choices: [
+                    { text: localize('LA.movement.stopAtBlock'), icon: 'fas fa-hand' },
+                    { text: 'Ignore', icon: 'fas fa-forward' }
+                ]
+            });
+        }
+        finally
+        {
+            if (trace?.parent)
+                trace.parent.removeChild(trace);
+            trace?.destroy();
+        }
+
+        const choiceIdx = /** @type {any} */ (result)?.choiceIdx;
+
+        if (choiceIdx === 0 && stopPath)
+            await _rulerMove(token, stopPath, replayOptions);
+        else if (choiceIdx === 1)
+            await _rulerMove(token, intentPath, replayOptions);
+        else
+            _clearCapRuler(token);
+    })();
+
+    return true;
 }
 
 /** Move a token from code. `useRuler` routes through Token.move() (Lancer cost rules apply); else TokenDocument.update for an exact land. */
 export async function _rulerMove(token, destination, extraOpts = {})
 {
     const { useRuler, ...passthroughOpts } = extraOpts;
+
     if (useRuler)
         await moveTokenTo(token, destination, passthroughOpts);
     else
     {
         const endPoint = Array.isArray(destination) ? destination[destination.length - 1] : destination;
         const update = { x: endPoint.x, y: endPoint.y };
+
         if (endPoint.elevation !== undefined)
             update.elevation = endPoint.elevation;
         // No implicit isDrag; caller opts in via passthroughOpts for cap consumption.
@@ -996,10 +1165,12 @@ export function _computeMoveData(options, startPos, endPos, elevationFallback = 
     }
 
     const moveOp = options?._movement?.[tokenDoc?.id];
+
     if (moveOp?.passed)
     {
         const cost = Number(moveOp.passed.cost);
         const dist = Number(moveOp.passed.distance);
+
         if (Number.isFinite(cost))
         {
             const movementCost = Math.round(cost / sceneDist);
@@ -1019,6 +1190,7 @@ export function _computeMoveData(options, startPos, endPos, elevationFallback = 
                 width: tokenDoc.width,
                 height: tokenDoc.height
             };
+
             const wpEnd = {
                 x: endPos.x,
                 y: endPos.y,
@@ -1026,6 +1198,7 @@ export function _computeMoveData(options, startPos, endPos, elevationFallback = 
                 width: tokenDoc.width,
                 height: tokenDoc.height
             };
+
             const result = tokenDoc.measureMovementPath([wpStart, wpEnd]);
             const cost = Number(result?.cost) || 0;
             const terrainPenalty = Number(result?.lancerTerrainPenalty) || 0;
@@ -1046,12 +1219,15 @@ export function _moveHasForcedAction(document, options)
 {
     const executedWaypoints = options?._movement?.[document.id]?.passed?.waypoints;
     const requestWaypoints = options?.movement?.[document.id]?.waypoints;
+
     const requestForced = (Array.isArray(requestWaypoints) && requestWaypoints.some(waypoint => waypoint?.action === 'forced'))
         || (Array.isArray(options?.waypoints) && options.waypoints.some(waypoint => waypoint?.action === 'forced'))
         || !!options?.forceUnintentional;
+
     if (Array.isArray(executedWaypoints))
     {
         const executedForced = executedWaypoints.some(waypoint => waypoint?.action === 'forced');
+
         if (requestForced && !executedForced)
         {
             console.warn('lancer-automations | forced marker on request channels but not in executed path', {
@@ -1062,8 +1238,10 @@ export function _moveHasForcedAction(document, options)
                 forceUnintentional: options.forceUnintentional
             });
         }
+
         return executedForced;
     }
+
     return requestForced;
 }
 
@@ -1072,6 +1250,7 @@ export function _moveHasFreeAction(document, options)
     const executedWaypoints = options?._movement?.[document.id]?.passed?.waypoints;
     if (Array.isArray(executedWaypoints))
         return executedWaypoints.some(waypoint => parseAction(waypoint?.action).free);
+
     const requestWaypoints = options?.movement?.[document.id]?.waypoints;
     return Array.isArray(requestWaypoints) && requestWaypoints.some(waypoint => parseAction(waypoint?.action).free);
 }
@@ -1081,8 +1260,12 @@ export function _moveHasTeleportAction(document, options)
     const movementActions = CONFIG.Token?.movement?.actions;
     const isTeleportAction = (actionKey) => !!movementActions?.[actionKey]?.teleport;
     const executedWaypoints = options?._movement?.[document.id]?.passed?.waypoints;
+
     if (Array.isArray(executedWaypoints))
         return executedWaypoints.some(waypoint => isTeleportAction(waypoint?.action));
+    if (options?.teleport)
+        return true;
+
     const requestWaypoints = options?.movement?.[document.id]?.waypoints;
     return Array.isArray(requestWaypoints) && requestWaypoints.some(waypoint => isTeleportAction(waypoint?.action));
 }
@@ -1115,22 +1298,17 @@ export async function handleTokenMove(document, change, options, userId)
 
     const v13Method = options.movement?.[document.id]?.method;
     const isForceMovement = _moveHasForcedAction(document, options);
+
     const isDrag = !isForceMovement && (
         'rulerSegment' in options || options.isDrag || v13Method === 'dragging'
     );
-    const isTeleport = !!options.teleport || _moveHasTeleportAction(document, options);
 
-    if (isTeleport && isDrag && !options._laTeleFxPlayed && typeof Sequencer !== 'undefined')
+    const isTeleport = _moveHasTeleportAction(document, options);
+
+    if (isTeleport && isDrag && !options._laTeleFxPlayed)
     {
         options._laTeleFxPlayed = true;
-        const startCenter = token.getCenterPoint(startPos);
-        const endCenter = token.getCenterPoint(endPos);
-        const tokenSize = Math.max(1, token.document.width ?? 1, token.document.height ?? 1) * canvas.grid.size;
-        new Sequence()
-            .effect().file('jb2a.impact.003.yellow').atLocation(startCenter).size(tokenSize * 3).mirrorX().playbackRate(2)
-            .effect().file('jb2a.impact.003.yellow').atLocation(endCenter).size(tokenSize * 3)
-            .play();
-        actionFX.playTeleportSoundFX();
+        actionFX.playTeleportMoveFX(token, startPos, endPos);
     }
 
     const { distanceMoved, movementCost, isFreeMovement, costOverridden } = _computeMoveData(options, startPos, endPos, newElevation, document);
@@ -1151,7 +1329,8 @@ export async function handleTokenMove(document, change, options, userId)
     // History/cap only apply to actual combatants of the active combat; non-combatants start fresh.
     const tokenDoc = document.document;
     const tokenId = tokenDoc.id ?? tokenDoc._id;
-    const inCombat = !!game.combat?.active && !!game.combat.combatants.find(combatant => combatant.token?.id === tokenId);
+    const inCombat = (!!game.combat?.active && !!game.combat.combatants.find(combatant => combatant.token?.id === tokenId)) || movesOnItsOwn(token);
+
     if (!inCombat
         && (getLAFlag(tokenDoc,'moveHistory') != null
             || getLAFlag(tokenDoc,'movementCap') != null))
@@ -1167,18 +1346,21 @@ export async function handleTokenMove(document, change, options, userId)
         .reduce((acc, move) => acc + (move.movementCost ?? move.distanceMoved), 0);
 
     let chipId = null;
-    /** @type {'move'|'free'|'forced'|null} */
+    /** @type {'move'|'free'|'forced'|'manual'|null} */
     let chipKind = null;
     let newChip = false;
     let firstChip = false;
-    if (inCombat && (isDrag || isForceMovement))
+    const isKeyMove = !isDrag && !isForceMovement && v13Method === 'keyboard';
+
+    if (inCombat && (isDrag || isForceMovement || isKeyMove))
     {
-        chipKind = isForceMovement ? 'forced' : (isFreeMovement ? 'free' : 'move');
-        const turnChips = currentTurnChips(token);
+        chipKind = isForceMovement ? 'forced' : (isKeyMove ? 'manual' : (isFreeMovement ? 'free' : 'move'));
+        const turnChips = moverTurnChips(token);
         const lastChip = turnChips.at(-1);
         const pendingChips = _pendingMoveChips.get(tokenId) ?? [];
         const latest = pendingChips.at(-1) ?? (lastChip?.move ? { id: lastChip.id, kind: lastChip.moveKind ?? 'move' } : null);
         chipId = latest?.kind === chipKind ? latest.id : null;
+
         if (!chipId)
         {
             newChip = true;
@@ -1203,25 +1385,29 @@ export async function handleTokenMove(document, change, options, userId)
             isTeleport,
             costOverridden: costOverridden === true,
             capBypass: options.ignoreMovementCap === true || _capSystemOff(),
+            straightFlip: straightFlipFor(tokenDoc),
             startPos
         }]
     };
+
     if (inCombat)
     {
         _moveHistoryCache.set(tokenId, newData);
         foundry.utils.setProperty(tokenDoc.flags, 'lancer-automations.moveHistory', newData);
         const isLastSegment = !options.rulerSegment || options.lastRulerSegment === true;
         if (tokenDoc.isOwner && isLastSegment)
-            tokenDoc.update({ 'flags.lancer-automations.moveHistory': newData });
+            foundry.utils.setProperty(change, 'flags.lancer-automations.moveHistory', newData);
+
         if (newChip)
         {
             const pendingChip = { id: chipId, kind: chipKind };
             _pendingMoveChips.set(tokenId, [...(_pendingMoveChips.get(tokenId) ?? []), pendingChip]);
-            const spend = firstChip ? consumeAction(token, 'move').catch(() => null) : Promise.resolve(null);
+            const spend = firstChip && token.actor?.type !== 'deployable' ? consumeAction(token, 'move').catch(() => null) : Promise.resolve(null);
             spend
                 .then(tracker => recordAction(token, { id: chipId, name: MOVE_CHIP_NAMES[chipKind], activation: 'Move', icon: 'mdi mdi-arrow-right-bold-hexagon-outline', tracker, move: true, moveKind: chipKind }))
                 .finally(() => _pendingMoveChips.set(tokenId, (_pendingMoveChips.get(tokenId) ?? []).filter(pending => pending !== pendingChip)));
         }
+
         if (isForceMovement && !isFreeMovement && !options.isUndo)
             Hooks.callAll('lancer-automations.battelog.involuntaryMove', { token, distance: distanceMoved });
     }
@@ -1232,6 +1418,7 @@ export async function handleTokenMove(document, change, options, userId)
     moveInfo.isFreeMovement = isFreeMovement;
     moveInfo.movementCost = movementCost;
     let moveLeg = null;
+
     if (isDrag && inCombat && !isFreeMovement)
     {
         const spentBefore = prevIntentional;
@@ -1248,6 +1435,7 @@ export async function handleTokenMove(document, change, options, userId)
             spentAfter
         };
     }
+
     await handleTrigger(isDrag ? 'onMove' : 'onInvoluntaryMove', { triggeringToken: token, distanceMoved, elevationMoved: newElevation, startPos, endPos, isDrag, moveInfo, moveLeg, ...(isDrag ? {} : _involuntaryMoveData(options)) });
 
     const pendingWaypointCount = options._movement?.[token.id]?.pending?.waypoints?.length ?? 0;

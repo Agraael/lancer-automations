@@ -2,7 +2,11 @@
 // Shared token/actor predicates used across the module. Centralised so call
 // sites stop redefining the same helpers.
 
+import { localizeFormat } from '../tools/string-utils.js';
+import { fightsThroughOwner } from '../interactive/deployable-owner.js';
+
 export const LANCER_ACTOR_TYPES = ['mech', 'pilot', 'npc', 'deployable'];
+const MOUNT_NUMERALS = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII'];
 
 const _MECH_STATS_TYPES = new Set(['mech', 'npc']);
 const _NO_REACTION_TYPES = new Set(['deployable']);
@@ -50,11 +54,13 @@ export function rankParts(actor)
         return { kind: 'T', value: Number(actor.system?.tier) || 1 };
     if (actor.type === 'pilot')
         return { kind: 'LL', value: Number(actor.system?.level) || 0 };
+
     if (actor.type === 'mech')
     {
         const pilot = actor.system?.pilot?.value;
         return pilot ? { kind: 'LL', value: Number(pilot.system?.level) || 0 } : null;
     }
+
     return null;
 }
 
@@ -89,6 +95,7 @@ export function shortOverchargeTerm(term)
     const match = /^\+?(\d+)d(\d+)(?:\+(\d+))?$/i.exec(String(term ?? '').trim());
     if (!match)
         return term;
+
     const [, count, faces, flat] = match;
     const dice = `${count === '1' ? '' : count}d${faces}`;
     return flat ? `${dice}+${flat}` : dice;
@@ -101,14 +108,16 @@ export function isTokenInCombat(token)
     const id = token?.id;
     if (!id)
         return false;
+
     for (const combat of game.combats ?? [])
     {
         if (!combat.started)
             continue;
-        if (combat.combatants?.some?.(c => c.tokenId === id))
+        if (combat.combatants?.some?.(combatant => combatant.tokenId === id))
             return true;
     }
-    return false;
+
+    return fightsThroughOwner(token);
 }
 
 function _findCombatant(tokenOrActor)
@@ -116,6 +125,7 @@ function _findCombatant(tokenOrActor)
     const actor = tokenOrActor?.actor ?? tokenOrActor;
     const tokenId = tokenOrActor?.actor ? tokenOrActor.id : actor?.token?.id;
     const combat = game.combat;
+
     if (!combat?.started)
         return null;
     return combat.combatants.find(combatant =>
@@ -172,11 +182,13 @@ export function deriveSaveDc(targetActor, statOverride = null)
 {
     if (!targetActor)
         return 10;
+
     if (statOverride)
     {
         const lookupStat = String(statOverride).toUpperCase();
         return foundry.utils.getProperty(targetActor, STAT_PATHS[lookupStat] || lookupStat.toLowerCase()) || 10;
     }
+
     return targetActor.system?.save || 10;
 }
 
@@ -209,6 +221,7 @@ export function isItemAvailable(item, reactionPath)
     if (item.type === "talent" && reactionPath)
     {
         const rankMatch = reactionPath.match(/ranks\[(\d+)\]/);
+
         if (rankMatch)
         {
             const requiredRank = Number.parseInt(rankMatch[1]) + 1;
@@ -220,10 +233,12 @@ export function isItemAvailable(item, reactionPath)
     if (item.type === "mech_weapon" && reactionPath)
     {
         const profileMatch = reactionPath.match(/profiles\[(\d+)\]/);
+
         if (profileMatch)
         {
             const requiredProfile = Number.parseInt(profileMatch[1]);
             const currentProfile = item.system?.selected_profile_index ?? 0;
+
             if (currentProfile !== requiredProfile)
                 return false;
         }
@@ -315,4 +330,16 @@ export function getItemType(item)
     if (!item)
         return "";
     return item.system?.type || item.type || "";
+}
+
+export function mountLabel(actor, mount)
+{
+    const label = localizeFormat('LA.choiceCard.mountSection', { type: mount?.type ?? '' }).trim();
+    const sameType = (actor?.system?.loadout?.weapon_mounts ?? []).filter(other => other.type === mount?.type);
+    const index = sameType.indexOf(mount);
+
+    if (sameType.length < 2 || index < 0)
+        return label;
+
+    return `${label} ${MOUNT_NUMERALS[index] ?? index + 1}`;
 }

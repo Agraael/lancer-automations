@@ -1,6 +1,6 @@
 import { localize } from "../tools/string-utils.js";
 import { installLancerHints } from "../setup/codemirror-hints.js";
-import { ReactionManager } from "./reaction-manager.js";
+import { AutomationManager } from "./automation-manager.js";
 
 export class StartupScriptEditor extends FormApplication
 {
@@ -53,6 +53,7 @@ export class StartupScriptEditor extends FormApplication
         const isBuiltin = !!this.object?.script?.builtin;
         const host = html.find('.sse-codemirror-host')[0];
         const textarea = html.find('textarea[name="code"]')[0];
+
         if (host && typeof CodeMirror !== 'undefined')
         {
             const initialValue = textarea?.value ?? "";
@@ -68,6 +69,7 @@ export class StartupScriptEditor extends FormApplication
                 scrollbarStyle: 'native',
                 readOnly: isBuiltin
             });
+
             if (!isBuiltin)
             {
                 this._codeEditor.on('change', (cm) =>
@@ -77,10 +79,12 @@ export class StartupScriptEditor extends FormApplication
                 });
                 installLancerHints(this._codeEditor, 'startup');
             }
+
             const fit = () =>
             {
                 if (!this._codeEditor || !host?.isConnected)
                     return;
+
                 const height = host.clientHeight;
                 if (height <= 0)
                     return;
@@ -90,6 +94,7 @@ export class StartupScriptEditor extends FormApplication
                     cmEl.style.setProperty('height', height + 'px', 'important');
                 this._codeEditor.refresh();
             };
+
             requestAnimationFrame(() => requestAnimationFrame(fit));
             const resizeObserver = new ResizeObserver(fit);
             resizeObserver.observe(host);
@@ -105,6 +110,7 @@ export class StartupScriptEditor extends FormApplication
         }
         catch
         { /* ignore */ }
+
         return super.close(options);
     }
 
@@ -115,6 +121,7 @@ export class StartupScriptEditor extends FormApplication
 
         const id = formData.id ?? foundry.utils.randomID();
         const name = (formData.name ?? "").trim();
+
         if (!name)
         {
             ui.notifications.warn(localize('LA.notify.scriptNameIsRequired'));
@@ -128,11 +135,13 @@ export class StartupScriptEditor extends FormApplication
             enabled: !!formData.enabled,
             code: formData.code ?? ""
         };
+
         if (formData.workshopId)
             entry.workshopId = formData.workshopId;
 
-        const scripts = ReactionManager.getStartupScripts();
+        const scripts = AutomationManager.getStartupScripts();
         const isNew = !this.object?.script && !entry.workshopId;
+
         if (isNew)
             scripts.push(entry);
         else
@@ -144,7 +153,8 @@ export class StartupScriptEditor extends FormApplication
                 scripts.push(entry);
         }
 
-        await ReactionManager.saveStartupScripts(scripts);
+        await AutomationManager.saveStartupScripts(scripts);
+
         if (this.object?.manager)
         {
             this.object.manager._needsReload = true;

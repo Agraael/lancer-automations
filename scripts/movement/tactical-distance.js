@@ -1,26 +1,22 @@
 /* global game, canvas, foundry, Hooks, PIXI */
 
-import { getMinGridDistance, getDistanceTokenToPoint } from '../combat/grid-helpers.js';
+import { getMinGridDistance, getMinDistanceTokenToPoint } from '../combat/grid-helpers.js';
 import { getModuleSetting } from '../tools/settings-utils.js';
 import { ISO_SETTINGS, getIsoStateForToken } from '../setup/iso-settings.js';
 import { hasLineOfSight } from '../vision/lancerDetectionModes.js';
 import { belowBarsY } from '../tah/tokenStatBar.js';
 
 import { MODULE_ID } from '../tools/constants.js';
+import { gridScale, stopTicker } from '../tools/canvas-utils.js';
 const MODE_KEY = 'enableTacticalDistance'; // values: 'off' | 'combat' | 'always' (legacy boolean migrated below)
 const LABEL_KEY = '_laTacticalLabel';
 const GHOST_KEY = '_laTacticalLabelGhost';
+const THROTTLE_KEY = 'tacticalDistanceThrottleFps';
 // mdi eye-outline / eye-off-outline
-const EYE_ON = '\u{F06D0}';
-const EYE_OFF = '\u{F06D1}';
-const EYE_SEEN = '#4dd35f';
-const EYE_BLOCKED = '#ff5b52';
-
-// Label metrics are world px, calibrated on a 100px grid.
-function gridScale()
-{
-    return (canvas.grid?.size || 100) / 100;
-}
+export const EYE_ON = '\u{F06D0}';
+export const EYE_OFF = '\u{F06D1}';
+export const EYE_SEEN = '#4dd35f';
+export const EYE_BLOCKED = '#ff5b52';
 
 // Smaller font = smaller bitmap, so raise the density to keep it sharp.
 function labelResolution(scale)
@@ -60,6 +56,7 @@ function shouldShow()
 function makeLabel()
 {
     const scale = gridScale();
+
     const style = foundry.canvas.containers.PreciseText.getTextStyle({
         fontFamily: ['Material Design Icons', 'Signika'],
         fontSize: 14 * scale,
@@ -69,6 +66,7 @@ function makeLabel()
         align: 'center',
         fontWeight: '600'
     });
+
     const text = new foundry.canvas.containers.PreciseText('', style);
     text.resolution = labelResolution(scale);
     text.anchor.set(0.5, 0);
@@ -77,6 +75,7 @@ function makeLabel()
 
 // Above the stat-bar overlay (zIndex 99999) so bars never cover labels.
 let _labelOverlay = null;
+
 function getLabelOverlay()
 {
     if (_labelOverlay && !_labelOverlay.destroyed)
@@ -93,11 +92,13 @@ function getLabelOverlay()
 function _livePlaceable(token)
 {
     const id = token?.document?.id;
+
     for (const preview of canvas.tokens?.preview?.children ?? [])
     {
         if (preview?.document?.id === id)
             return preview;
     }
+
     return token;
 }
 
@@ -106,10 +107,12 @@ let _labelRefId = null;
 // Overlay labels don't inherit token transforms; reposition every frame so they follow
 // moving tokens and drag previews.
 let _tickerFn = null;
+
 function _startTicker()
 {
     if (_tickerFn || !canvas?.app?.ticker)
         return;
+
     _tickerFn = () =>
     {
         for (const token of canvas.tokens?.placeables ?? [])
@@ -117,7 +120,9 @@ function _startTicker()
             const label = token[LABEL_KEY];
             if (label && !label.destroyed)
                 positionLabel(token, label);
+
             const ghost = token[GHOST_KEY];
+
             if (ghost && !ghost.destroyed)
             {
                 const clone = _livePlaceable(token);
@@ -126,23 +131,19 @@ function _startTicker()
             }
         }
     };
-    canvas.app.ticker.add(_tickerFn);
-}
 
-function _stopTicker()
-{
-    if (_tickerFn)
-        canvas?.app?.ticker?.remove(_tickerFn);
-    _tickerFn = null;
+    canvas.app.ticker.add(_tickerFn);
 }
 
 function _ensureLabelAt(token, key)
 {
     if (token[key] && !token[key].destroyed)
         return token[key];
+
     const overlay = getLabelOverlay();
     if (!overlay)
         return null;
+
     const label = makeLabel();
     overlay.addChild(label);
     token[key] = label;
@@ -153,6 +154,7 @@ function _ensureLabelAt(token, key)
 function _removeLabelAt(token, key)
 {
     const label = token[key];
+
     if (label)
     {
         try
@@ -161,6 +163,7 @@ function _removeLabelAt(token, key)
         }
         catch
         { /* ignore */ }
+
         delete token[key];
     }
 }
@@ -179,7 +182,7 @@ function clearAll()
 {
     for (const t of canvas.tokens?.placeables ?? [])
         removeLabel(t);
-    _stopTicker();
+    _tickerFn = stopTicker(_tickerFn);
 }
 
 // Tool-driven reference: the Advanced Measure tool shows distance labels from a selected/hovered
@@ -195,6 +198,7 @@ function _effectiveMeasureRef()
 
 // Coalesced redraw that re-reads the CURRENT reference at fire time (never a stale captured token).
 let _refRafQueued = false;
+
 function _queueRefUpdate()
 {
     if (_refRafQueued)
@@ -203,11 +207,13 @@ function _queueRefUpdate()
     requestAnimationFrame(() =>
     {
         _refRafQueued = false;
+
         if (_measurePoint)
         {
             updateLabelsForPoint(_measurePoint);
             return;
         }
+
         const ref = _effectiveMeasureRef();
         if (ref)
             updateLabelsFor(ref);
@@ -228,6 +234,7 @@ export function setMeasureDistanceReference(token)
 
 // The eye bakes as tofu if drawn before the webfont loads; unchanged .text never re-renders.
 let _mdiFontReady = false;
+
 function _ensureMdiFont()
 {
     if (_mdiFontReady || !globalThis.document?.fonts?.load)
@@ -250,14 +257,17 @@ function losEyeEnabled()
 
 // A point origin (e.g. the cursor) takes priority over the token reference while set; null reverts.
 let _measurePoint = null;
+
 export function setMeasureDistancePoint(point)
 {
     _measurePoint = point || null;
+
     if (_measurePoint)
     {
         updateLabelsForPoint(_measurePoint);
         return;
     }
+
     const ref = _effectiveMeasureRef();
     if (ref)
         updateLabelsFor(ref);
@@ -269,6 +279,7 @@ function updateLabelsForPoint(point)
 {
     _labelRefId = null;
     const units = canvas.scene?.grid?.units ?? '';
+
     for (const target of canvas.tokens.placeables)
     {
         if (target.isPreview || !target.visible)
@@ -276,11 +287,12 @@ function updateLabelsForPoint(point)
             removeLabel(target);
             continue;
         }
+
         const label = ensureLabel(target);
         if (!label)
             continue;
         removeGhostLabel(target);
-        const text = `↔ ${getDistanceTokenToPoint(point, target)}${units ? ` ${units}` : ''}`;
+        const text = `↔ ${getMinDistanceTokenToPoint(point, target)}${units ? ` ${units}` : ''}`;
         if (label.text !== text)
             label.text = text;
         _syncEye(label, null);
@@ -292,8 +304,10 @@ export function snapElevationForDisplay(rawElev)
 {
     const value = Number(rawElev) || 0;
     const isGridless = canvas.grid?.type === globalThis.CONST.GRID_TYPES.GRIDLESS;
+
     if (isGridless)
         return Math.round(value * 100) / 100;
+
     const step = Number(getModuleSetting('tacticalElevationStep')) || 0.5;
     return Number((Math.round(value / step) * step).toFixed(3));
 }
@@ -304,11 +318,13 @@ function buildLabelText(previewToken, targetToken)
     const dist = getMinGridDistance(previewToken, targetToken, null, false);
     let line = `↔ ${dist}${units ? ` ${units}` : ''}`;
     const dElev = snapElevationForDisplay((targetToken.document.elevation ?? 0) - (previewToken.document.elevation ?? 0));
+
     if (dElev !== 0)
     {
         const arrow = dElev > 0 ? '↑' : '↓';
         line += `  ${arrow} ${Math.abs(dElev)}${units ? ` ${units}` : ''}`;
     }
+
     return line;
 }
 
@@ -326,9 +342,11 @@ function _syncEye(label, seen)
         label._laEye = null;
         return;
     }
+
     if (!label._laEye || label._laEye.destroyed)
     {
         const scale = gridScale();
+
         const style = foundry.canvas.containers.PreciseText.getTextStyle({
             fontFamily: ['Material Design Icons', 'Signika'],
             fontSize: 14 * scale,
@@ -336,16 +354,20 @@ function _syncEye(label, seen)
             strokeThickness: Math.max(1, 3 * scale),
             fontWeight: '600'
         });
+
         const eye = new foundry.canvas.containers.PreciseText('', style);
         eye.resolution = labelResolution(scale);
         eye.anchor.set(1, 0.5);
         label.addChild(eye);
         label._laEye = eye;
     }
+
     const eye = label._laEye;
     const glyph = seen ? EYE_ON : EYE_OFF;
+
     if (eye.text !== glyph)
         eye.text = glyph;
+
     const fill = seen ? EYE_SEEN : EYE_BLOCKED;
     if (eye.style.fill !== fill)
         eye.style.fill = fill;
@@ -361,6 +383,7 @@ function belowAnchorY(target)
 {
     let anchor = belowBarsY(target) ?? target.h + 2;
     const nameplate = target.nameplate;
+
     if (nameplate?.visible)
         anchor = Math.max(anchor, nameplate.position.y + (nameplate.height ?? 0) + 2);
     return anchor;
@@ -371,6 +394,7 @@ function zoomCounterScale()
     const minZoom = Number(getModuleSetting('tacticalMinZoomScale')) || 0;
     if (minZoom <= 0)
         return 1;
+
     const zoom = canvas.stage?.scale?.x || 1;
     return Math.max(1, minZoom / zoom);
 }
@@ -382,6 +406,7 @@ function positionLabel(target, label)
     const iso = getIsoStateForToken(target, ISO_SETTINGS.tacticalDistance);
     const zoomK = zoomCounterScale();
     const gap = 4 * gridScale();
+
     if (iso && target.mesh)
     {
         label.anchor.set(0.5, below ? 0 : 1);
@@ -400,7 +425,9 @@ function positionLabel(target, label)
         label.scale.set(zoomK, zoomK);
         label.pivot.set(0, 0);
     }
+
     const eye = label._laEye;
+
     if (eye && !eye.destroyed)
     {
         const textW = label.texture?.orig?.width ?? 0;
@@ -418,40 +445,50 @@ function updateLabelsFor(previewToken)
         _ensureMdiFont();
     _labelRefId = previewToken.document?.id ?? null;
     const previewSourceId = previewToken.sourceId ?? previewToken.document?.id;
+
     for (const target of canvas.tokens.placeables)
     {
         if (target.isPreview)
             continue;
+
         if (target.id === previewSourceId || target.document?.id === previewSourceId)
         {
             removeLabel(target);
             continue;
         }
+
         if (!target.visible)
         {
             removeLabel(target);
             continue;
         }
+
         const label = ensureLabel(target);
         if (!label)
             continue;
+
         const text = buildLabelText(previewToken, target);
         if (label.text !== text)
             label.text = text;
+
         const seen = _losState(previewToken, target);
         _syncEye(label, seen);
         positionLabel(target, label);
         const clone = _livePlaceable(target);
+
         if (clone === target)
         {
             removeGhostLabel(target);
             continue;
         }
+
         const ghost = ensureGhostLabel(target);
         if (!ghost)
             continue;
+
         const isRef = target.document?.id === _labelRefId;
         const ghostText = isRef ? text : buildLabelText(previewToken, clone);
+
         if (ghost.text !== ghostText)
             ghost.text = ghostText;
         _syncEye(ghost, isRef ? seen : _losState(previewToken, clone));
@@ -459,14 +496,36 @@ function updateLabelsFor(previewToken)
     }
 }
 
-// coalesce refreshToken bursts (1 update per animation frame per dragged preview)
+// coalesce refreshToken bursts (1 update per animation frame per dragged preview, capped at the throttle rate)
 let _pendingPreview = null;
 let _rafQueued = false;
+let _lastPreviewUpdate = 0;
+let _trailingPreviewTimer = null;
+
 function _queueUpdate(previewToken)
 {
     _pendingPreview = previewToken;
-    if (_rafQueued)
+    if (_rafQueued || _trailingPreviewTimer !== null)
         return;
+
+    const fps = Number(getModuleSetting(THROTTLE_KEY)) || 0;
+
+    if (fps > 0)
+    {
+        const throttleMs = 1000 / fps;
+        const elapsed = globalThis.performance.now() - _lastPreviewUpdate;
+
+        if (elapsed < throttleMs)
+        {
+            _trailingPreviewTimer = globalThis.setTimeout(() =>
+            {
+                _trailingPreviewTimer = null;
+                _queueUpdate(_pendingPreview);
+            }, throttleMs - elapsed + 1);
+            return;
+        }
+    }
+
     _rafQueued = true;
     requestAnimationFrame(() =>
     {
@@ -475,6 +534,7 @@ function _queueUpdate(previewToken)
         _pendingPreview = null;
         if (!token || token.destroyed)
             return;
+        _lastPreviewUpdate = globalThis.performance.now();
         updateLabelsFor(token);
     });
 }
@@ -487,6 +547,7 @@ Hooks.on('refreshToken', (token) =>
         _queueRefUpdate();
         return;
     }
+
     // Otherwise the plain drag-preview path (mode-gated).
     if (!shouldShow())
         return;
@@ -539,6 +600,14 @@ Hooks.once('init', () =>
         type: Number,
         default: 0,
         range: { min: 0, max: 4, step: 0.1 },
+        config: false
+    });
+    game.settings.register(MODULE_ID, THROTTLE_KEY, {
+        name: 'LA.settings.tacticalDistanceThrottleFps.name',
+        hint: 'LA.settings.tacticalDistanceThrottleFps.hint',
+        scope: 'client',
+        type: Number,
+        default: 30,
         config: false
     });
 });

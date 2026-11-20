@@ -13,12 +13,15 @@ function _rollIdOf(flowState)
 {
     if (!flowState || typeof flowState !== 'object')
         return null;
+
     let rollId = _rollIds.get(flowState);
+
     if (!rollId)
     {
         rollId = foundry.utils.randomID();
         _rollIds.set(flowState, rollId);
     }
+
     return rollId;
 }
 
@@ -33,28 +36,37 @@ function _onTrigger(triggerType, data)
 {
     if (!TRACKED.has(triggerType))
         return;
+
     const rawId = data?.triggeringToken?.id ?? null;
     const attackerId = resolveCreditTokenId(rawId);
+
     if (!attackerId)
         return;
+
     const pilotTokenId = attackerId !== rawId ? pilotTokenOf(rawId) : null;
+
     const combat = _findActiveCombatForToken(attackerId)
         ?? (pilotTokenId ? findTelemetryCombatForToken(attackerId) : null);
+
     if (!combat)
         return;
 
     const hit = triggerType === 'onHit' || triggerType === 'onTechHit';
+
     const category = (triggerType === 'onTechHit' || triggerType === 'onTechMiss')
         ? 'tech'
         : 'weapon';
+
     const isSmart = data?.flowState?.data?.is_smart === true;
     const defense = (category === 'tech' || isSmart) ? 'edef' : 'evasion';
+
     const targets = (data?.targets ?? [])
         .map(entry =>
         {
             const targetId = _targetTokenId(entry);
             if (!targetId)
                 return null;
+
             const targetEntry = { targetId, hit, defense };
             if (hit && entry.crit)
                 targetEntry.crit = true;
@@ -63,6 +75,7 @@ function _onTrigger(triggerType, data)
             return targetEntry;
         })
         .filter(Boolean);
+
     if (targets.length === 0)
         return;
 
@@ -70,6 +83,7 @@ function _onTrigger(triggerType, data)
     const weaponName = String(weapon?.name ?? data?.actionName ?? '').toUpperCase();
     // Basic attack/tech = the manual apply tool, not a real weapon. Excluded from fav weapon.
     const basic = !weapon?.id || weaponName === 'BASIC ATTACK' || weaponName === 'BASIC TECH';
+
     const event = {
         type: 'attack',
         round: combat.round ?? 0,
@@ -79,13 +93,16 @@ function _onTrigger(triggerType, data)
         attackType: data?.attackType ?? null,
         targets,
     };
+
     if (basic)
         event.basic = true;
     if (pilotTokenId)
         event.pilotTokenId = pilotTokenId;
+
     const rollId = _rollIdOf(data?.flowState);
     if (rollId)
         event.rollId = rollId;
+
     const tapeId = data?.flowState?.la_extraData?.tapeId;
     if (tapeId)
         event.tapeId = tapeId;

@@ -8,6 +8,7 @@ const AREA_RANGE_TYPES = ["Blast", "Burst", "Cone", "Line"];
 function _getItemBaseData(item)
 {
     let tags, range;
+
     if (item.type === "mech_weapon")
     {
         const profileIdx = item.system?.selected_profile_index ?? 0;
@@ -20,6 +21,7 @@ function _getItemBaseData(item)
         tags = item.system?.tags ?? [];
         range = item.system?.range ?? [];
     }
+
     return { tags: tags.map(tag => ({ ...tag })), range: range.map(rangeEntry => ({ ...rangeEntry })) };
 }
 
@@ -34,9 +36,11 @@ function _resolveWeaponsAndActor(input)
     {
         if (!entry)
             continue;
+
         if (entry.documentName === "Token" || entry.actor)
         {
             const entryActor = entry.actor;
+
             if (entryActor)
             {
                 actor = actor ?? entryActor;
@@ -55,6 +59,7 @@ function _resolveWeaponsAndActor(input)
                 weapons.push(entry);
         }
     }
+
     return { weapons, actor };
 }
 
@@ -68,13 +73,16 @@ function _applyItemBonuses(item, actor, tags, range)
 {
     if (!actor)
         return;
+
     const bonuses = flattenBonuses([
         ...getGlobalBonuses(actor),
         ...getConstantBonuses(actor),
         ...getV3DataBonuses(actor, ['tag', 'range']).map(row => row.bonus)
     ]);
+
     const flowTags = new Set(["all", "attack"]);
     const state = { actor, item, data: { tags, range } };
+
     for (const bonus of bonuses)
     {
         if (!isBonusApplicable(bonus, flowTags, state))
@@ -93,6 +101,7 @@ export function getWeaponProfiles_WithBonus(weapon, actor)
 {
     if (!weapon?.system)
         return [];
+
     const resolvedActor = actor ?? weapon.parent ?? null;
     const rawProfiles = weapon.system.profiles;
 
@@ -106,12 +115,15 @@ export function getWeaponProfiles_WithBonus(weapon, actor)
             const workingDamage = (profile.all_damage ?? profile.damage ?? []).map(damageEntry => ({ ...damageEntry }));
             const base_damage = workingDamage.map(damageEntry => ({ ...damageEntry })); // snapshot for popup diff
             const bonusState = { actor: resolvedActor, item: weapon, data: { tags, range: base, damage: workingDamage } };
+
             const bonuses = flattenBonuses([
                 ...getGlobalBonuses(resolvedActor),
                 ...getConstantBonuses(resolvedActor),
                 ...getV3DataBonuses(resolvedActor, ['range']).map(row => row.bonus)
             ]);
+
             const flowTags = new Set(["all", "attack"]);
+
             for (const bonus of bonuses)
             {
                 if (bonus.type === 'range' && isBonusApplicable(bonus, flowTags, bonusState))
@@ -119,6 +131,7 @@ export function getWeaponProfiles_WithBonus(weapon, actor)
                 else if (bonus.type === 'damage' && mutatesBaseDamage(bonus) && isBonusApplicable(bonus, flowTags, bonusState))
                     mutateDamageWithBonus(bonusState, bonus);
             }
+
             return { ...profile, range: base, all_range: base, base_range, damage: workingDamage, base_damage };
         });
     }
@@ -131,11 +144,13 @@ export function getWeaponProfiles_WithBonus(weapon, actor)
     let damage = weapon.system.damage;
     let attack_bonus = weapon.system.attack_bonus;
     let accuracy = weapon.system.accuracy;
+
     if (weapon.type === 'npc_feature')
     {
         const tierOverride = weapon.system.tier_override ?? 0;
         const tier = tierOverride > 0 ? tierOverride : (resolvedActor?.system?.tier ?? 1);
         const tierIdx = Math.max(0, Math.min(2, tier - 1));
+
         if (Array.isArray(damage?.[0]))
             damage = damage[tierIdx] ?? [];
         if (Array.isArray(attack_bonus))
@@ -143,15 +158,19 @@ export function getWeaponProfiles_WithBonus(weapon, actor)
         if (Array.isArray(accuracy))
             accuracy = accuracy[tierIdx] ?? 0;
     }
+
     const workingDamage = Array.isArray(damage) ? damage.map(damageEntry => ({ ...damageEntry })) : [];
     const base_damage = workingDamage.map(damageEntry => ({ ...damageEntry }));
     const bonusState = { actor: resolvedActor, item: weapon, data: { tags, range: base, damage: workingDamage } };
+
     const bonuses = flattenBonuses([
         ...getGlobalBonuses(resolvedActor),
         ...getConstantBonuses(resolvedActor),
         ...getV3DataBonuses(resolvedActor, ['range']).map(row => row.bonus)
     ]);
+
     const flowTags = new Set(["all", "attack"]);
+
     for (const bonus of bonuses)
     {
         if (bonus.type === 'range' && isBonusApplicable(bonus, flowTags, bonusState))
@@ -159,6 +178,7 @@ export function getWeaponProfiles_WithBonus(weapon, actor)
         else if (bonus.type === 'damage' && mutatesBaseDamage(bonus) && isBonusApplicable(bonus, flowTags, bonusState))
             mutateDamageWithBonus(bonusState, bonus);
     }
+
     return [{ ...weapon.system, damage: workingDamage.length > 0 ? workingDamage : damage, attack_bonus, accuracy, range: base, base_range, base_damage }];
 }
 
@@ -169,6 +189,7 @@ export async function getItemTags_WithBonus(item, actor)
 {
     if (!item)
         return [];
+
     const resolvedActor = actor ?? item.parent ?? null;
     const { tags, range } = _getItemBaseData(item);
     await _applyItemBonuses(item, resolvedActor, tags, range);
@@ -179,11 +200,22 @@ export function getItemAreaRanges_WithBonus(item, actor = null)
 {
     if (!item?.system)
         return [];
+
     const { tags, range } = _getItemBaseData(item);
     _applyItemBonuses(item, actor ?? item.parent ?? null, tags, range);
     return range
         .map(rangeEntry => ({ type: String(rangeEntry?.type ?? ''), val: Number.parseInt(rangeEntry?.val) || 0 }))
         .filter(rangeEntry => rangeEntry.val > 0 && AREA_RANGE_TYPES.includes(rangeEntry.type));
+}
+
+const AREA_PATTERNS = new Set(['blast', 'burst', 'cone', 'line']);
+
+export function isAoeDamage(state)
+{
+    const shape = state.__laAttackShape ?? state.la_extraData?.laTargeting ?? state.la_extraData?.attackShape;
+    if (shape?.pattern)
+        return AREA_PATTERNS.has(String(shape.pattern).toLowerCase());
+    return getItemAreaRanges_WithBonus(state.data?.lancerItem ?? state.item, state.actor).length > 0;
 }
 
 /** Returns the maximum range value per range type across all weapons of the input.
@@ -193,10 +225,12 @@ export function getMaxWeaponRanges_WithBonus(input)
 {
     const { weapons, actor } = _resolveWeaponsAndActor(input);
     const maxPerType = {};
+
     for (const weapon of weapons)
     {
         const { tags, range } = _getItemBaseData(weapon);
         _applyItemBonuses(weapon, actor, tags, range);
+
         for (const rangeEntry of range)
         {
             const rangeValue = Number.parseInt(rangeEntry.val) || 0;
@@ -204,6 +238,7 @@ export function getMaxWeaponRanges_WithBonus(input)
                 maxPerType[rangeEntry.type] = rangeValue;
         }
     }
+
     return maxPerType;
 }
 
@@ -216,6 +251,7 @@ export function getActorMaxThreat(actor)
         return 0;
     if (_getActorWeapons(actor).length === 0)
         return 0;
+
     const ranges = getMaxWeaponRanges_WithBonus(actor);
     return Math.max(1, ranges.Threat ?? 0);
 }
@@ -226,15 +262,20 @@ export function getSensorRange_WithBonus(input)
 {
     const actor = input?.actor ?? input;
     const base = Number(actor?.system?.sensor_range) || 10;
+
     if (!actor?.system)
         return base;
+
     const range = [{ type: "Sensor", val: base }];
     const state = { actor, item: null, data: { tags: [], range } };
+
     const bonuses = flattenBonuses([
         ...getGlobalBonuses(actor),
         ...getConstantBonuses(actor)
     ]);
+
     const flowTags = new Set(["all"]);
+
     for (const bonus of bonuses)
     {
         if (bonus.type !== "range" || (bonus.rangeType ?? "") !== "Sensor")
@@ -243,6 +284,7 @@ export function getSensorRange_WithBonus(input)
             continue;
         mutateRangeWithBonus(state, bonus);
     }
+
     return Number(range.find(entry => entry.type === "Sensor")?.val) || base;
 }
 
@@ -269,13 +311,16 @@ function _itemRangeMap(item, actor)
     const throwVal = thrownValue(tags);
     if (throwVal > 0)
         allRanges.push({ type: "Thrown", val: throwVal });
+
     const maxPerType = {};
+
     for (const rangeEntry of allRanges)
     {
         const rangeValue = Number.parseInt(rangeEntry.val) || 0;
         if (rangeValue > 0 && (maxPerType[rangeEntry.type] === undefined || rangeValue > maxPerType[rangeEntry.type]))
             maxPerType[rangeEntry.type] = rangeValue;
     }
+
     return maxPerType;
 }
 
@@ -286,8 +331,10 @@ export async function getMaxItemRanges_WithBonus(item, actor)
 {
     if (!item)
         return {};
+
     const maxPerType = _itemRangeMap(item, actor ?? item.parent ?? null);
     const deployRange = Number.parseInt(getLAFlag(item,"deployRange")) || 0;
+
     if (deployRange > (maxPerType.Deploy ?? 0))
         maxPerType.Deploy = deployRange;
     return maxPerType;
@@ -314,10 +361,13 @@ export function shapeSpecFromRanges(ranges)
     const entries = (ranges ?? [])
         .map(/** @type {any} */ (entry) => ({ type: String(entry?.type ?? ''), val: Number(entry?.val) || 0 }))
         .filter(entry => entry.val > 0);
+
     const maxOf = (...types) => Math.max(0, ...entries.filter(entry => types.includes(entry.type)).map(entry => entry.val));
     const area = entries.find(entry => AREA_RANGE_TYPES.includes(entry.type));
+
     if (area)
         return { pattern: area.type.toLowerCase(), size: area.val, range: maxOf('Range') };
+
     const reach = maxOf('Range', 'Threat');
     return reach > 0 ? { pattern: 'target', size: 1, range: reach } : null;
 }
@@ -327,12 +377,14 @@ export function getActorMaxReach_WithBonus(input)
 {
     const { weapons, actor } = _resolveWeaponsAndActor(input);
     let max = 0;
+
     for (const weapon of weapons)
     {
         const reach = getWeaponReachRange(weapon, actor);
         if (reach > max)
             max = reach;
     }
+
     return max;
 }
 
@@ -341,6 +393,7 @@ export function weaponIgnoresLineOfSight(item)
 {
     if (!item)
         return false;
+
     const { tags } = _getItemBaseData(item);
     return tags.some(tag => (tag.lid ?? tag.id) === 'tg_arcing' || (tag.lid ?? tag.id) === 'tg_seeking');
 }
@@ -351,6 +404,7 @@ export function getActorReachBands_WithBonus(input)
     const { weapons, actor } = _resolveWeaponsAndActor(input);
     let max = 0;
     let freeMax = 0;
+
     for (const weapon of weapons)
     {
         const reach = getWeaponReachRange(weapon, actor);
@@ -359,5 +413,6 @@ export function getActorReachBands_WithBonus(input)
         if (reach > freeMax && weaponIgnoresLineOfSight(weapon))
             freeMax = reach;
     }
+
     return { max, freeMax };
 }

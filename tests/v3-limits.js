@@ -1,7 +1,7 @@
 import { addConstantBonus, removeConstantBonus, getConstantBonuses, setItemBonusOff, isItemBonusOff, addGlobalBonus, removeGlobalBonus, getGlobalBonuses, bonusFrequencyFree, burnBonusUsageForFlow, getApplicableDefenseBonuses, consumeResistanceUse, checkEffectImmunities, getV3DefenseRows, getFlowTags, isBonusApplicable, linkedBonusOf, resolveDamageBonus, linkBonusToItem, unlinkBonusFromItem, itemAttachmentOrigin, resolveStatValue, statBonusValueText, applyTagBonus, mutateRangeWithBonus } from "../scripts/bonuses/genericBonuses.js";
 import { v3DataRows, replaceV3Data, restoreV3Data, isV3DataReplaced } from "../scripts/tools/v3-data.js";
 import { getLAFlags } from "../scripts/tools/flag-utils.js";
-import { processEffectConsumption, reactionRunsOnToken, isPilotToken } from "../scripts/activations/reactions-engine.js";
+import { processEffectConsumption, automationRunsOnToken, isPilotToken } from "../scripts/activations/automation-engine.js";
 import { effectStack, linkEffectToItem, unlinkEffectFromItem } from "../scripts/bonuses/flagged-effects.js";
 import { clearGate, executeSimpleActivation, consumeReaction, modifyAction } from "../scripts/tools/misc-tools.js";
 import { actionExtrasLeft, actionCounts } from "../scripts/combat/action-extras.js";
@@ -132,11 +132,11 @@ async function runsOn()
     const system = { type: 'mech_system' };
     check('isPilotToken on a pilot', isPilotToken(pilotToken), true);
     check('isPilotToken on a mech', isPilotToken(mechToken), false);
-    check('talent, default: runs on the mech', reactionRunsOnToken({}, mechToken, talent), true);
-    check('talent, default: not on the pilot token', reactionRunsOnToken({}, pilotToken, talent), false);
-    check('talent, runsOn pilot: pilot token only', [reactionRunsOnToken({ runsOn: 'pilot' }, mechToken, talent), reactionRunsOnToken({ runsOn: 'pilot' }, pilotToken, talent)], [false, true]);
-    check('talent, runsOn both: both tokens', [reactionRunsOnToken({ runsOn: 'both' }, mechToken, talent), reactionRunsOnToken({ runsOn: 'both' }, pilotToken, talent)], [true, true]);
-    check('mech items ignore runsOn', reactionRunsOnToken({ runsOn: 'pilot' }, mechToken, system), true);
+    check('talent, default: runs on the mech', automationRunsOnToken({}, mechToken, talent), true);
+    check('talent, default: not on the pilot token', automationRunsOnToken({}, pilotToken, talent), false);
+    check('talent, runsOn pilot: pilot token only', [automationRunsOnToken({ runsOn: 'pilot' }, mechToken, talent), automationRunsOnToken({ runsOn: 'pilot' }, pilotToken, talent)], [false, true]);
+    check('talent, runsOn both: both tokens', [automationRunsOnToken({ runsOn: 'both' }, mechToken, talent), automationRunsOnToken({ runsOn: 'both' }, pilotToken, talent)], [true, true]);
+    check('mech items ignore runsOn', automationRunsOnToken({ runsOn: 'pilot' }, mechToken, system), true);
 }
 
 async function flowTags()

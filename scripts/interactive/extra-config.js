@@ -4,6 +4,7 @@
 import { getPerRoundLimit, getPerTurnLimit, getPerSceneLimit, getPerMissionLimit, itemAllTags, hitGatedScopes, actionSubKey, itemActionSubs, getPerRoundLimitFromSub, getPerTurnLimitFromSub, getPerSceneLimitFromSub, getPerMissionLimitFromSub } from '../combat/per-frequency-tags.js';
 
 import { getLAFlag, setLAFlag } from '../tools/flag-utils.js';
+import { updateRouted } from '../tools/routed-update.js';
 import { MODULE_ID } from '../tools/constants.js';
 const FLAG_KEY = 'extraConfig';
 
@@ -24,8 +25,10 @@ export function _hasResource(item, type)
 {
     if (!item)
         return false;
+
     const tags = itemAllTags(item);
     const hasTag = (lid) => tags.some?.(/** @type {any} */ tag => tag?.lid === lid);
+
     switch (type)
     {
         case 'uses':
@@ -68,6 +71,7 @@ export async function configureItemExtraConfig(item, patch)
 {
     if (!item?.setFlag)
         throw new Error('configureItemExtraConfig: invalid item');
+
     const cur = getExtraConfig(item) ?? {};
     const next = { ...cur, ...(patch ?? {}) };
     await setLAFlag(item,FLAG_KEY, next);
@@ -101,11 +105,13 @@ export async function setItemAutoConsumeDisabled(item, type, disabled)
         throw new Error('setItemAutoConsumeDisabled: invalid item');
     if (!CANONICAL_TYPES.includes(type))
         throw new Error(`setItemAutoConsumeDisabled: unknown type '${type}'`);
+
     const cur = getAutoConsumeDisabled(item);
     if (disabled)
         cur.add(type);
     else
         cur.delete(type);
+
     const disabledTypes = [...cur];
     await configureItemExtraConfig(item, { autoConsumeDisabled: disabledTypes });
     return disabledTypes;
@@ -121,13 +127,16 @@ export async function setItemAutoConsumeDisabledAll(item, disabled)
 {
     if (!item?.setFlag)
         throw new Error('setItemAutoConsumeDisabledAll: invalid item');
+
     const disabledTypes = disabled ? _detectResources(item) : [];
     const subAutoConsumeDisabled = {};
+
     if (disabled)
     {
         for (const sub of itemActionSubs(item))
             subAutoConsumeDisabled[sub.key] = _subResources(sub.data, { item, key: sub.key });
     }
+
     await configureItemExtraConfig(item, { autoConsumeDisabled: disabledTypes, subAutoConsumeDisabled });
     return disabledTypes;
 }
@@ -161,11 +170,13 @@ export async function setSubAutoConsumeDisabled(item, subKey, type, disabled)
         throw new Error('setSubAutoConsumeDisabled: invalid item');
     if (!SUB_LIMIT[type])
         throw new Error(`setSubAutoConsumeDisabled: unknown type '${type}'`);
+
     const current = getSubAutoConsumeDisabled(item, subKey);
     if (disabled)
         current.add(type);
     else
         current.delete(type);
+
     const subLists = { ...(getExtraConfig(item)?.subAutoConsumeDisabled ?? {}) };
     subLists[subKey] = [...current];
     await configureItemExtraConfig(item, { subAutoConsumeDisabled: subLists });
@@ -190,7 +201,9 @@ export async function setConsumeOn(item, type, mode)
         throw new Error('setConsumeOn: invalid item');
     if (!SUB_LIMIT[type] || !CONSUME_ON_MODES.includes(mode))
         throw new Error(`setConsumeOn: bad args '${type}' / '${mode}'`);
+
     const consumeOn = { ...(getExtraConfig(item)?.consumeOn ?? {}) };
+
     if (mode === 'auto')
     {
         if (type in consumeOn)
@@ -198,8 +211,10 @@ export async function setConsumeOn(item, type, mode)
             delete consumeOn[type];
             await item.update({ [`flags.${MODULE_ID}.${FLAG_KEY}.consumeOn.-=${type}`]: null });
         }
+
         return consumeOn;
     }
+
     consumeOn[type] = mode;
     await configureItemExtraConfig(item, { consumeOn });
     return consumeOn;
@@ -220,51 +235,59 @@ async function _applyResourceDelta(item, type, delta)
             const cur = Number(item.system?.uses?.value) || 0;
             const max = Number(item.system?.uses?.max);
             const next = _clampAt(cur + delta, Number.isFinite(max) && max > 0 ? max : Infinity);
-            await item.update({ 'system.uses.value': next });
+            await updateRouted(item, { 'system.uses.value': next });
             return next;
         }
+
         case 'loading':
         {
             const loaded = delta > 0;
-            await item.update({ 'system.loaded': loaded });
+            await updateRouted(item, { 'system.loaded': loaded });
             return loaded;
         }
+
         case 'charged':
         {
             const charged = delta > 0;
-            await item.update({ 'system.charged': charged });
+            await updateRouted(item, { 'system.charged': charged });
             return charged;
         }
+
         case 'perTurn':
         {
             const cur = Number(item.system?.uses_per_turn?.value) || 0;
-            await item.update({ 'system.uses_per_turn.value': _clampAt(cur - delta, Infinity) });
+            await updateRouted(item, { 'system.uses_per_turn.value': _clampAt(cur - delta, Infinity) });
             return Number(item.system?.uses_per_turn?.value) || 0;
         }
+
         case 'perRound':
         {
             const cur = Number(item.system?.uses_per_round?.value) || 0;
-            await item.update({ 'system.uses_per_round.value': _clampAt(cur - delta, Infinity) });
+            await updateRouted(item, { 'system.uses_per_round.value': _clampAt(cur - delta, Infinity) });
             return Number(item.system?.uses_per_round?.value) || 0;
         }
+
         case 'perScene':
         {
             const cur = Number(item.system?.uses_per_scene?.value) || 0;
-            await item.update({ 'system.uses_per_scene.value': _clampAt(cur - delta, Infinity) });
+            await updateRouted(item, { 'system.uses_per_scene.value': _clampAt(cur - delta, Infinity) });
             return Number(item.system?.uses_per_scene?.value) || 0;
         }
+
         case 'perMission':
         {
             const cur = Number(item.system?.uses_per_mission?.value) || 0;
-            await item.update({ 'system.uses_per_mission.value': _clampAt(cur - delta, Infinity) });
+            await updateRouted(item, { 'system.uses_per_mission.value': _clampAt(cur - delta, Infinity) });
             return Number(item.system?.uses_per_mission?.value) || 0;
         }
+
         case 'reserveUsed':
         {
             const used = delta < 0;
-            await item.update({ 'system.used': used });
+            await updateRouted(item, { 'system.used': used });
             return used;
         }
+
         default:
             return null;
     }
@@ -305,6 +328,7 @@ export function _usesCountSuffix(item, type)
 {
     if (type !== 'uses')
         return '';
+
     const max = Number(item?.system?.uses?.max) || 0;
     return max > 0 ? ` · <b style="color:#e0c060;">${item.system.uses.value ?? 0}/${max}</b>` : '';
 }
@@ -332,6 +356,7 @@ export function renderConsumeStatusHtml(item, action = null)
 {
     const subKey = action ? actionSubKey(item, action) : null;
     let rows;
+
     if (subKey)
     {
         const disabled = getSubAutoConsumeDisabled(item, subKey);
@@ -342,6 +367,7 @@ export function renderConsumeStatusHtml(item, action = null)
         const disabled = getAutoConsumeDisabled(item);
         rows = _detectResources(item).map(type => _inlineRow(type, disabled.has(type), _consumeWhen(item, type), null, _usesCountSuffix(item, type))).join('');
     }
+
     if (!rows)
         return '';
     return `<div class="la-ec-inline" style="margin-bottom:6px;padding:4px 6px;background:rgba(0,0,0,0.15);border-radius:3px;">
@@ -362,13 +388,16 @@ export function bindConsumeStatusToggles(root, item)
             const type = String($el.data('type') ?? '');
             if (!CANONICAL_TYPES.includes(type))
                 return;
+
             const subKey = $el.data('subKey') ? String($el.data('subKey')) : null;
             const readDisabled = () => subKey ? getSubAutoConsumeDisabled(item, subKey) : getAutoConsumeDisabled(item);
             const isOff = readDisabled().has(type);
+
             if (subKey)
                 await setSubAutoConsumeDisabled(item, subKey, type, !isOff);
             else
                 await setItemAutoConsumeDisabled(item, type, !isOff);
+
             const nowOff = readDisabled().has(type);
             const iconEl = $el.find('i');
             iconEl.removeClass('fa-square-xmark fa-square-check');

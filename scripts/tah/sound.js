@@ -24,6 +24,7 @@ const TOKEN_FEEDBACK_VARIANTS = new Set([
 
 // Per-variant min gap (ms); default 60.
 const MIN_GAP = { targeting: 60 };
+
 const SFX = {
     hover:         { src: 'modules/lancer-automations/FX/audio/hover.wav',         scale: 0.3 },
     open:          { src: 'modules/lancer-automations/FX/audio/hover.wav',         scale: 0.3 },
@@ -32,6 +33,7 @@ const SFX = {
     battleLogClick:{ src: 'modules/lancer-automations/FX/audio/battleLog/BattleLogClick.wav', scale: 0.35 },
     details:       { src: 'modules/lancer-automations/FX/audio/details.wav',       scale: 2 },
     toggle:        { src: 'modules/lancer-automations/FX/audio/toggle.wav',        scale: 1.5 },
+    locateToken:   { src: 'modules/lancer-automations/FX/audio/locateToken.wav',   scale: 0.1 },
     tokenHover:    { src: 'modules/lancer-automations/FX/audio/tokenHover.mp3',    scale: 0.4 },
     tokenSelect:   { src: 'modules/lancer-automations/FX/audio/tokenSelect.wav',   scale: 0.4 },
     tokenDeselect: { src: 'modules/lancer-automations/FX/audio/tokenDeselect.wav', scale: 0.3 },
@@ -47,7 +49,7 @@ const SFX = {
 /**
  * Play a UI sound. Token/canvas feedback variants use `tah.tokenFeedbackVolume`;
  * TAH HUD sounds use `tah.uiSoundVolume`. 0 = silent.
- * @param {'hover'|'open'|'details'|'toggle'|'statusHover'|'battleLogHover'|'battleLogClick'|'tokenHover'|'tokenSelect'|'tokenDeselect'|'tokenTarget'|'tokenUntarget'|'tokenDrag'|'tokenMove'|'elevationKey'|'targeting'|'targetingConfirm'} [variant='open']
+ * @param {'hover'|'open'|'details'|'toggle'|'locateToken'|'statusHover'|'battleLogHover'|'battleLogClick'|'tokenHover'|'tokenSelect'|'tokenDeselect'|'tokenTarget'|'tokenUntarget'|'tokenDrag'|'tokenMove'|'elevationKey'|'targeting'|'targetingConfirm'} [variant='open']
  */
 export function playUiSound(variant = 'open', { force = false } = {})
 {
@@ -55,14 +57,17 @@ export function playUiSound(variant = 'open', { force = false } = {})
     const isTokenFeedback = TOKEN_FEEDBACK_VARIANTS.has(variant);
     const settingKey = isTokenFeedback ? 'tah.tokenFeedbackVolume' : 'tah.uiSoundVolume';
     const muteKey = isTokenFeedback ? `tah.tokenSound.${variant}` : `tah.uiSound.${variant}`;
+
     if (!force && getModuleSetting(muteKey) === false)
         return;
     vol = Number(getModuleSetting(settingKey)) || 0;
     if (vol <= 0)
         return;
+
     const now = Date.now();
     const minGap = MIN_GAP[variant] ?? 60;
     const cooldownKey = (variant === 'hover' || variant === 'open') ? 'hover|open' : variant;
+
     if (now - (_lastSoundAt.get(cooldownKey) ?? 0) < minGap)
         return;
     _lastSoundAt.set(cooldownKey, now);
@@ -87,6 +92,39 @@ export function playUiSound(variant = 'open', { force = false } = {})
     { /* ignore */ });
 }
 
+let _pendingDeselect = null;
+let _pendingSelectSound = false;
+
+export function playTokenSelectSound()
+{
+    if (_pendingDeselect)
+    {
+        clearTimeout(_pendingDeselect);
+        _pendingDeselect = null;
+    }
+
+    if (!_pendingSelectSound)
+    {
+        _pendingSelectSound = true;
+        requestAnimationFrame(() =>
+        {
+            _pendingSelectSound = false;
+            playUiSound('tokenSelect');
+        });
+    }
+}
+
+export function playTokenDeselectSound()
+{
+    if (_pendingDeselect)
+        clearTimeout(_pendingDeselect);
+    _pendingDeselect = setTimeout(() =>
+    {
+        _pendingDeselect = null;
+        playUiSound('tokenDeselect');
+    }, 50);
+}
+
 // Shared by the ruler and token-drag waypoint feedback so both play the same click.
 export const WAYPOINT_ADD_SOUND = 'targetingConfirm';
 export const WAYPOINT_REMOVE_SOUND = 'tokenUntarget';
@@ -94,6 +132,7 @@ export const WAYPOINT_REMOVE_SOUND = 'tokenUntarget';
 // Battle Log intro sounds. Registered separately from TAH UI/token sounds so
 // they can be muted independently. Loops return a controller with .stop().
 const BATTLELOG_BASE = 'modules/lancer-automations/FX/audio/battleLog';
+
 const BATTLELOG_SOUNDS = {
     fadeIn:           { src: `${BATTLELOG_BASE}/fadeIn2.wav`,            scale: 0.5 },
     fadeOut:          { src: `${BATTLELOG_BASE}/fadeOut2.wav`,           scale: 0.5 },
@@ -122,16 +161,20 @@ export function playBattleLogSound(variant, { loop = false, volumeScale = 1 } = 
 {
     const noop = { stop: () =>
     {} };
+
     const vol = Number(getModuleSetting('tah.battleLogVolume')) || 0;
     if (vol <= 0)
         return noop;
+
     const entry = BATTLELOG_SOUNDS[variant];
     if (!entry)
         return noop;
+
     const promise = Promise.resolve(foundry.audio.AudioHelper.play(
         /** @type {any} */ ({ src: entry.src, volume: vol * entry.scale * volumeScale, autoplay: true, loop }),
         false
     ));
+
     let stopped = false;
     return {
         stop: () =>
@@ -161,10 +204,12 @@ function _themeSrcForOutcome(outcome)
 {
     const map = { VICTORY: 'themeVictory', DEFEAT: 'themeDefeat', PARTIAL: 'themePartial' };
     const specificKey = map[outcome];
+
     const get = (settingKey) =>
     {
         return String(getModuleSetting(`tah.battleLog.${settingKey}`) ?? '').trim();
     };
+
     return (specificKey && get(specificKey)) || get('themeDefault') || '';
 }
 
@@ -184,17 +229,21 @@ export function playBattleLogTheme(outcome)
     const src = _themeSrcForOutcome(outcome);
     if (!src)
         return;
+
     let vol = 0;
     vol = Number(getModuleSetting('tah.battleLogVolume')) || 0;
     if (vol <= 0)
         return;
+
     const raw = Number(getModuleSetting('tah.battleLog.themeVolume'));
     const themeVol = Number.isFinite(raw) ? Math.min(2, Math.max(0.5, raw)) : 1;
     const target = vol * 0.51 * themeVol;
+
     const promise = Promise.resolve(foundry.audio.AudioHelper.play(
         /** @type {any} */ ({ src, volume: _battleLogThemeMuted ? 0 : target, autoplay: true, loop: _themeLoops() }),
         false,
     ));
+
     _battleLogTheme = { promise, target, src };
 }
 
@@ -212,12 +261,14 @@ export function setBattleLogThemeMuted(muted)
 {
     _battleLogThemeMuted = typeof muted === 'boolean' ? muted : !_battleLogThemeMuted;
     const entry = _battleLogTheme;
+
     if (entry)
     {
         entry.promise.then(/** @param {any} sound */ sound =>
         {
             if (!sound)
                 return;
+
             try
             {
                 const next = _battleLogThemeMuted ? 0 : entry.target;
@@ -233,6 +284,7 @@ export function setBattleLogThemeMuted(muted)
         }).catch(() =>
         { /* ignore */ });
     }
+
     return _battleLogThemeMuted;
 }
 
@@ -247,6 +299,7 @@ export function stopBattleLogTheme({ fadeMs = 1200 } = {})
     {
         if (!sound)
             return;
+
         try
         {
             if (fadeMs > 0 && typeof sound.fade === 'function')
@@ -344,6 +397,7 @@ async function _listFolderFiles(folder)
 {
     if (_damageFileCache.has(folder))
         return _damageFileCache.get(folder);
+
     try
     {
         const browseResult = await FilePicker.browse('data', folder);
@@ -363,18 +417,22 @@ export async function playDamageSound(type, { force = false } = {})
 {
     const key = String(type ?? '').toLowerCase();
     const cfg = DAMAGE_SOUNDS[key];
+
     if (!cfg)
         return;
     if (_damageVolume() <= 0)
         return;
+
     if (!force)
     {
         if (getModuleSetting(`tah.damageSound.${key}`) === false)
             return;
     }
+
     const files = await _listFolderFiles(cfg.folder);
     if (!files.length)
         return;
+
     const src = files[Math.floor(Math.random() * files.length)];
     _playDamageAudio(src, cfg.scale);
 }
@@ -383,18 +441,22 @@ export async function playStatsSound(key, { force = false } = {})
 {
     const single = STAT_SOUNDS[key];
     const folder = STAT_FOLDER_SOUNDS[key];
+
     if (!single && !folder)
         return;
+
     if (!force)
     {
         if (getModuleSetting(`tah.statSound.${key}`) === false)
             return;
     }
+
     if (single)
     {
         _playDamageAudio(single.src, single.scale);
         return;
     }
+
     const files = await _listFolderFiles(folder.folder);
     if (!files.length)
         return;
@@ -406,11 +468,13 @@ export function playStatusSfxSound(key, { force = false } = {})
     const cfg = STATUS_SFX_SOUNDS[key];
     if (!cfg)
         return;
+
     if (!force)
     {
         if (getModuleSetting(`tah.statusSfx.${key}`) === false)
             return;
     }
+
     _playDamageAudio(cfg.src, cfg.scale);
 }
 
@@ -445,33 +509,43 @@ $(document).on('click', '.lancer-damage-apply', (ev) =>
         const msgEl = ev.currentTarget.closest('.chat-message.message');
         if (!msgEl)
             return;
+
         const msg = game.messages?.get(msgEl.dataset.messageId);
         const dmgData = msg?.flags?.lancer?.damageData;
+
         if (!dmgData)
             return;
+
         const btnGroup = ev.currentTarget.closest('.lancer-damage-button-group');
         const targetUuid = btnGroup?.dataset?.target;
         const targetResult = dmgData.targetDamageResults?.find((entry) => entry.target === targetUuid);
+
         if (!targetResult)
             return;
+
         const targetDoc = fromUuidSync(targetUuid);
+
         const targetTokenObj = /** @type {any} */ (targetDoc)?.object
             ?? (canvas?.tokens?.get(/** @type {any} */ (targetDoc)?.id) ?? null);
+
         const actor = /** @type {any} */ (targetDoc)?.actor;
         const actorId = actor?.id;
         _markDamageApplied(actorId);
         const preHp = Number(actor?.system?.hp?.value ?? 0);
         const preOvershield = Number(actor?.system?.overshield?.value ?? 0);
         const typeAmounts = new Map();
+
         for (const d of targetResult.damage ?? [])
         {
             const amt = Number(d.amount);
+
             if (amt > 0)
             {
-                const typeKey = String(d.type).toLowerCase();
+                const typeKey = targetResult.laVariable && d.type === targetResult.laVariable ? 'variable' : String(d.type).toLowerCase();
                 typeAmounts.set(typeKey, (typeAmounts.get(typeKey) ?? 0) + amt);
             }
         }
+
         const types = new Set(typeAmounts.keys());
         const audioOn = _damageVolume() > 0;
         const PHYSICAL = new Set(['kinetic', 'energy', 'explosive', 'variable']);
@@ -481,10 +555,12 @@ $(document).on('click', '.lancer-damage-apply', (ev) =>
         {
             if (!actor)
                 return;
+
             const postHp = Number(actor.system?.hp?.value ?? 0);
             const postOvershield = Number(actor.system?.overshield?.value ?? 0);
             const armorAbsorbed = postHp >= preHp && postOvershield >= preOvershield && physTypes.length > 0;
             const overshieldOnly = !armorAbsorbed && postOvershield < preOvershield && postHp >= preHp;
+
             if (armorAbsorbed)
             {
                 if (audioOn)
@@ -507,6 +583,7 @@ $(document).on('click', '.lancer-damage-apply', (ev) =>
                         for (let hit = 0; hit < hits; hit++)
                             setTimeout(() => playDamageSound(damageType), hit * DAMAGE_IMPACT_DELAY_MS);
                     }
+
                     playDamageImpactFX(damageType, targetTokenObj, typeAmounts.get(damageType));
                 }
             }
@@ -521,8 +598,10 @@ Hooks.on('preUpdateActor', (actor, change) =>
 {
     if (!actor?.id)
         return;
+
     const actorSystem = actor.system ?? {};
     const prev = {};
+
     if (change?.system?.hp?.value !== undefined)
         prev.hp = Number(actorSystem.hp?.value ?? 0);
     if (change?.system?.heat?.value !== undefined)
@@ -546,16 +625,19 @@ Hooks.on('updateActor', (actor, change) =>
 {
     if (!actor?.id)
         return;
+
     if (_damageVolume() <= 0)
     {
         _prevStatsByActor.delete(actor.id);
         return;
     }
+
     const prev = _prevStatsByActor.get(actor.id) ?? {};
     _prevStatsByActor.delete(actor.id);
     const duringDamage = _wasRecentlyDamaged(actor.id);
 
     const newHp = change?.system?.hp?.value;
+
     if (newHp !== undefined && prev.hp !== undefined)
     {
         if (newHp < prev.hp && !duringDamage)
@@ -563,7 +645,9 @@ Hooks.on('updateActor', (actor, change) =>
         else if (newHp > prev.hp)
             playStatsSound('hp_heal');
     }
+
     const newHeat = change?.system?.heat?.value;
+
     if (newHeat !== undefined && prev.heat !== undefined)
     {
         if (newHeat > prev.heat && !duringDamage)
@@ -571,25 +655,33 @@ Hooks.on('updateActor', (actor, change) =>
         else if (newHeat < prev.heat)
             playStatsSound('heat_clean');
     }
+
     const newBurn = change?.system?.burn;
+
     if (newBurn !== undefined && prev.burn !== undefined)
     {
         if (newBurn > prev.burn && !duringDamage)
             playDamageSound('burn');
     }
+
     const newInfection = change?.system?.infection;
+
     if (newInfection !== undefined && prev.infection !== undefined)
     {
         if (newInfection > prev.infection && !duringDamage)
             playDamageSound('infection');
     }
+
     const newOvershield = change?.system?.overshield?.value;
+
     if (newOvershield !== undefined && prev.overshield !== undefined)
     {
         if (newOvershield > prev.overshield)
             playDamageSound('overshield');
     }
+
     const newPilotStress = change?.system?.bond_state?.stress?.value;
+
     if (newPilotStress !== undefined && prev.pilotStress !== undefined)
     {
         if (newPilotStress > prev.pilotStress && !duringDamage)
@@ -600,7 +692,9 @@ Hooks.on('updateActor', (actor, change) =>
         else if (newPilotStress < prev.pilotStress)
             playStatsSound('stress_heal');
     }
+
     const newPilotXp = change?.system?.bond_state?.xp?.value;
+
     if (newPilotXp !== undefined && prev.pilotXp !== undefined)
     {
         if (newPilotXp > prev.pilotXp)
@@ -614,13 +708,16 @@ function _playPilotStressPuff(actor)
 {
     if (typeof Sequence === 'undefined' || typeof Sequencer === 'undefined')
         return;
+
     const token = actor?.getActiveTokens?.()?.[0];
     if (!token)
         return;
+
     const primary = 'jb2a.smoke.puff.centered.dark_black';
     const fallback = 'jb2a.smoke.puff.centered.grey';
     const jb2a = !!game.modules.get('jb2a_patreon')?.active;
     const file = jb2a ? primary : fallback;
+
     try
     {
         Sequencer.Preloader.preloadForClients([file]).then(() =>

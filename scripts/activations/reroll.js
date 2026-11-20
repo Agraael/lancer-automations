@@ -1,14 +1,17 @@
 /* global game */
 
 import { MODULE_ID } from '../tools/constants.js';
-import { localize, localizeFormat } from '../tools/string-utils.js';
-import { isBonusApplicable, burnBonusFrequency } from '../bonuses/genericBonuses.js';
+import { localize, localizeFormat, escapeHtml } from '../tools/string-utils.js';
+import { isBonusApplicable, burnBonusFrequency, flattenBonuses } from '../bonuses/genericBonuses.js';
+import { showFlowDice } from './dice-first.js';
 
 const _clone = (value) => (typeof foundry?.utils?.deepClone === 'function' ? foundry.utils.deepClone(value) : JSON.parse(JSON.stringify(value ?? null)));
+
 const _snapshotAttackLike = (state) => ({
     attack_results: _clone(state.data?.attack_results ?? []),
     hit_results: _clone(state.data?.hit_results ?? [])
 });
+
 const _restoreAttackLike = (state, snap) =>
 {
     if (!state.data)
@@ -16,7 +19,9 @@ const _restoreAttackLike = (state, snap) =>
     state.data.attack_results = snap.attack_results;
     state.data.hit_results = snap.hit_results;
 };
+
 const _snapshotSimpleRoll = (state) => ({ roll: _clone(state.data?.result?.roll ?? null) });
+
 const _restoreSimpleRoll = (state, snap) =>
 {
     if (state.data?.result)
@@ -44,18 +49,23 @@ const ROLL_TYPES = {
         {
             const attackResults = state.data?.attack_results ?? [];
             const hitResults = state.data?.hit_results ?? [];
+
             for (let i = 0; i < attackResults.length; i++)
             {
                 const attackRoll = attackResults[i]?.roll;
                 if (attackRoll)
                     attackRoll._total = newTotal;
+
                 const hitResult = hitResults[i];
+
                 if (hitResult)
                 {
                     const isSmart = state.data?.is_smart ?? false;
+
                     const targetStat = isSmart
                         ? (hitResult.target?.actor?.system?.edef ?? 8)
                         : (hitResult.target?.actor?.system?.evasion ?? 5);
+
                     hitResult.total = String(newTotal).padStart(2, '0');
                     hitResult.hit = newTotal >= targetStat;
                     hitResult.crit = state.data?.attack_type !== 'Tech' && newTotal >= 20;
@@ -80,12 +90,15 @@ const ROLL_TYPES = {
         {
             const attackResults = state.data?.attack_results ?? [];
             const hitResults = state.data?.hit_results ?? [];
+
             for (let i = 0; i < attackResults.length; i++)
             {
                 const techRoll = attackResults[i]?.roll;
                 if (techRoll)
                     techRoll._total = newTotal;
+
                 const hitResult = hitResults[i];
+
                 if (hitResult)
                 {
                     const edef = hitResult.target?.actor?.system?.edef ?? 8;
@@ -192,24 +205,74 @@ const ROLL_TYPES = {
     }
 };
 
+function dieClasses(die, result)
+{
+    if (typeof die.getResultCSS === 'function')
+        return ['roll', ...die.getResultCSS(result)].filter(Boolean).join(' ');
+
+    const classes = ['roll', 'die', `d${die.faces}`];
+    if (result.discarded || result.active === false)
+        classes.push('discarded');
+    else if (result.result === die.faces)
+        classes.push('max');
+    else if (result.result === 1)
+        classes.push('min');
+    return classes.join(' ');
+}
+
+function diceRowHtml(roll)
+{
+    let html = '';
+    let pendingOp = '';
+
+    for (const term of roll.terms ?? [])
+    {
+        if (typeof term.operator === 'string')
+        {
+            pendingOp = term.operator === '-' ? '−' : term.operator;
+            continue;
+        }
+
+        const dice = term.faces && Array.isArray(term.results) ? [term] : (term.dice ?? []);
+        if (!dice.length)
+            continue;
+        if (html || pendingOp === '−')
+            html += `<li class="la-reroll-op">${pendingOp || '+'}</li>`;
+
+        for (const die of dice)
+            html += (die.results ?? []).map(result => `<li class="${dieClasses(die, result)}">${die.getResultLabel?.(result) ?? result.result}</li>`).join('');
+        pendingOp = '';
+    }
+
+    return html;
+}
+
+function rollTrayHtml(roll)
+{
+    const header = `<header class="part-header flexrow"><span class="part-formula">${escapeHtml(String(roll.formula ?? ''))}</span><span class="part-total">${roll.total}</span></header>`;
+    return `<div class="la-reroll-tray"><div class="dice-tooltip"><div class="wrapper"><section class="tooltip-part"><div class="dice">${header}<ol class="dice-rolls">${diceRowHtml(roll)}</ol></div></section></div></div></div>`;
+}
+
 function rollSummaryHtml(def, state)
 {
     const roll = def.getRoll(state);
+    const tray = roll ? rollTrayHtml(roll) : '';
     const lines = [];
-    if (roll)
-        lines.push(`<code>${roll.formula}</code> = <b>${roll.total}</b>`);
-
     let hasTargetLine = false;
+
     for (const target of def.getTargets(state) ?? [])
     {
         if (typeof target?.hit !== 'boolean')
             continue;
+
         const name = target.token?.name ?? target.token?.document?.name;
         if (!name)
             continue;
+
         const verdict = target.crit
             ? localize('LA.reroll.crit')
             : localize(target.hit ? 'LA.reroll.hit' : 'LA.reroll.miss');
+
         const total = target.total ?? null;
         lines.push(`${name}: <b>${verdict}</b>${total === null ? '' : ` (${total})`}`);
         hasTargetLine = true;
@@ -224,7 +287,7 @@ function rollSummaryHtml(def, state)
             lines.push(`<b>${localize('LA.reroll.failed')}</b>`);
     }
 
-    return lines.join('<br>') || null;
+    return (tray + lines.join('<br>')) || null;
 }
 
 function buildPayload(rollType, def, state, rerollCount, markDirty)
@@ -239,6 +302,7 @@ function buildPayload(rollType, def, state, rerollCount, markDirty)
         const api = game.modules.get(MODULE_ID)?.api;
         const defaultContext = /** @type {any} */ (reroll)._defaultContext ?? {};
         const userOwners = api?.getTokenOwnerUserId(defaultContext.relatedToken ?? defaultContext.originToken ?? token);
+
         const pick = await api.startChoiceCard({
             title: titleStr,
             item: defaultContext.item ?? null,
@@ -250,8 +314,10 @@ function buildPayload(rollType, def, state, rerollCount, markDirty)
                 { text: `Original (${orig ?? '?'})`, icon: 'fas fa-undo' }
             ]
         });
+
         return pick?.choiceIdx === 0;
     };
+
     const doReroll = async (subtype = 'retry', titleForChoose = 'KEEP WHICH?') =>
     {
         await _runRerollWithSubtype(def, state, _normalizeSubtype(subtype), makeChooseHandler(titleForChoose));
@@ -266,6 +332,7 @@ function buildPayload(rollType, def, state, rerollCount, markDirty)
         const item = opts?.item ?? defaultContext.item ?? null;
         const originToken = opts?.originToken ?? defaultContext.originToken ?? null;
         const relatedToken = opts?.relatedToken ?? defaultContext.relatedToken ?? null;
+
         const runApply = async (chose) =>
         {
             if (chose)
@@ -273,6 +340,7 @@ function buildPayload(rollType, def, state, rerollCount, markDirty)
             if (postChoice)
                 await postChoice(chose);
         };
+
         if (!allowConfirm)
         {
             if (preConfirm)
@@ -281,16 +349,20 @@ function buildPayload(rollType, def, state, rerollCount, markDirty)
                 if (!ok)
                     return;
             }
+
             await runApply(true);
             return;
         }
+
         if (preConfirm)
         {
             const ok = await preConfirm();
             if (!ok)
                 return;
         }
+
         const targetUid = userIdControl ?? api?.getTokenOwnerUserId(relatedToken) ?? api?.getActiveGMId();
+
         const result = await api.startChoiceCard({
             title,
             description: reasonText ?? undefined,
@@ -303,6 +375,7 @@ function buildPayload(rollType, def, state, rerollCount, markDirty)
                 { text: 'Keep', icon: 'fas fa-times' }
             ]
         });
+
         await runApply(result?.choiceIdx === 0);
     };
 
@@ -338,11 +411,13 @@ function buildPayload(rollType, def, state, rerollCount, markDirty)
     {
         if (typeof newTotal !== 'number')
             throw new TypeError(`${MODULE_ID} | changeRoll(${rollType}): newTotal must be a number`);
+
         const apply = async () =>
         {
             def.applyChangeRoll(state, newTotal);
             markDirty();
         };
+
         await presentCard(changeRoll, {
             reasonText: joinReason(reasonText),
             title: title ?? autoTitle(changeRoll, 'CHANGE ROLL?'),
@@ -376,6 +451,7 @@ function buildPayload(rollType, def, state, rerollCount, markDirty)
 // Resolution priority: retry first (replaces), then highest/lowest (extremes), then choose last
 // (so the user picks against the running best). Within a priority bucket, registration order.
 const _SUBTYPE_PRIORITY = { retry: 0, highest: 1, lowest: 1, choose: 2 };
+
 const _normalizeSubtype = (subtype) =>
 {
     const normalized = String(subtype ?? 'retry').toLowerCase();
@@ -391,16 +467,20 @@ async function _runRerollWithSubtype(def, state, subtype, chooseHandler)
 
     if (def.beforeReroll)
         def.beforeReroll(state);
+
     const primaryStep = game.lancer?.flowSteps?.get(def.rerollStepName);
     if (typeof primaryStep !== 'function')
         throw new Error(`${MODULE_ID} | reroll: "${def.rerollStepName}" missing`);
     await primaryStep(state);
+
     for (const extra of def.extraRerollSteps ?? [])
     {
         const fn = game.lancer?.flowSteps?.get(extra);
         if (typeof fn === 'function')
             await fn(state);
     }
+
+    await showFlowDice(state);
 
     const altTotal = def.getRoll(state)?.total ?? null;
     let keptOriginal = false;
@@ -423,11 +503,13 @@ async function applyBonusRerolls(state, rollType, def)
 {
     const api = game.modules.get(MODULE_ID)?.api;
     const actor = state.actor;
+
     if (!api || !actor)
         return;
 
-    const globals = api.getGlobalBonuses?.(actor) ?? [];
-    const constants = api.getConstantBonuses?.(actor) ?? [];
+    const globals = flattenBonuses(api.getGlobalBonuses?.(actor) ?? []);
+    const constants = flattenBonuses(api.getConstantBonuses?.(actor) ?? []);
+
     const candidates = [
         ...globals.map(bonus => ({ bonus, source: 'global' })),
         ...constants.map(bonus => ({ bonus, source: 'constant' }))
@@ -450,6 +532,7 @@ async function applyBonusRerolls(state, rollType, def)
         const upperName = String(name).toUpperCase();
 
         const rollLineHtml = rollSummaryHtml(def, state);
+
         const offer = await api.startChoiceCard({
             title: localizeFormat('LA.dialogTitle.useReroll', { name: upperName }),
             description: rollLineHtml ?? undefined,
@@ -460,6 +543,7 @@ async function applyBonusRerolls(state, rollType, def)
                 { text: localize('LA.reroll.keep'), icon: 'fas fa-times' }
             ]
         });
+
         if (offer?.choiceIdx !== 0)
             continue;
 
@@ -474,8 +558,10 @@ async function applyBonusRerolls(state, rollType, def)
                     { text: localizeFormat('LA.reroll.original', { value: orig ?? '?' }), icon: 'fas fa-undo' }
                 ]
             });
+
             return pick?.choiceIdx === 0;
         };
+
         try
         {
             await _runRerollWithSubtype(def, state, subtype, chooseHandler);
@@ -501,6 +587,7 @@ async function applyBonusRerolls(state, rollType, def)
 function makeOnRollStep(rollType)
 {
     const def = ROLL_TYPES[rollType];
+
     return async function onRollStep(state)
     {
         const api = game.modules.get(MODULE_ID)?.api;
@@ -509,16 +596,20 @@ function makeOnRollStep(rollType)
         await applyBonusRerolls(state, rollType, def);
         let rerollCount = 0;
         let dirty;
+
         do
         {
             dirty = false;
+
             const payload = buildPayload(rollType, def, state, rerollCount, () =>
             {
                 dirty = true;
                 rerollCount++;
             });
+
             await api.handleTrigger('onRoll', payload);
         } while (dirty);
+
         return true;
     };
 }

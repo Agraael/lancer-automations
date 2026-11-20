@@ -2,10 +2,13 @@
 
 import { injectExtraDataUtility } from './flows.js';
 import { getLAFlag, setLAFlag } from '../tools/flag-utils.js';
+import { flowActionTitle } from '../tools/flow-title.js';
 import { getModuleSetting } from '../tools/settings-utils.js';
-import { accDiffTargetToken } from '../combat/grid-helpers.js';
+import { accDiffTargetToken, getMinGridDistance } from '../combat/grid-helpers.js';
 import { applyDamageImmunities, getApplicableImmunityBonuses, getApplicableDefenseBonuses, getAttackImmunityBonuses, convertHeatToEnergyIfHeatless, consumeImmunityUse, burnBonusUsageForFlow, bonusCoversDamage } from '../bonuses/genericBonuses.js';
-import { getItemAreaRanges_WithBonus } from '../tools/weapon-bonus-utils.js';
+import { isAoeDamage } from '../tools/weapon-bonus-utils.js';
+import { consumeVulnerable } from '../bonuses/vulnerable-consume.js';
+import { stampVariableTargets } from '../bonuses/variable-damage.js';
 import { findEffectOnToken } from '../bonuses/flagged-effects.js';
 import { getActiveGMId, startChoiceCard } from '../interactive/network.js';
 import { resolveDeployableSourceItem } from '../interactive/deployables.js';
@@ -17,13 +20,18 @@ import { consumePerFrequencyForItem, itemAllTags } from '../combat/per-frequency
 import { getAutoConsumeDisabled } from '../interactive/extra-config.js';
 import { handleTrigger, _advanceMoveStack, _wipeMoveStack, _isActiveMoveStackFor } from '../main.js';
 import { noteActivation } from '../movement/move-tracking.js';
-import { recordAction, noteTriggerResults } from '../tah/action-tape.js';
+import { recordAction, noteTriggerResults, ordnanceWindowClosed } from '../tah/action-tape.js';
 import { captureAppliedEffects, flowChanges } from '../tah/tape-changes.js';
+import { billingActor } from '../interactive/deployable-owner.js';
 import { weaponTypeIcon } from '../tah/item-helpers.js';
 import { recordRollSnapshot } from '../uplink/snapshots.js';
 
 import { localize, localizeFormat } from '../tools/string-utils.js';
-import { trackerSnapshot } from '../combat/action-extras.js';
+import { trackerSnapshot, slotLedger, quickOnlyGranted } from '../combat/action-extras.js';
+import { spendReactionForTape, runHeldReactionHook } from '../tools/action-economy.js';
+import { isOrdnanceWeapon } from '../combat/action-limits.js';
+import { canEngage } from '../combat/overwatch.js';
+
 // Stat rolls are built on an actor, so the item/action they belong to only exists if a caller stamped it.
 function checkAttribution(state)
 {
@@ -76,11 +84,19 @@ export async function onAttackStep(state)
     broadcastFocus('attack', [token, ...targets]);
     recordRollSnapshot('attack', state);
 
+    if (isOrdnanceWeapon(weapon))
+    {
+        const engaged = targets.filter(target => canEngage(token, target) && getMinGridDistance(token, target) <= 1);
+        if (engaged.length)
+            ui.notifications.warn(localizeFormat('LA.notify.ordnanceEngagedTarget', { weapon: weapon.name, targets: engaged.map(target => target.name).join(', ') }));
+    }
+
     const actionData = attackActionData(state, weapon);
 
     if (token && !state.la_extraData?.tapeRecorded)
     {
         const tapeAction = state.la_extraData?.tapeAction ?? null;
+
         const tapeId = await recordAction(token, {
             name: tapeAction?.name ?? actionData.title,
             activation: tapeAction?.activation ?? state.data?.action?.activation ?? 'Quick',
@@ -89,6 +105,7 @@ export async function onAttackStep(state)
             icon: weapon ? weaponTypeIcon(weapon) : 'mdi mdi-target',
             tracker: state.la_extraData?.reactionTracker ?? null
         });
+
         if (tapeId)
             state.injectFlowExtraData({ tapeId });
     }
@@ -137,6 +154,7 @@ export async function hitImmunityStep(state)
         const immunityBonuses = (subtype) => getAttackImmunityBonuses(targetToken.actor, subtype, state.actor, state, { defenderToken: targetToken, attackerToken });
 
         const critImmunity = immunityBonuses('crit');
+
         if (critImmunity.length > 0 && (hitResult?.crit || attackResult?.crit))
         {
             if (hitResult)
@@ -149,6 +167,7 @@ export async function hitImmunityStep(state)
 
         const missImmunity = immunityBonuses('miss');
         const hitImmunity = immunityBonuses('hit');
+
         if (missImmunity.length > 0 && hitImmunity.length > 0)
         {
             await announceAttackImmunity(targetToken, localize('LA.flow.immunityWash'), localizeFormat('LA.notify.immuneMissAndHit', { name: targetToken.name }), [...missImmunity, ...hitImmunity], 0x999999);
@@ -172,15 +191,18 @@ export async function hitImmunityStep(state)
                 hitResult.hit = false;
                 hitResult.crit = false;
             }
+
             if (attackResult)
             {
                 attackResult.hit = false;
                 attackResult.crit = false;
             }
+
             await announceAttackImmunity(targetToken, localize('LA.flow.hitImmune'), localizeFormat('LA.notify.immuneToHits', { name: targetToken.name }), hitImmunity, 0xcccccc);
             await consumeImmunityUse(targetToken.actor, 'hit', state, { bonuses: hitImmunity });
         }
     }
+
     return true;
 }
 
@@ -226,6 +248,7 @@ export async function onHitMissStep(state)
             flowState: state
         });
     }
+
     if (missTargets.length > 0)
     {
         await handleTrigger('onMiss', {
@@ -292,7 +315,6 @@ export async function assertDamageTargetsStep(state)
     return true;
 }
 
-const AREA_PATTERNS = new Set(['blast', 'burst', 'cone', 'line']);
 const TAG_ACTIVATIONS = {
     "tg_quick_action": "Quick",
     "tg_full_action": "Full",
@@ -300,14 +322,6 @@ const TAG_ACTIVATIONS = {
     "tg_protocol": "Protocol",
     "tg_free_action": "Free"
 };
-
-function isAoeDamage(state)
-{
-    const shape = state.__laAttackShape ?? state.la_extraData?.laTargeting ?? state.la_extraData?.attackShape;
-    if (shape?.pattern)
-        return AREA_PATTERNS.has(String(shape.pattern).toLowerCase());
-    return getItemAreaRanges_WithBonus(state.data?.lancerItem ?? state.item, state.actor).length > 0;
-}
 
 export async function onDamageStep(state)
 {
@@ -320,6 +334,7 @@ export async function onDamageStep(state)
     const targets = state.data?.targets || [];
     broadcastFocus('damage', [token, ...targets.map(targetInfo => targetInfo.target)]);
     recordRollSnapshot('damage', state);
+    stampVariableTargets(state);
 
     const actionData = attackActionData(state, weapon);
     const aoe = isAoeDamage(state);
@@ -328,23 +343,27 @@ export async function onDamageStep(state)
     {
         const targetToken = targetInfo.target;
         const isCrit = targetInfo.crit || false;
-        const isHit = targetInfo.hit || false;
+        const isHit = targetInfo.hit || isCrit;
 
         if (targetInfo.damage && targetToken.actor)
         {
             const immunities = getApplicableImmunityBonuses(targetToken.actor, 'damage', state, { ownerTokenId: targetToken.id, otherToken: token })
                 .filter(bonus => bonusCoversDamage(bonus, aoe));
+
             targetInfo.laImmunity = immunities.map(bonus => bonus.id).filter(Boolean);
             const preTotal = targetInfo.damage.reduce((sum, damage) => sum + (Number(damage.amount ?? damage.val) || 0), 0);
             targetInfo.damage = applyDamageImmunities(targetToken.actor, targetInfo.damage, state, immunities, aoe);
             const postTotal = targetInfo.damage.reduce((sum, damage) => sum + (Number(damage.amount ?? damage.val) || 0), 0);
+
             if (postTotal < preTotal)
             {
                 await consumeImmunityUse(targetToken.actor, 'damage', state, { bonuses: immunities });
                 broadcastFloatTokenText(targetToken, 'Immune', 0xcccccc);
             }
+
             targetInfo.damage = convertHeatToEnergyIfHeatless(targetToken.actor, targetInfo.damage);
         }
+
         if (targetToken.actor)
         {
             // Rides into the damage card via printDamageCard's spread, so every client sees the same verdict.
@@ -358,6 +377,7 @@ export async function onDamageStep(state)
                 .filter(Boolean);
             targetInfo.laAoe = aoe;
         }
+
         if (Array.isArray(targetInfo.bonus_damage) && targetToken.actor)
             targetInfo.bonus_damage = convertHeatToEnergyIfHeatless(targetToken.actor, targetInfo.bonus_damage);
 
@@ -383,6 +403,7 @@ export async function onDamageStep(state)
         }
     }
 
+    await consumeVulnerable(state);
     await burnBonusUsageForFlow(state);
     return true;
 }
@@ -408,11 +429,13 @@ export async function onStructureStep(state)
     const actor = state.actor;
     const token = actor?.token ? canvas.tokens.get(actor.token.id) : actor?.getActiveTokens()?.[0];
     const roll = state.data?.result?.roll;
+
     const modifyRoll = (newTotal) =>
     {
         if (state.data?.result?.roll)
             state.data.result.roll._total = newTotal;
     };
+
     return runCancellableStep(state, {
         trigger: 'onStructure',
         cancelKey: 'cancelStructureOutcome',
@@ -452,11 +475,13 @@ export async function onStressStep(state)
     const actor = state.actor;
     const token = actor?.token ? canvas.tokens.get(actor.token.id) : actor?.getActiveTokens()?.[0];
     const roll = state.data?.result?.roll;
+
     const modifyRoll = (newTotal) =>
     {
         if (state.data?.result?.roll)
             state.data.result.roll._total = newTotal;
     };
+
     return runCancellableStep(state, {
         trigger: 'onStress',
         cancelKey: 'cancelStressOutcome',
@@ -491,15 +516,22 @@ export async function onTechAttackStep(state)
 
     if (token && !state.la_extraData?.tapeRecorded)
     {
+        const spendsReaction = state.la_extraData?.asReaction && !state.la_extraData?.reactionConsumed && !state.la_extraData?.freeUse;
+        const tracker = spendsReaction ? await spendReactionForTape(token, { held: !!state.la_extraData?.heldAction }) : null;
+
         const tapeId = await recordAction(token, {
             name: actionData.title,
-            activation: actionData.isInvade
-                ? 'Invade'
-                : (state.data?.action?.activation
-                    ?? (techItem?.system?.tech_type === 'Full' ? 'Full Tech' : 'Quick Tech')),
+            tracker,
+            activation: state.la_extraData?.asReaction
+                ? 'Reaction'
+                : actionData.isInvade
+                    ? 'Invade'
+                    : (state.data?.action?.activation
+                        ?? (techItem?.system?.tech_type === 'Full' ? 'Full Tech' : 'Quick Tech')),
             item: techItem,
             ...(state.la_extraData?.freeUse ? { type: 'free' } : {})
         });
+
         if (tapeId)
             state.injectFlowExtraData({ tapeId });
     }
@@ -517,18 +549,10 @@ export async function onTechAttackStep(state)
     return true;
 }
 
-export async function onTechHitMissStep(state)
+function techHitMissTargets(state)
 {
-    state = injectExtraDataUtility(state);
-    const actor = state.actor;
-    const item = state.item;
-    const token = actor?.token ? canvas.tokens.get(actor.token.id) : actor?.getActiveTokens()?.[0];
-    const techItem = item;
     const targetInfos = state.data?.acc_diff?.targets || [];
     const hitResults = state.data?.hit_results || [];
-
-    const actionData = techActionData(state, techItem);
-
     const hitTargets = [];
     const missTargets = [];
 
@@ -558,6 +582,18 @@ export async function onTechHitMissStep(state)
         }
     }
 
+    return { hitTargets, missTargets };
+}
+
+export async function onTechHitMissStep(state)
+{
+    state = injectExtraDataUtility(state);
+    const actor = state.actor;
+    const token = actor?.token ? canvas.tokens.get(actor.token.id) : actor?.getActiveTokens()?.[0];
+    const techItem = state.item;
+    const actionData = techActionData(state, techItem);
+    const { hitTargets, missTargets } = techHitMissTargets(state);
+
     if (hitTargets.length > 0)
     {
         await handleTrigger('onTechHit', {
@@ -571,6 +607,7 @@ export async function onTechHitMissStep(state)
             flowState: state
         });
     }
+
     if (missTargets.length > 0)
     {
         await handleTrigger('onTechMiss', {
@@ -587,6 +624,39 @@ export async function onTechHitMissStep(state)
 
     await burnBonusUsageForFlow(state);
     return true;
+}
+
+export async function emitInvadeHit(state, optionOf)
+{
+    const actor = state.actor;
+    const token = actor?.token ? canvas.tokens.get(actor.token.id) : actor?.getActiveTokens()?.[0];
+    const { hitTargets } = techHitMissTargets(state);
+    const groups = new Map();
+
+    for (const entry of hitTargets)
+    {
+        const option = optionOf(entry.target);
+        if (!option)
+            continue;
+        if (!groups.has(option))
+            groups.set(option, []);
+        groups.get(option).push(entry);
+    }
+
+    for (const [option, targets] of groups)
+    {
+        const actionData = { ...techActionData(state, option.item ?? null), title: option.name, action: { name: option.name }, detail: option.detail ?? '', isInvade: true, tags: option.tags ?? [] };
+        await handleTrigger('onInvadeHit', {
+            triggeringToken: token,
+            techItem: option.item ?? null,
+            targets,
+            actionName: option.name,
+            isInvade: true,
+            tags: actionData.tags,
+            actionData,
+            flowState: state
+        });
+    }
 }
 
 export async function onCheckStep(state)
@@ -626,11 +696,13 @@ function _relaunchIgnore(state)
     return async () =>
     {
         const flowClass = game.lancer?.flows?.get?.(state.name);
+
         if (!flowClass)
         {
             ui.notifications.error(localizeFormat('LA.notify.unknownFlowType', { name: state.name }));
             return;
         }
+
         try
         {
             const newFlow = new flowClass(state.item ?? state.actor, { ...state.data });
@@ -657,15 +729,18 @@ function _relaunchIgnore(state)
  * @param {string} opts.defaultTitle
  * @param {string} [opts.choice1Text]
  * @param {string} [opts.choice2Text] - null drops the second button.
+ * @param {string} [opts.choice1Icon]
+ * @param {string} [opts.choice2Icon]
  * @param {((uc: string|null) => Object)|null} [opts.getExtraCardOptions]
  * @param {(() => Promise<void>)|null} [opts.onBefore] - Called before card, after preConfirms.
  * @param {(() => Promise<void>)|null} [opts.onAfter] - Called after card.
  * @returns {((reasonText?: string, title?: string, allowConfirm?: boolean, userIdControl?: any, preConfirm?: any, postChoice?: any, opts?: Object) => Promise<void>) & { wait: () => Promise<void> }}
  */
-export function _buildCancelFn({ setFlag, cancelledBy, getIgnoreCallback, defaultReason, defaultTitle, choice1Text = "Cancel", choice2Text = "Ignore", getExtraCardOptions = null, onBefore = null, onAfter = null })
+export function _buildCancelFn({ setFlag, cancelledBy, getIgnoreCallback, defaultReason, defaultTitle, choice1Text = "Cancel", choice2Text = "Ignore", choice1Icon = "fas fa-check", choice2Icon = "fas fa-times", getExtraCardOptions = null, onBefore = null, onAfter = null })
 {
     if (!cancelledBy)
         console.error('lancer-automations | _buildCancelFn: missing cancelledBy array');
+
     const cancelledReasons = [];
     const preConfirms = [];
     let cardPending = false;
@@ -679,11 +754,13 @@ export function _buildCancelFn({ setFlag, cancelledBy, getIgnoreCallback, defaul
             console.error('lancer-automations | cancel called without _reactorIdentity');
         if (cancelFn._reactorIdentity && cancelledBy)
             cancelledBy.push(cancelFn._reactorIdentity);
+
         // Fall back to reactor-dispatch context when caller omits opts
         const defaultContext = cancelFn._defaultContext ?? {};
         const item = opts.item ?? defaultContext.item ?? null;
         const originToken = opts.originToken ?? defaultContext.originToken ?? null;
         const relatedToken = opts.relatedToken ?? defaultContext.relatedToken ?? null;
+
         if (reasonText)
             cancelledReasons.push(reasonText);
         if (preConfirm)
@@ -695,26 +772,32 @@ export function _buildCancelFn({ setFlag, cancelledBy, getIgnoreCallback, defaul
         {
             await Promise.resolve();
             const ignoreCallback = getIgnoreCallback();
+
             if (preConfirms.length > 0)
             {
                 const results = await Promise.all(preConfirms.map(preConfirmFn => preConfirmFn()));
+
                 if (results.every(result => !result))
                 {
                     await ignoreCallback();
                     return;
                 }
             }
+
             if (!allowConfirm)
             {
                 // Auto-pick choice1 (cancel-equivalent = keep blocked)
                 await postChoice?.(true);
                 return;
             }
+
             const description = cancelledReasons.length > 1
                 ? cancelledReasons.map(reason => `• ${reason}`).join('<br>')
                 : (cancelledReasons[0] ?? defaultReason);
+
             if (onBefore)
                 await onBefore();
+
             const extraCardOptions = getExtraCardOptions ? getExtraCardOptions(userIdControl) : {};
             await startChoiceCard({
                 mode: "or",
@@ -728,7 +811,7 @@ export function _buildCancelFn({ setFlag, cancelledBy, getIgnoreCallback, defaul
                 choices: [
                     {
                         text: choice1Text,
-                        icon: "fas fa-check",
+                        icon: choice1Icon,
                         callback: async () =>
                         {
                             await postChoice?.(true);
@@ -736,7 +819,7 @@ export function _buildCancelFn({ setFlag, cancelledBy, getIgnoreCallback, defaul
                     },
                     ...(choice2Text ? [{
                         text: choice2Text,
-                        icon: "fas fa-times",
+                        icon: choice2Icon,
                         callback: async () =>
                         {
                             await postChoice?.(false);
@@ -750,6 +833,7 @@ export function _buildCancelFn({ setFlag, cancelledBy, getIgnoreCallback, defaul
         })();
         return _promise;
     };
+
     cancelFn.wait = () => _promise;
     return cancelFn;
 }
@@ -764,6 +848,7 @@ async function runCancellableStep(state, { trigger, cancelKey, reason, title, to
         state.data._cancelledBy = [];
 
     let cancelTriggered = false;
+
     const cancelFn = _buildCancelFn({
         setFlag: () =>
         {
@@ -790,6 +875,7 @@ async function runCancellableStep(state, { trigger, cancelKey, reason, title, to
         await cancelFn.wait();
         return false;
     }
+
     return true;
 }
 
@@ -797,6 +883,7 @@ export async function stunnedAutoFailStep(state)
 {
     const actor = state.actor;
     const token = actor?.token ? canvas.tokens.get(actor.token.id) : actor?.getActiveTokens()?.[0];
+
     if (!token)
         return true;
 
@@ -806,8 +893,10 @@ export async function stunnedAutoFailStep(state)
 
     const path = (state.data?.path || '').toLowerCase();
     const title = (state.data?.title || '').toUpperCase();
+
     const isHullOrAgi = path.includes('hull') || path.includes('agi')
         || title.includes('HULL') || title.includes('AGI');
+
     if (!isHullOrAgi)
         return true;
 
@@ -829,6 +918,7 @@ export async function onInitCheckStep(state)
     state = injectExtraDataUtility(state);
     const actor = state.actor;
     const token = actor?.token ? canvas.tokens.get(actor.token.id) : actor?.getActiveTokens()?.[0];
+
     const proceed = await runCancellableStep(state, {
         trigger: 'onInitCheck',
         cancelKey: 'cancelCheck',
@@ -842,6 +932,7 @@ export async function onInitCheckStep(state)
             ...checkAttribution(state)
         }
     });
+
     if (!proceed)
         return false;
 
@@ -858,6 +949,7 @@ export async function onInitAttackStep(state)
     const weapon = item;
     const targets = state.data?.acc_diff?.targets?.map(accDiffTargetToken).filter(Boolean) || [];
     const actionData = attackActionData(state, weapon);
+
     const proceed = await runCancellableStep(state, {
         trigger: 'onInitAttack',
         cancelKey: 'cancelAttack',
@@ -872,8 +964,12 @@ export async function onInitAttackStep(state)
             actionData
         }
     });
+
     if (!proceed)
         return false;
+
+    if (isOrdnanceWeapon(weapon) && ordnanceWindowClosed(token, state.la_extraData?.tapeAnchor))
+        ui.notifications.warn(localizeFormat('LA.notify.ordnanceWindowClosed', { weapon: weapon.name }));
 
     if (token)
         state.actor = token.actor;
@@ -888,6 +984,7 @@ export async function onInitTechAttackStep(state)
     const techItem = item;
     const targets = state.data?.acc_diff?.targets?.map(accDiffTargetToken).filter(Boolean) || [];
     const actionData = techActionData(state, techItem);
+
     const proceed = await runCancellableStep(state, {
         trigger: 'onInitTechAttack',
         cancelKey: 'cancelTechAttack',
@@ -903,6 +1000,7 @@ export async function onInitTechAttackStep(state)
             actionData
         }
     });
+
     if (!proceed)
         return false;
 
@@ -911,12 +1009,47 @@ export async function onInitTechAttackStep(state)
     return true;
 }
 
+/**
+ * Name and activation type a flow reports to automations, the same at init and at activation.
+ * @returns {{name: string, type: string, aided: boolean}}
+ */
+function normalizedActivation(state, actor, item, rawName, rawType)
+{
+    // Lancer prepends ALL-CAPS flow tags like "CORE ACTIVATION :: " / "RESERVE :: " to action names.
+    let name = rawName.replace(/^[A-Z][A-Z ]+ :: /, '');
+    let type = rawType;
+    let aided = false;
+
+    // Normalize built-in flows that have no item and use actor-prefixed titles
+    const flowName = state.name ?? '';
+    if (flowName === 'OverchargeFlow')
+    {
+        type = 'Protocol';
+        name = 'Overcharge';
+    }
+    else if (flowName === 'StabilizeFlow')
+    {
+        aided = !!actor?.statuses?.has('aided');
+        type = aided ? 'Quick' : 'Full';
+        name = 'Stabilize';
+    }
+    else if (flowName === 'BondPowerFlow')
+        name = state.item?.system?.powers?.[state.data?.powerIndex]?.name ?? name;
+
+    if (state.la_extraData?.endActivation && item?.name)
+        name = item.name;
+
+    return { name, type, aided };
+}
+
 export async function onActivationStep(state)
 {
     state = injectExtraDataUtility(state);
     const actor = state.actor;
+
     const token = canvas.tokens.get(state.la_extraData?.sourceTokenId)
         ?? (actor?.token ? canvas.tokens.get(actor.token.id) : actor?.getActiveTokens()?.[0]);
+
     let item = state.item;
 
     // SimpleActivationFlow carries no item, addExtraActions stamps _sourceItemId so extras can resolve theirs.
@@ -929,9 +1062,11 @@ export async function onActivationStep(state)
 
     // Deployable: resolve source item so reactions can match.
     let deployable = null;
+
     if (actor?.type === 'deployable')
     {
         deployable = { actor, lid: actor.system?.lid ?? null };
+
         if (!item)
         {
             item = await resolveDeployableSourceItem(actor) ?? null;
@@ -941,31 +1076,15 @@ export async function onActivationStep(state)
     }
 
     let actionType = state.data?.action?.activation || item?.system?.activation || state.data?.type || 'Other';
-    let actionName = state.data?.title || state.data?.action?.name || item?.name || 'Unknown Action';
-    // Lancer prepends ALL-CAPS flow tags like "CORE ACTIVATION :: " / "RESERVE :: " to action names.
-    actionName = actionName.replace(/^[A-Z][A-Z ]+ :: /, '');
+    const identity = normalizedActivation(state, actor, item, flowActionTitle(state) || state.data?.action?.name || item?.name || 'Unknown Action', actionType);
+    let actionName = identity.name;
+    actionType = identity.type;
 
-    // Normalize built-in flows that have no item and use actor-prefixed titles
-    const flowName = state.name ?? '';
-    if (flowName === 'OverchargeFlow')
-    {
-        actionType = 'Protocol';
-        actionName = 'Overcharge';
-    }
-    else if (flowName === 'StabilizeFlow')
-    {
-        actionType = 'Full';
-        actionName = 'Stabilize';
-    }
-    else if (flowName === 'TalentFlow' && state.data?.rank?.name)
-        actionName = state.data.rank.name;
-    else if (flowName === 'BondPowerFlow')
-        actionName = state.item?.system?.powers?.[state.data?.powerIndex]?.name ?? actionName;
-
-    if (state.la_extraData?.endActivation && item?.name)
-        actionName = item.name;
+    if (identity.aided)
+        state.injectFlowExtraData({ aided: true });
 
     const tags = state.data?.tags || item?.system?.tags || [];
+
     if (!state.data?.action?.activation && Array.isArray(tags))
     {
         for (const tag of tags)
@@ -978,9 +1097,12 @@ export async function onActivationStep(state)
         }
     }
 
+    if (state.la_extraData?.asReaction)
+        actionType = 'Reaction';
+
     const actionData = {
         type: "action",
-        title: state.data?.title || actionName,
+        title: flowActionTitle(state) || actionName,
         action: state.data?.action || {
             name: actionName,
             activation: actionType
@@ -993,9 +1115,13 @@ export async function onActivationStep(state)
 
     let reactionJustConsumed = false;
     let tracker = null;
+
+    if (state.la_extraData?.heldAction && token)
+        await runHeldReactionHook(token);
+
     if (actionType === 'Reaction' && token?.actor && !state.la_extraData?.freeUse && getModuleSetting('consumeReaction'))
     {
-        const before = trackerSnapshot(token.actor);
+        const before = trackerSnapshot(billingActor(token));
         if (state.la_extraData?.reactionConsumed)
         {
             reactionJustConsumed = true;
@@ -1004,7 +1130,7 @@ export async function onActivationStep(state)
         else if (await consumeReaction(token))
         {
             reactionJustConsumed = true;
-            tracker = { before, after: trackerSnapshot(token.actor) };
+            tracker = { before, after: trackerSnapshot(billingActor(token)) };
         }
         else
             ui.notifications.warn(localizeFormat('LA.notify.noReactionAvailable', { name: token.name }));
@@ -1018,7 +1144,7 @@ export async function onActivationStep(state)
 
     if (token && !isEndActivation)
     {
-        const tapeId = await recordAction(token, { id: chipId, name: actionName, activation: actionType, item, deployable, tracker, boost: actionName === 'Boost', changes: flowChanges({ state }, state.actor), ...(state.la_extraData?.freeUse ? { type: 'free' } : {}) });
+        const tapeId = await recordAction(token, { id: chipId, name: state.la_extraData?.tapeName ?? actionName, activation: actionType, item, deployable, tracker, boost: actionName === 'Boost', changes: flowChanges({ state }, state.actor), ...(state.la_extraData?.tapeIcon ? { icon: state.la_extraData.tapeIcon } : {}), ...(state.la_extraData?.freeUse ? { type: 'free' } : {}) });
         if (tapeId)
             state.injectFlowExtraData({ tapeId });
     }
@@ -1035,10 +1161,13 @@ export async function onActivationStep(state)
         extraData: state.la_extraData ?? {},
         flowState: state
     };
-    const trackerBefore = { ...(token?.actor?.system?.action_tracker ?? {}) };
+
+    const payer = token ? billingActor(token) : null;
+    const trackerBefore = { ...(payer?.system?.action_tracker ?? {}), slots: slotLedger(payer), quickOnly: quickOnlyGranted(payer) };
     const stopCapture = captureAppliedEffects(isEndActivation ? null : state.la_extraData?.tapeId ?? null);
     let results;
     let captured = { applied: [], removed: [] };
+
     try
     {
         results = await handleTrigger(isEndActivation ? 'onEndActivation' : 'onActivation', payload);
@@ -1047,13 +1176,15 @@ export async function onActivationStep(state)
     {
         captured = stopCapture();
     }
+
     if (token && !isEndActivation && state.la_extraData?.tapeId)
-        await noteTriggerResults(token, state.la_extraData.tapeId, trackerBefore, captured.applied, captured.removed);
+        await noteTriggerResults(token, state.la_extraData.tapeId, trackerBefore, captured.applied, captured.removed, captured.tokens);
     await handleTrigger(isEndActivation ? 'onPostEndActivation' : 'onPostActivation', { ...payload, results });
 
     // Gated on the overlay flag, not action.laCombat, so extras don't double-roll; deployables keep their actions on the actor.
     const overlayActor = token?.actor ?? actor;
     const overlay = (item ? getActionOverlay(item, actionName) : null) ?? getActionOverlay(overlayActor, actionName);
+
     if (overlay?.laCombat)
         await executeExtraActionCombat(overlayActor, { ...actionData.action, ...overlay, name: actionName }, item);
 
@@ -1066,12 +1197,14 @@ export async function onActivationStep(state)
 
     // Auto-discharge extra actions that carry a `recharge` field after activation
     const activatedAction = state.data?.action;
+
     if (activatedAction?.recharge && activatedAction?.charged !== false)
     {
         for (const actorItem of (state.actor?.items ?? []))
         {
             const itemExtraActions = getLAFlag(actorItem,'extraActions') || [];
             const match = itemExtraActions.find(action => action.name === activatedAction.name && action.recharge);
+
             if (match)
             {
                 match.charged = false;
@@ -1079,8 +1212,10 @@ export async function onActivationStep(state)
                 break;
             }
         }
+
         const actorExtraActions = getLAFlag(state.actor,'extraActions') || [];
         const actorMatch = actorExtraActions.find(action => action.name === activatedAction.name && action.recharge);
+
         if (actorMatch)
         {
             actorMatch.charged = false;
@@ -1096,18 +1231,22 @@ export async function consumeGenericPrintResourcesStep(state)
     const item = state.item;
     if (!item?.system)
         return true;
+
     const itemSystem = item.system;
     const tags = itemAllTags(itemSystem);
     const hasTag = (lid) => tags.some(tag => tag?.lid === lid);
     const disabled = getAutoConsumeDisabled(item);
     const updates = {};
+
     if (!disabled.has('uses') && hasTag('tg_limited') && itemSystem.uses != null)
     {
         const usesIsNested = typeof itemSystem.uses !== 'number';
         const currentUses = usesIsNested ? Number(itemSystem.uses.value ?? 0) : Number(itemSystem.uses);
+
         if (currentUses > 0)
             updates[usesIsNested ? 'system.uses.value' : 'system.uses'] = currentUses - 1;
     }
+
     if (!disabled.has('loading') && hasTag('tg_loading') && itemSystem.loaded === true)
         updates['system.loaded'] = false;
     if (!disabled.has('charged') && hasTag('tg_recharge') && itemSystem.charged !== false)
@@ -1122,8 +1261,10 @@ export async function onInitActivationStep(state)
 {
     state = injectExtraDataUtility(state);
     const actor = state.actor;
+
     const token = canvas.tokens.get(state.la_extraData?.sourceTokenId)
         ?? (actor?.token ? canvas.tokens.get(actor.token.id) : actor?.getActiveTokens()?.[0]);
+
     let item = state.item;
     if (!state.data)
         state.data = {};
@@ -1132,9 +1273,11 @@ export async function onInitActivationStep(state)
 
     // Deployable: surface the actor's LID and resolve the source item.
     let deployable = null;
+
     if (actor?.type === 'deployable')
     {
         deployable = { actor, lid: actor.system?.lid ?? null };
+
         if (!item)
         {
             item = await resolveDeployableSourceItem(actor) ?? null;
@@ -1144,9 +1287,12 @@ export async function onInitActivationStep(state)
     }
 
     let actionType = state.data?.action?.activation || item?.system?.activation || state.data?.type || 'Other';
-    const actionName = state.data?.title || state.data?.action?.name || item?.name || 'Unknown Action';
+    const identity = normalizedActivation(state, actor, item, flowActionTitle(state) || state.data?.action?.name || item?.name || 'Unknown Action', actionType);
+    const actionName = identity.name;
+    actionType = identity.type;
 
     const tags = state.data?.tags || item?.system?.tags || [];
+
     if (!state.data?.action?.activation && Array.isArray(tags))
     {
         for (const tag of tags)
@@ -1159,9 +1305,12 @@ export async function onInitActivationStep(state)
         }
     }
 
+    if (state.la_extraData?.asReaction)
+        actionType = 'Reaction';
+
     const actionData = {
         type: "action",
-        title: state.data?.title || actionName,
+        title: flowActionTitle(state) || actionName,
         action: state.data?.action || { name: actionName, activation: actionType },
         detail: state.data?.detail || state.data?.effect || item?.system?.effect || "",
         tags: tags,
@@ -1170,6 +1319,7 @@ export async function onInitActivationStep(state)
     };
 
     let cancelActivation = false;
+
     const cancelAction = _buildCancelFn({
         setFlag: () =>
         {
@@ -1200,7 +1350,7 @@ export async function onInitActivationStep(state)
     if (cancelActivation)
     {
         if (token && _isActiveMoveStackFor(token.id))
-            _wipeMoveStack();
+            _wipeMoveStack(token.id);
         await cancelAction.wait();
         return false;
     }

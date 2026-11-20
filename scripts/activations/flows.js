@@ -11,11 +11,13 @@ export function registerModuleFlows(flowSteps, flows)
 {
 
     const ActivationFlow = flows.get("ActivationFlow");
+
     if (!ActivationFlow)
     {
         console.error("lancer-automations | Could not find ActivationFlow to retrieve base Flow class");
         return;
     }
+
     const Flow = Object.getPrototypeOf(ActivationFlow);
 
     class SimpleActivationFlow extends Flow
@@ -29,6 +31,7 @@ export function registerModuleFlows(flowSteps, flows)
                 detail: options?.detail || "",
                 tags: options?.tags || []
             };
+
             super(uuid, initialData);
         }
     }
@@ -51,26 +54,44 @@ export function registerFlowStatePersistence()
         {
             const hookId = Hooks.on("preCreateChatMessage", (message) =>
             {
-                const attackData = message.flags?.lancer?.attackData;
+                const attackData = /** @type {any} */ (message.flags)?.lancer?.attackData;
                 if (!attackData)
                     return;
                 if (state.__laAttackShape)
                     message.updateSource(/** @type {any} */ ({ "flags.lancer-automations.attackShape": { ...state.__laAttackShape } }));
+
+                const foreignItem = state.item && state.item.parent !== state.actor;
+                if (foreignItem)
+                    message.updateSource(/** @type {any} */ ({ "flags.lancer.attackData.attackerItemUuid": null }));
+
                 const effectMatch = attackData.executeEffectId === state.data?.executeEffectId;
                 const hasInjectedTags = Array.isArray(state.la_extraData?.injectedTags) && state.la_extraData.injectedTags.length > 0;
                 const hasInjectedDamage = Array.isArray(state.la_extraData?.injectedDamage) && state.la_extraData.injectedDamage.length > 0;
                 const hasFlowBonus = Array.isArray(state.la_extraData?.flow_bonus) && state.la_extraData.flow_bonus.length > 0;
-                if (!effectMatch && !hasInjectedTags && !hasInjectedDamage && !hasFlowBonus)
+                const noDamage = state.la_extraData?.noDamage === true;
+
+                if (!effectMatch && !hasInjectedTags && !hasInjectedDamage && !hasFlowBonus && !foreignItem && !noDamage)
                     return;
+
                 let flowState = {};
                 if (state.la_extraData && typeof state.la_extraData === 'object')
                     flowState = { ...state.la_extraData };
+
+                if (foreignItem)
+                    flowState = { ...flowState, attackItemUuid: state.item.uuid };
+
                 if (Object.keys(flowState).length > 0)
                 {
                     message.updateSource({
                         "flags.lancer-automations.flowState": flowState
                     });
                 }
+            });
+
+            const createdId = Hooks.on("createChatMessage", (message) =>
+            {
+                if (/** @type {any} */ (message.flags)?.lancer?.attackData && message.author?.id === game.user.id)
+                    state.la_cardMessage = message;
             });
 
             try
@@ -80,6 +101,7 @@ export function registerFlowStatePersistence()
             finally
             {
                 Hooks.off("preCreateChatMessage", hookId);
+                Hooks.off("createChatMessage", createdId);
             }
         });
     });
@@ -96,17 +118,30 @@ export function bindChatMessageStateInterceptor(message, html)
 {
     const flowState = getLAFlags(message)?.flowState;
     const attackShape = getLAFlags(message)?.attackShape;
-    if (!flowState && !attackShape)
+    const fromAttackCard = !!(/** @type {any} */ (message.flags)?.lancer?.attackData);
+
+    if (!flowState && !attackShape && !fromAttackCard)
         return;
 
     // v13's renderChatMessageHTML passes a raw HTMLElement; legacy/wrapped paths pass jQuery.
     const root = html instanceof HTMLElement ? html : html[0];
     const damageBtn = root?.querySelector(".lancer-damage-flow");
+
+    if (flowState?.noDamage)
+    {
+        damageBtn?.remove();
+        return;
+    }
+
     if (damageBtn)
     {
         damageBtn.addEventListener("click", () =>
         {
-            ActiveFlowState.current = attackShape ? { ...flowState, attackShape } : flowState;
+            ActiveFlowState.current = {
+                ...flowState,
+                ...(attackShape ? { attackShape } : {}),
+                ...(fromAttackCard ? { fromAttackCard: true } : {}),
+            };
             // Clear it shortly after in case the flow doesn't begin synchronously for some reason
             setTimeout(() =>
             {
@@ -153,6 +188,7 @@ export function injectExtraDataUtility(state)
 export async function forceTechHUDStep(state, _options)
 {
     const data = state?.data;
+
     if (data?.acc_diff && !data.acc_diff.lancerItem)
     {
         data.acc_diff.lancerItem = {
@@ -164,5 +200,6 @@ export async function forceTechHUDStep(state, _options)
             system: {}
         };
     }
+
     return true;
 }

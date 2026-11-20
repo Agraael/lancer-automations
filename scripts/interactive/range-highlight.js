@@ -1,6 +1,7 @@
 import { isHexGrid, offsetToCube, cubeDistance, getHexCenter, pixelToOffset, getOccupiedOffsets, getInRangeOffsets } from "../combat/grid-helpers.js";
 import { getModuleSetting } from "../tools/settings-utils.js";
 import { mixColor } from "../tools/color-utils.js";
+import { gridScale } from "../tools/canvas-utils.js";
 import { awaitMovementSettled } from "../movement/move-api.js";
 import { RANGE_GLOW, RANGE_PULSE_STYLE } from "./canvas-palette.js";
 import { destroyGraphics, addGraphicsBelowTokens, addGraphicsAboveTokens, _paintCells, drawDashedEdges } from "./canvas-primitives.js";
@@ -31,6 +32,7 @@ export function teardownRangePulse(wavePulse, rangeHighlight, pulseGraphic)
         canvas.app.ticker.remove(wavePulse);
         wavePulse.dispose?.();
     }
+
     destroyGraphics(rangeHighlight);
     destroyGraphics(pulseGraphic);
 }
@@ -40,24 +42,29 @@ export function _groupCellsByDistance(originOffsets, cellKeys)
 {
     const hex = isHexGrid();
     const byDist = new Map();
+
     for (const key of cellKeys)
     {
         const [col, row] = key.split(',').map(Number);
         let minDist = Infinity;
+
         for (const originOffset of originOffsets)
         {
             const dist = hex
                 ? cubeDistance(offsetToCube(originOffset.col, originOffset.row), offsetToCube(col, row))
                 : Math.max(Math.abs(originOffset.col - col), Math.abs(originOffset.row - row));
+
             if (dist < minDist)
                 minDist = dist;
         }
+
         if (minDist === 0)
             continue;
         if (!byDist.has(minDist))
             byDist.set(minDist, []);
         byDist.get(minDist).push({ col, row });
     }
+
     return byDist;
 }
 
@@ -93,6 +100,7 @@ function _paintCellBrackets(graphic, cells, frac)
     {
         const { col, row } = _cellColRow(cell);
         const corners = _cellCorners(col, row);
+
         for (let index = 0; index < corners.length; index++)
         {
             const start = corners[index];
@@ -158,8 +166,9 @@ export function _makeRangePulseTick(pulseGraphic, hexesByDist, range, opts = {})
         los = false,
         freeRange = 0,
     } = opts;
+
     const speedMul = _rangePulseSpeed();
-    const gridScale = canvas.grid.size / 100; // line widths are calibrated on a 100px grid
+    const scale = gridScale(); // line widths are calibrated on a 100px grid
     const widthMul = _rangePulseWidthMul();
     const opacityMul = _rangePulseOpacity('rangePulseWaveOpacity');
     const pulseStyle = _rangePulseSetting('rangePulseStyle', 'inset');
@@ -173,29 +182,36 @@ export function _makeRangePulseTick(pulseGraphic, hexesByDist, range, opts = {})
     const flashLayer = new PIXI.Container();
     addGraphicsAboveTokens(flashLayer);
     const flashes = [];
+
     const clearFlashes = () =>
     {
         for (const flash of flashes)
             destroyGraphics(flash.sprite);
         flashes.length = 0;
     };
+
     const buildFlashes = (ringOfCell) =>
     {
         clearFlashes();
+
         for (const token of canvas.tokens?.placeables ?? [])
         {
             const texture = token.mesh?.texture;
             if (!texture || !token.visible)
                 continue;
+
             let ringDist = null;
+
             for (const offset of getOccupiedOffsets(token))
             {
                 const cellRing = ringOfCell.get(`${offset.col},${offset.row}`);
                 if (cellRing !== undefined && (ringDist === null || cellRing < ringDist))
                     ringDist = cellRing;
             }
+
             if (ringDist === null)
                 continue;
+
             const sprite = new PIXI.Sprite(texture);
             sprite.eventMode = 'none';
             sprite.blendMode = PIXI.BLEND_MODES.ADD;
@@ -205,13 +221,15 @@ export function _makeRangePulseTick(pulseGraphic, hexesByDist, range, opts = {})
             flashes.push({ token, sprite, ringDist });
         }
     };
-    const lineW = Math.max(1, lineWidth * gridScale * widthMul);
-    const glowW = lineW + Math.max(1, 1.5 * gridScale * widthMul);
-    const haloW = glowColor === null ? lineW + Math.max(1, gridScale * widthMul) : glowW + Math.max(1, gridScale * widthMul);
+
+    const lineW = Math.max(1, lineWidth * scale * widthMul);
+    const glowW = lineW + Math.max(1, 1.5 * scale * widthMul);
+    const haloW = glowColor === null ? lineW + Math.max(1, scale * widthMul) : glowW + Math.max(1, scale * widthMul);
     // Rings prepainted once into child Graphics; per-frame work is alpha-only (no re-tessellation).
     const ringGraphics = new Map();
     // Brackets are open paths, so they can't be filled.
     const closedShape = pulseStyle !== 'bracket';
+
     const paintShape = (ringG, ringCells) =>
     {
         if (pulseStyle === 'bracket')
@@ -219,23 +237,27 @@ export function _makeRangePulseTick(pulseGraphic, hexesByDist, range, opts = {})
         else
             _paintCellsInset(ringG, ringCells, INSET_TILE_SCALE);
     };
+
     const paintRingGraphic = (ringCells) =>
     {
         const ringG = new PIXI.Graphics();
         // dark halo under the bright pulse line so the wave reads on light + dark maps
         ringG.lineStyle(haloW, 0x000000, 1);
         paintShape(ringG, ringCells);
+
         if (glowColor !== null)
         {
             ringG.lineStyle(glowW, glowColor, 1);
             paintShape(ringG, ringCells);
         }
+
         ringG.lineStyle(lineW, coolCoreColor, 1);
         if (closedShape)
             ringG.beginFill(color, 1 / Math.max(1, lineAlphaMul));
         paintShape(ringG, ringCells);
         if (closedShape)
             ringG.endFill();
+
         // Second core, cross-faded in at the crest, so the line runs white hot without a repaint.
         const hotG = new PIXI.Graphics();
         hotG.lineStyle(lineW * HOT_CORE_WIDTH_MUL, lineColor, 1);
@@ -248,6 +270,7 @@ export function _makeRangePulseTick(pulseGraphic, hexesByDist, range, opts = {})
         pulseGraphic.addChild(ringG);
         return ringG;
     };
+
     const buildRings = (rings) =>
     {
         for (const child of pulseGraphic.removeChildren())
@@ -258,9 +281,11 @@ export function _makeRangePulseTick(pulseGraphic, hexesByDist, range, opts = {})
         maxRingDist = 0;
         if (_OUTLINE_ONLY)
             return;
+
         // rebuilt per pass so a moved origin re-tests against fresh vision
         const cellFilter = makePulseCellFilter(originToken, { los, freeRange });
         const ringOfCell = new Map();
+
         const recordCells = (cells, ringDist) =>
         {
             for (const cell of cells)
@@ -269,23 +294,29 @@ export function _makeRangePulseTick(pulseGraphic, hexesByDist, range, opts = {})
                 ringOfCell.set(`${col},${row}`, ringDist);
             }
         };
+
         if (range <= 1)
         {
             const ringCells = [];
             for (const cells of rings.values())
                 ringCells.push(...cells);
+
             const kept = cellFilter(ringCells);
+
             if (kept.length)
             {
                 ringGraphics.set(0, paintRingGraphic(kept));
                 recordCells(kept, 0);
             }
+
             buildFlashes(ringOfCell);
             return;
         }
+
         for (const [ringDist, ringCells] of rings)
         {
             const kept = cellFilter(ringCells);
+
             if (kept.length)
             {
                 ringGraphics.set(ringDist, paintRingGraphic(kept));
@@ -294,8 +325,10 @@ export function _makeRangePulseTick(pulseGraphic, hexesByDist, range, opts = {})
                     maxRingDist = ringDist;
             }
         }
+
         buildFlashes(ringOfCell);
     };
+
     const setRingAlpha = (ringG, waveAlpha, heat = 0) =>
     {
         const alpha = Math.min(1, baseAlpha + baseLineAlpha + waveAlpha * lineAlphaMul) * opacityMul;
@@ -304,9 +337,11 @@ export function _makeRangePulseTick(pulseGraphic, hexesByDist, range, opts = {})
         if (ringG.laHotCore && !ringG.laHotCore.destroyed)
             ringG.laHotCore.alpha = Math.pow(Math.max(0, Math.min(1, heat)), HOT_CORE_CURVE);
     };
+
     buildRings(hexesByDist);
     let lastKey = _originPosKey(originToken);
     const motionGate = _makeMotionGate();
+
     const tick = () =>
     {
         if (pulseGraphic.destroyed)
@@ -315,11 +350,14 @@ export function _makeRangePulseTick(pulseGraphic, hexesByDist, range, opts = {})
             destroyGraphics(flashLayer);
             return;
         }
+
         if (_OUTLINE_ONLY)
             return;
+
         if (lastKey !== null)
         {
             const key = _originPosKey(originToken);
+
             if (key !== lastKey && motionGate.ready())
             {
                 lastKey = key;
@@ -335,17 +373,21 @@ export function _makeRangePulseTick(pulseGraphic, hexesByDist, range, opts = {})
                 });
             }
         }
+
         const now = performance.now();
         // rings rise from the origin outward and stay up; 'bloom' crests once, the repeat mode crests again after a rest
         const elapsed = now - bloomStart;
         const sweepMs = maxRingDist * bloomStagger + bloomRise;
+
         const crestElapsed = pulseMotion === 'bloom'
             ? elapsed
             : elapsed % (sweepMs + WAVE_REST_MS / speedMul);
+
         for (const [ringDist, ringG] of ringGraphics)
         {
             if (ringG.destroyed)
                 continue;
+
             const ringStart = ringDist * bloomStagger;
             const risen = Math.max(0, Math.min(1, (elapsed - ringStart) / bloomRise));
             const eased = risen * risen * (3 - 2 * risen);
@@ -353,16 +395,20 @@ export function _makeRangePulseTick(pulseGraphic, hexesByDist, range, opts = {})
             const crest = Math.sin(crestPhase * Math.PI) * BLOOM_CREST;
             setRingAlpha(ringG, peakAlpha * (eased * BLOOM_REST_LEVEL + crest), crest / BLOOM_CREST);
         }
+
         for (const { token, sprite, ringDist } of flashes)
         {
             if (sprite.destroyed)
                 continue;
+
             const mesh = token.mesh;
+
             if (!mesh || token.destroyed || !token.visible)
             {
                 sprite.visible = false;
                 continue;
             }
+
             const crestPhase = Math.max(0, Math.min(1, (crestElapsed - ringDist * bloomStagger) / bloomRise));
             const strength = Math.sin(crestPhase * Math.PI) * FLASH_MAX_ALPHA;
             sprite.alpha = strength;
@@ -376,12 +422,14 @@ export function _makeRangePulseTick(pulseGraphic, hexesByDist, range, opts = {})
             sprite.scale.set(mesh.scale?.x ?? 1, mesh.scale?.y ?? 1);
         }
     };
+
     // the ticker is removed before the graphic is destroyed, so the flashes need their own teardown
     tick.dispose = () =>
     {
         clearFlashes();
         destroyGraphics(flashLayer);
     };
+
     return tick;
 }
 
@@ -424,6 +472,7 @@ function _originPosKey(origin)
     const effectiveOrigin = _effectiveOrigin(origin);
     if (!effectiveOrigin?.document)
         return null;
+
     const center = effectiveOrigin.center ?? { x: effectiveOrigin.document.x, y: effectiveOrigin.document.y };
     return `${Math.round(center.x)},${Math.round(center.y)}`;
 }
@@ -431,16 +480,18 @@ function _originPosKey(origin)
 // Dark halo + bright line + fill over a set/array of "col,row" cells. Line width calibrated on a 100px grid.
 export function paintCellRegion(graphic, cells, { color = 0x00ff00, alpha = 0.2, lineAlpha = undefined, lineColor = 0xFFFFFF, lineWidth: rawLineWidth = 2 } = {})
 {
-    const gridScale = canvas.grid.size / 100;
+    const scale = gridScale();
     const resolvedLineAlpha = lineAlpha ?? (isHexGrid() ? 0.4 : 0.7);
-    const lineWidth = rawLineWidth > 0 ? Math.max(1, rawLineWidth * gridScale) : 0;
-    const haloWidth = lineWidth > 0 ? lineWidth + Math.max(1, 2 * gridScale) : 0;
+    const lineWidth = rawLineWidth > 0 ? Math.max(1, rawLineWidth * scale) : 0;
+    const haloWidth = lineWidth > 0 ? lineWidth + Math.max(1, 2 * scale) : 0;
+
     if (lineWidth > 0 && resolvedLineAlpha > 0)
     {
         graphic.lineStyle(haloWidth, 0x000000, Math.min(1, resolvedLineAlpha + 0.25));
         _paintCells(graphic, cells);
         graphic.lineStyle(lineWidth, lineColor, Math.min(1, resolvedLineAlpha + 0.2));
     }
+
     if (alpha > 0)
         graphic.beginFill(color, alpha);
     _paintCells(graphic, cells);
@@ -453,11 +504,13 @@ export function _perimeterEdges(cells)
 {
     const round = (value) => Math.round(value * 10) / 10;
     const edges = new Map();
+
     for (const cell of cells)
     {
         const col = typeof cell === 'string' ? Number(cell.split(',')[0]) : cell.col;
         const row = typeof cell === 'string' ? Number(cell.split(',')[1]) : cell.row;
         const corners = _cellCorners(col, row);
+
         for (let index = 0; index < corners.length; index++)
         {
             const start = corners[index];
@@ -466,18 +519,22 @@ export function _perimeterEdges(cells)
             const endKey = `${round(end.x)},${round(end.y)}`;
             const edgeKey = startKey < endKey ? `${startKey}|${endKey}` : `${endKey}|${startKey}`;
             const existing = edges.get(edgeKey);
+
             if (existing)
                 existing.count += 1;
             else
                 edges.set(edgeKey, { count: 1, ax: start.x, ay: start.y, bx: end.x, by: end.y });
         }
     }
+
     const boundary = [];
+
     for (const edge of edges.values())
     {
         if (edge.count === 1)
             boundary.push(edge);
     }
+
     return boundary;
 }
 
@@ -487,21 +544,25 @@ export function paintPerimeterGlow(graphic, cells, { lineColor = RANGE_PULSE_STY
     const boundary = _perimeterEdges(cells);
     if (!boundary.length)
         return;
-    const gridScale = canvas.grid.size / 100;
+
+    const scale = gridScale();
     const widthMul = _rangePulseWidthMul();
     lineAlpha *= _rangePulseOpacity('rangePulseWaveOpacity');
-    const lineW = Math.max(1, lineWidth * gridScale * widthMul);
-    const glowW = lineW + Math.max(1, 1.5 * gridScale * widthMul);
-    const haloW = glowColor === null ? lineW + Math.max(1, gridScale * widthMul) : glowW + Math.max(1, gridScale * widthMul);
+    const lineW = Math.max(1, lineWidth * scale * widthMul);
+    const glowW = lineW + Math.max(1, 1.5 * scale * widthMul);
+    const haloW = glowColor === null ? lineW + Math.max(1, scale * widthMul) : glowW + Math.max(1, scale * widthMul);
+
     const strokeBoundary = (width, colorInt, alpha) =>
     {
         graphic.lineStyle(width, colorInt, alpha);
+
         for (const edge of boundary)
         {
             graphic.moveTo(edge.ax, edge.ay);
             graphic.lineTo(edge.bx, edge.by);
         }
     };
+
     if (halo)
         strokeBoundary(haloW, 0x000000, lineAlpha);
     if (glowColor !== null)
@@ -516,46 +577,55 @@ const BLOCKED_CONTOUR_ALPHA = 0.25;
 export function paintBlockedRangeContour(graphic, fullCells, litCells, { glowColor = RANGE_GLOW.manual, lineAlpha = BLOCKED_CONTOUR_ALPHA } = {})
 {
     const round = (value) => Math.round(value * 10) / 10;
+
     const edgeKeyOf = (edge) =>
     {
         const aKey = `${round(edge.ax)},${round(edge.ay)}`;
         const bKey = `${round(edge.bx)},${round(edge.by)}`;
         return aKey < bKey ? `${aKey}|${bKey}` : `${bKey}|${aKey}`;
     };
+
     // tied to the canvas: the ghost stops at the scene edge like the lit reach does
     const rect = canvas.dimensions?.sceneRect ?? null;
     const onMapCells = [];
+
     for (const cell of fullCells)
     {
         const { col, row } = _cellColRow(cell);
         if (_cellOnMap(col, row, rect))
             onMapCells.push(cell);
     }
+
     const litEdgeKeys = new Set(_perimeterEdges(litCells).map(edgeKeyOf));
     const edges = [];
+
     for (const edge of _perimeterEdges(onMapCells))
     {
         if (!litEdgeKeys.has(edgeKeyOf(edge)))
             edges.push([{ x: edge.ax, y: edge.ay }, { x: edge.bx, y: edge.by }]);
     }
+
     if (!edges.length)
         return;
-    const gridScale = canvas.grid.size / 100;
+
+    const scale = gridScale();
     const widthMul = _rangePulseWidthMul();
     const alpha = lineAlpha * _rangePulseOpacity('rangePulseWaveOpacity');
     const dashLen = canvas.grid.size * 0.16;
     const gapLen = dashLen * 0.75;
     // same halo + glow + core stack as paintPerimeterGlow, dashed and dimmer
-    const lineW = Math.max(1, 1.2 * gridScale * widthMul);
-    const glowW = lineW + Math.max(1, 1.5 * gridScale * widthMul);
-    const haloW = glowColor === null ? lineW + Math.max(1, gridScale * widthMul) : glowW + Math.max(1, gridScale * widthMul);
+    const lineW = Math.max(1, 1.2 * scale * widthMul);
+    const glowW = lineW + Math.max(1, 1.5 * scale * widthMul);
+    const haloW = glowColor === null ? lineW + Math.max(1, scale * widthMul) : glowW + Math.max(1, scale * widthMul);
     graphic.lineStyle(haloW, 0x000000, alpha);
     drawDashedEdges(graphic, edges, dashLen, gapLen, 0);
+
     if (glowColor !== null)
     {
         graphic.lineStyle(glowW, glowColor, alpha);
         drawDashedEdges(graphic, edges, dashLen, gapLen, 0);
     }
+
     graphic.lineStyle(lineW, RANGE_PULSE_STYLE.lineColor, alpha);
     drawDashedEdges(graphic, edges, dashLen, gapLen, 0);
 }
@@ -565,8 +635,10 @@ export function paintRangeHighlight(highlight, casterToken, range, color = 0x00f
     highlight.clear();
     const cellFilter = makePulseCellFilter(casterToken, { los: opts.los === true, freeRange: opts.freeRange ?? 0 });
     const inRange = cellFilter(getInRangeOffsets(casterToken, range, { includeSelf }));
+
     if (!_OUTLINE_ONLY)
         paintCellRegion(highlight, inRange, { color, alpha, lineAlpha: opts.lineAlpha, lineColor: opts.lineColor, lineWidth: opts.lineWidth });
+
     if (opts.glowColor != null)
     {
         // boundary from the includeSelf set so the origin never leaves an inner hole in the outline
@@ -587,9 +659,11 @@ export function drawRangeHighlight(casterToken, range, color = 0x00ff00, alpha =
 
     // follow the origin as it moves
     let lastKey = _originPosKey(casterToken);
+
     if (lastKey !== null)
     {
         const motionGate = _makeMotionGate();
+
         const followTick = () =>
         {
             if (!highlight || highlight.destroyed)
@@ -597,7 +671,9 @@ export function drawRangeHighlight(casterToken, range, color = 0x00ff00, alpha =
                 canvas.app.ticker.remove(followTick);
                 return;
             }
+
             const key = _originPosKey(casterToken);
+
             if (key !== lastKey && motionGate.ready())
             {
                 lastKey = key;
@@ -609,8 +685,10 @@ export function drawRangeHighlight(casterToken, range, color = 0x00ff00, alpha =
                 });
             }
         };
+
         canvas.app.ticker.add(followTick);
     }
+
     return highlight;
 }
 
@@ -619,12 +697,14 @@ export function createFadeInOut(graphics, { fadeInMs = 180, fadeOutMs = 180 }, o
 {
     for (const graphic of graphics)
         graphic.alpha = 0;
+
     let fadeStart = performance.now();
     let fadeFrom = 0;
     let fadeTo = 1;
     let fadeDur = Math.max(1, fadeInMs);
     let onFadeDone = null;
     let finished = false;
+
     const finish = () =>
     {
         if (finished)
@@ -634,6 +714,7 @@ export function createFadeInOut(graphics, { fadeInMs = 180, fadeOutMs = 180 }, o
         onFadeDone = null;
         onDestroyed();
     };
+
     const fadeTick = () =>
     {
         if (graphics.some(graphic => graphic.destroyed))
@@ -641,11 +722,13 @@ export function createFadeInOut(graphics, { fadeInMs = 180, fadeOutMs = 180 }, o
             finish();
             return;
         }
+
         const elapsed = performance.now() - fadeStart;
         const fadeProgress = Math.min(1, elapsed / fadeDur);
         const alpha = fadeFrom + (fadeTo - fadeFrom) * fadeProgress;
         for (const graphic of graphics)
             graphic.alpha = alpha;
+
         if (fadeProgress >= 1)
         {
             canvas.app.ticker.remove(fadeTick);
@@ -653,16 +736,20 @@ export function createFadeInOut(graphics, { fadeInMs = 180, fadeOutMs = 180 }, o
                 finish();
         }
     };
+
     canvas.app.ticker.add(fadeTick);
+
     return () =>
     {
         if (finished)
             return;
+
         if (fadeOutMs <= 0)
         {
             finish();
             return;
         }
+
         fadeStart = performance.now();
         fadeFrom = graphics[0]?.alpha ?? 1;
         fadeTo = 0;
@@ -671,6 +758,30 @@ export function createFadeInOut(graphics, { fadeInMs = 180, fadeOutMs = 180 }, o
         canvas.app.ticker.remove(fadeTick);
         canvas.app.ticker.add(fadeTick);
     };
+}
+
+function _reachRect(sources)
+{
+    const size = canvas.grid.size;
+    let rect = null;
+
+    for (const [source, range] of sources)
+    {
+        const doc = source?.document;
+        const left = doc ? doc.x : source?.x;
+        const top = doc ? doc.y : source?.y;
+
+        if (!Number.isFinite(left) || !Number.isFinite(top))
+            return null;
+
+        const reach = ((Number(range) || 0) + 1) * size;
+        const width = (doc ? (doc.width ?? 1) * size : 0) + 2 * reach;
+        const height = (doc ? (doc.height ?? 1) * size : 0) + 2 * reach;
+        const part = new PIXI.Rectangle(left - reach, top - reach, width, height);
+        rect = rect ? rect.enlarge(part) : part;
+    }
+
+    return rect;
 }
 
 // Gray range highlight with an animated wave pulse from one origin. Returns a destroy() fn.
@@ -682,14 +793,21 @@ export function createPulsingRangeHighlight(casterToken, range, { includeSelf = 
         const rangeHighlight = drawRangeHighlight(casterToken, range, RANGE_PULSE_STYLE.baseColor, staticFillAlpha, includeSelf, { lineAlpha: _staticGridAlpha(staticLineAlpha), lineColor: RANGE_PULSE_STYLE.lineColor, glowColor, los, freeRange });
         const pulseGraphic = new PIXI.Graphics();
         addGraphicsBelowTokens(pulseGraphic);
+
         const hexesByDist = _groupCellsByDistance(
             getOccupiedOffsets(casterToken),
             getInRangeOffsets(casterToken, range, { includeSelf: true })
         );
+
         const wavePulse = _makeRangePulseTick(pulseGraphic, hexesByDist, range, { originToken: casterToken, glowColor, los, freeRange });
         canvas.app.ticker.add(wavePulse);
-        return createFadeInOut([rangeHighlight, pulseGraphic], { fadeInMs, fadeOutMs },
+
+        const destroy = createFadeInOut([rangeHighlight, pulseGraphic], { fadeInMs, fadeOutMs },
             () => teardownRangePulse(wavePulse, rangeHighlight, pulseGraphic));
+
+        destroy.reachRect = () => _reachRect([[casterToken, range]]);
+        destroy.origins = new Set([casterToken?.document?.id].filter(Boolean));
+        return destroy;
     });
 }
 
@@ -701,6 +819,7 @@ export function createMergedRangeHighlight(entries, {
 } = {})
 {
     const waveRange = Math.max(1, ...entries.map(entry => entry.range));
+
     const originOffsetsFor = (entry) => entry.point
         ? [pixelToOffset(entry.point.x, entry.point.y)]
         : getOccupiedOffsets(_effectiveOrigin(entry.token));
@@ -712,20 +831,24 @@ export function createMergedRangeHighlight(entries, {
         const unionStatic = new Set();
         const unionWave = new Set();
         const unionFullWave = new Set();
+
         for (const entry of entries)
         {
             const origin = entry.point ?? _effectiveOrigin(entry.token);
             const range = entry.range;
             const cellFilter = makePulseCellFilter(entry.token ?? null, { los: entry.los === true, freeRange: entry.freeRange ?? 0 });
+
             for (const offset of originOffsetsFor(entry))
             {
                 const key = `${offset.col},${offset.row}`;
+
                 if (!seen.has(key))
                 {
                     seen.add(key);
                     unionOrigins.push(offset);
                 }
             }
+
             for (const key of cellFilter(getInRangeOffsets(origin, range, { includeSelf })))
                 unionStatic.add(key);
             for (const key of cellFilter(getInRangeOffsets(origin, range, { includeSelf: true })))
@@ -733,6 +856,7 @@ export function createMergedRangeHighlight(entries, {
             for (const key of getInRangeOffsets(origin, range, { includeSelf: true, elevationAware: false }))
                 unionFullWave.add(key);
         }
+
         return { unionOrigins, unionStatic, unionWave, unionFullWave };
     };
 
@@ -743,12 +867,14 @@ export function createMergedRangeHighlight(entries, {
         addGraphicsBelowTokens(pulseGraphic);
 
     let wavePulse = null;
+
     const rebuild = () =>
     {
         const { unionOrigins, unionStatic, unionWave, unionFullWave } = buildUnions();
         rangeHighlight.clear();
         if (!_OUTLINE_ONLY)
             paintCellRegion(rangeHighlight, unionStatic, { color: RANGE_PULSE_STYLE.baseColor, alpha: staticFillAlpha, lineAlpha: _staticGridAlpha(staticLineAlpha), lineColor: RANGE_PULSE_STYLE.lineColor });
+
         if (perimeter)
         {
             paintPerimeterGlow(rangeHighlight, unionWave, {
@@ -759,22 +885,28 @@ export function createMergedRangeHighlight(entries, {
             if (unionFullWave.size !== unionWave.size)
                 paintBlockedRangeContour(rangeHighlight, unionFullWave, unionWave, { glowColor });
         }
+
         if (!pulseGraphic)
             return;
+
         const hexesByDist = _groupCellsByDistance(unionOrigins, unionWave);
+
         if (wavePulse)
         {
             canvas.app.ticker.remove(wavePulse);
             wavePulse.dispose?.();
         }
+
         wavePulse = _makeRangePulseTick(pulseGraphic, hexesByDist, waveRange, { originToken: null, glowColor });
         canvas.app.ticker.add(wavePulse);
     };
+
     rebuild();
 
     const posKey = () => entries.map(entry => entry.point ? `pt:${entry.point.x},${entry.point.y}` : (_originPosKey(entry.token) ?? 'pt')).join('|');
     let lastKey = posKey();
     const motionGate = _makeMotionGate();
+
     const followTick = () =>
     {
         if (rangeHighlight.destroyed)
@@ -782,11 +914,14 @@ export function createMergedRangeHighlight(entries, {
             canvas.app.ticker.remove(followTick);
             return;
         }
+
         const key = posKey();
+
         if (key !== lastKey && motionGate.ready())
         {
             lastKey = key;
             rebuild();
+
             for (const entry of entries)
             {
                 if (entry.token)
@@ -800,14 +935,19 @@ export function createMergedRangeHighlight(entries, {
             }
         }
     };
+
     canvas.app.ticker.add(followTick);
 
     const fadeTargets = pulseGraphic ? [rangeHighlight, pulseGraphic] : [rangeHighlight];
+
     const destroy = createFadeInOut(fadeTargets, { fadeInMs, fadeOutMs }, () =>
     {
         canvas.app.ticker.remove(followTick);
         teardownRangePulse(wavePulse, rangeHighlight, pulseGraphic);
     });
+
     destroy.graphics = fadeTargets;
+    destroy.reachRect = () => _reachRect(entries.map(entry => [entry.point ?? entry.token, entry.range]));
+    destroy.origins = new Set(entries.map(entry => entry.token?.document?.id).filter(Boolean));
     return destroy;
 }

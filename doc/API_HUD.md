@@ -77,7 +77,7 @@ Item-held actions appear under their item in the TAH menu, actor-held actions in
 **`laCombat` mode:** stays in its activation column. Clicking prints the card then fires [`executeExtraActionCombat`](API_COMBAT.md). `'attack'` rolls a to-hit (weapon tags apply, `tg_smart` = E-DEF, `Invade`/`Quick Tech`/`Full Tech` = tech attack at Sensors). `'damage'` rolls `damage` with no to-hit.
 
 **Auto-behaviors when target is an Item:**
-- `_sourceItemId` is stamped onto every added action so [`onlyOnSourceMatch`](AUTOMATION_SYSTEM.md) reactions can resolve the parent item.
+- `_sourceItemId` is stamped onto every added action so [`onlyOnSourceMatch`](AUTOMATION_SYSTEM.md) automations can resolve the parent item.
 - If the action carries a consumable tag (`tg_loading` / `tg_recharge` / `tg_limited`) that's already on the parent item, that tag is stripped from the action along with its state field (`loaded` / `charged`+`recharge` / `uses`). A warning is shown. Item-level state stays authoritative.
 
 **Example:**
@@ -199,17 +199,17 @@ api.isActionLocked(actor, actionName)        // → boolean (manual + item locks
 api.getLockedActions(actor)                  // → string[]
 ```
 
-Both readers count `disable*` entries alongside locks, and neither sees activation-type locks.
+`isActionLocked` and `getLockedActions` count `disable*` entries alongside locks, and neither sees activation-type locks.
 
 | Param | Type | Description |
 |:------|:-----|:------------|
-| <kbd>target</kbd> | `Item\|Actor\|Token` | Item: lock lives on the item - off while destroyed/disabled, gone when removed, back on repair. Actor: source-tracked manual lock. |
+| <kbd>target</kbd> | `Item\|Actor\|Token` | Item: lock lives on the item, off while destroyed/disabled, gone when removed, back on repair. Actor: source-tracked manual lock. |
 | <kbd>actionName</kbd> | `string` | Standard action display name (`"Boost"`, `"Grapple"`, ...), or a weapon's name to grey that weapon's rows |
 | <kbd>sourceId</kbd> | `string` | Actor locks only. Stays locked until every source is removed. |
 | **inside `opts`** | | |
 | <kbd>reason</kbd> | `string` | Optional. Shown in the popup's "Locked by:" line (item locks default to the item name). |
 
-The third argument takes the `sourceId` string or an options object (`sourceIdOrOpts`). The trailing `kind` is an internal lock category used by the status system - leave it unset.
+The third argument takes the `sourceId` string or an options object (`sourceIdOrOpts`). The trailing `kind` is an internal lock category used by the status system. Leave it unset.
 
 Locked actions are grayed in TAH. The action popup names the locker (status, item, or reason). Locking a weapon (item target, `actionName` = the weapon's name) grays the weapon row and its FIGHT / SKIRMISH / BARRAGE / ATTACK entries, with the reason in the weapon popup.
 
@@ -265,7 +265,7 @@ await api.disableActorActionTypes(target, activationTypes, sourceIdOrOpts?, opts
 await api.enableActorActionTypes(target, activationTypes?, sourceId?)
 ```
 
-Same arguments as `lockActorAction` / `lockActorActionTypes`, but the rows show yellow (like status-disabled actions) instead of grey - use disable for temporary states, lock for lasting ones. Disabled entries are tracked separately: `unlock*` never removes them, `enable*` only removes them.
+Same arguments as `lockActorAction` / `lockActorActionTypes`, but the rows show yellow (like status-disabled actions) instead of grey. Use disable for temporary states, lock for lasting ones. Disabled entries are tracked separately: `unlock*` never removes them, `enable*` only removes them.
 
 | Param | Type | Default | Description |
 |:------|:-----|:--------|:------------|
@@ -276,7 +276,10 @@ Same arguments as `lockActorAction` / `lockActorActionTypes`, but the rows show 
 | <kbd>opts</kbd> | `Object` | `null` | Options when `sourceIdOrOpts` held the source id |
 | <kbd>opts.reason</kbd> | `string` | `null` | Shown on the disabled row |
 
-`enable*` takes `sourceId` in place of the last two. On an actor target pass the same id used to disable, omitting it errors and enables nothing. An Item target ignores `sourceId` and drops its own disabled entries, and `enableActorActionTypes` on an Item may also omit `activationTypes` to drop all of them.
+`enable*` takes `sourceId` in place of `sourceIdOrOpts` and `opts`.
+
+- On an actor target, pass the same id used to disable. Omitting it errors and enables nothing.
+- An Item target ignores `sourceId` and drops its own disabled entries. `enableActorActionTypes` on an Item may also omit `activationTypes` to drop all of them.
 
 ```js
 await api.disableActorAction(actor, 'Boost', 'overheat', { reason: 'Reactor venting' });
@@ -306,7 +309,7 @@ Combat data on an item's **native** actions (`system.actions`), stored in a flag
 | <kbd>actionName</kbd> | `string` | Name as it appears in `system.actions`. Dots are safe |
 | <kbd>overlay</kbd> | `Object\|null` | Combat fields below. Patch-merge. An empty value clears a field, `null` removes the overlay |
 
-**Overlay fields:** `laCombat` (`'attack'|'damage'`), `attack_bonus`, `accuracy`, `difficulty`, `attack_type`, `tags`, `damage`, `range` - same semantics as the `ExtraAction` combat fields above. `laCombat` is optional: a `range`-only overlay just grants range.
+**Overlay fields:** `laCombat` (`'attack'|'damage'`), `attack_bonus`, `accuracy`, `difficulty`, `attack_type`, `tags`, `damage`, `range`, same semantics as the `ExtraAction` combat fields above. `laCombat` is optional: a `range`-only overlay just grants range.
 
 **Example:**
 ```js
@@ -332,7 +335,13 @@ api.resolveGrantedActionRange(actor, actionName, base?)   // → number | null
 
 `resolveGrantedActionRange` takes the owning `actor`. `applyActionOverlays` takes an Item or Actor, a Token is not resolved and comes back with its actions unchanged.
 
-**Range grants:** `resolveGrantedActionRange` folds the overlay `range` entries for that action from every item that is neither destroyed nor disabled onto `base`. Per-entry `mode` works like AE changes: `upgrade` (default, greater wins), `add` (sums, negatives allowed), `override` (replaces `base` and any `upgrade`, highest override wins). `add` still sums on top of an `override`, so it is not a hard final value. Consumed by the Lock On automation (base = Sensors) and the TAH hover range pulse.
+**Range grants:** `resolveGrantedActionRange` starts from `base` and folds in the overlay `range` entries for that action from every item that is neither destroyed nor disabled. Per-entry `mode` works like AE changes:
+
+- `upgrade` (default): greater wins.
+- `add`: sums, negatives allowed.
+- `override`: replaces `base` and any `upgrade`, highest override wins. `add` still sums on top of an `override`, so it is not a hard final value.
+
+Consumed by the Lock On automation (base = Sensors) and the TAH hover range pulse.
 
 </details>
 
@@ -345,7 +354,7 @@ api.resolveGrantedActionRange(actor, actionName, base?)   // → number | null
 api.openExtrasDialog(target)
 ```
 
-Dialog for managing an owner's extras: extra actions, extra deployment actors, deployable LIDs, and extra token stat bars. Only lists entries created here. Warns when the stat-bar setting is off, the data is still saved. Also reachable via TAH > Utility > Misc > Add Extra.
+Dialog for managing an owner's extras: extra actions, extra deployment actors, deployable LIDs, custom deployables ([specs](API_INTERACTIVE.md#addDeployableSpec)), and extra token stat bars. Only lists entries created here. Warns when the stat-bar setting is off, but the data is still saved. Also reachable via TAH > Utility > Misc > Add Extra.
 
 | Param | Type | Description |
 |:------|:-----|:------------|
@@ -356,3 +365,64 @@ api.openExtrasDialog(token.actor);
 ```
 
 </details>
+
+---
+
+## World Clocks
+
+Feature guide: [Clocks](feature/CLOCKS.md). `lidOrName` is a clock's `lid` or exact name. Calls from players go through the active GM.
+
+<details id="getWorldClocks">
+<summary><b><code>getWorldClocks</code></b> → <code>object[]</code><br><b><code>getWorldClock</code></b> → <code>object | null</code></summary>
+
+<br>
+
+```js
+api.getWorldClocks()
+api.getWorldClock(lidOrName)
+```
+
+A clock: `{ lid, name, min, max, default_value, value, tone, visibility, users, groups }`.
+
+</details>
+
+<details id="createWorldClock">
+<summary><b><code>createWorldClock</code></b> <sup>async</sup> → <code>Promise&lt;string&gt;</code></summary>
+
+<br>
+
+```js
+const lid = await api.createWorldClock(name, { segments, tone, visibility });
+```
+
+| Param | Type | Description |
+|:------|:-----|:------------|
+| <kbd>segments</kbd> | `number` | 2 to 12. Default 6 |
+| <kbd>tone</kbd> | `"progress" \| "threat" \| "neutral"` | Default `"progress"` |
+| <kbd>visibility</kbd> | `string \| { users, groups }` | `"hidden"` (default), `"gm"`, `"all"`, `"user:<id>"`, `"group:<id>"` |
+
+</details>
+
+<details id="tickWorldClock">
+<summary><b><code>tickWorldClock</code></b> <sup>async</sup> → <code>Promise&lt;void&gt;</code><br><b><code>setWorldClockValue</code></b> <sup>async</sup> → <code>Promise&lt;void&gt;</code><br><b><code>setWorldClockTone</code></b> <sup>async</sup> → <code>Promise&lt;void&gt;</code><br><b><code>setWorldClockVisibility</code></b> <sup>async</sup> → <code>Promise&lt;void&gt;</code><br><b><code>removeWorldClock</code></b> <sup>async</sup> → <code>Promise&lt;void&gt;</code></summary>
+
+<br>
+
+```js
+await api.tickWorldClock(lidOrName, amount = 1);
+await api.setWorldClockValue(lidOrName, value);
+await api.setWorldClockTone(lidOrName, tone);
+await api.setWorldClockVisibility(lidOrName, visibility);
+await api.removeWorldClock(lidOrName);
+```
+
+The value stays between 0 and the clock's segments.
+
+</details>
+
+Hooks, on every client:
+
+```js
+Hooks.on("lancer-automations.worldClockChanged", (clock, from) => {});
+Hooks.on("lancer-automations.worldClockFilled", (clock) => {});
+```

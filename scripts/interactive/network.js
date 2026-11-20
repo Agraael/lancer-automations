@@ -2,7 +2,7 @@
 
 import {
     _queueCard, _createInfoCard, _updateInfoCard, _removeInfoCard,
-    _updatePendingBadge, _runCardCallback
+    _updatePendingBadge, _runCardCallback, claimCardEscape
 } from "./cards.js";
 
 import { drawMovementTrace } from "./canvas.js";
@@ -13,6 +13,18 @@ import { laDetailPopup, laRenderTextSection, laRenderActions, laRenderTags } fro
 // GM-controlled choice cards
 export const _pendingGMChoices = new Map(); // cardId → { resolve, cardEl, choices, mode }
 
+const _earlyGMReplies = new Map();
+
+function _replayEarlyGMReplies(cardId)
+{
+    const replies = _earlyGMReplies.get(cardId) ?? [];
+
+    _earlyGMReplies.delete(cardId);
+
+    for (const reply of replies)
+        void resolveGMChoiceCard(cardId, ...reply);
+}
+
 /**
  * Inserts a compact item chip into a choice card and binds a detail popup on click.
  * @param {JQuery} cardEl
@@ -22,14 +34,17 @@ export function _bindItemChip(cardEl, item)
 {
     if (!item)
         return;
+
     const img = item.img || '';
     const name = item.name || '';
+
     const chipHtml = `
         <div data-role="item-chip" style="display:flex;align-items:center;gap:6px;padding:4px 8px;margin-bottom:6px;background:rgba(255,255,255,0.04);border:1px solid #333;border-radius:3px;cursor:pointer;">
             ${img ? `<img src="${img}" style="width:22px;height:22px;object-fit:contain;border:none;flex-shrink:0;">` : ''}
             <span style="font-size:0.82em;color:#888;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${name}</span>
             <i class="fas fa-info-circle" style="color:#666;font-size:0.75em;flex-shrink:0;"></i>
         </div>`;
+
     const sectionHeader = cardEl.find('.la-info-card-body .la-section-header').first();
     if (sectionHeader.length)
         sectionHeader.before(chipHtml);
@@ -45,17 +60,20 @@ export function _bindItemChip(cardEl, item)
     {
         e.stopPropagation();
         const existing = $(document.querySelectorAll('.la-item-chip-popup'));
+
         if (existing.length)
         {
             _closeChipPopup(existing);
             return;
         }
+
         const itemSystem = item.system ?? {};
         let bodyHtml = laRenderTextSection('EFFECT', itemSystem.effect ?? itemSystem.description ?? '', '#e65100');
         bodyHtml += laRenderActions(itemSystem.actions ?? []);
         bodyHtml += laRenderTags(itemSystem.tags ?? []);
         if (!bodyHtml)
             bodyHtml = '<div style="font-size:0.82em;color:#888;">No description.</div>';
+
         const themeMap = /** @type {Record<string,string>} */ ({ mech_weapon: 'weapon', mech_system: 'system', talent: 'talent', core_bonus: 'core_bonus', npc_feature: 'weapon' });
         const theme = themeMap[item.type] ?? 'default';
         const subtitle = (item.type ?? '').replaceAll('_', ' ').toUpperCase();
@@ -68,8 +86,10 @@ export function _bindItemChip(cardEl, item)
         const popupH = popup.outerHeight() ?? 200;
         const winW = window.innerWidth, winH = window.innerHeight;
         let px = cardOffset.left + cardW + 8;
+
         if (px + popupW > winW - 10)
             px = cardOffset.left - popupW - 8;
+
         let py = chipOffset.top;
         if (py + popupH > winH - 10)
             py = winH - popupH - 10;
@@ -83,6 +103,8 @@ export function _bindItemChip(cardEl, item)
 
 // Broadcast cards (first-to-respond wins); stores cancel() on each target client to force-dismiss.
 export const _pendingBroadcastCards = new Map(); // cardId → cancel()
+
+const _keyedChoiceCards = new Map();
 
 // Vote cards (creator side)
 export const _pendingVoteCards = new Map(); // cardId → { resolve, cardEl, choices, votes: Map<userId,number>, allVoters: string[], hidden: boolean, refreshCreatorCard: fn }
@@ -106,12 +128,15 @@ export function getActiveGMId()
  * @param {Token} [options.originToken]
  * @param {Token} [options.relatedToken]
  * @param {Item} [options.item]
+ * @param {Function} [options.onCancel] - Cancel button handler; the card stays until `remove()`
  * @returns {{ remove: () => void }}
  */
-export function startWaitCard({ title = 'WAITING', description = '', waitMessage = 'Waiting for response…', originToken = null, relatedToken = null, item = null } = {})
+export function startWaitCard({ title = 'WAITING', description = '', waitMessage = 'Waiting for response…', originToken = null, relatedToken = null, item = null, onCancel = () =>
+{} } = {})
 {
     const waitDesc = (description ? description + '<br>' : '') +
         `<em style="color:#aaa;"><i class="fas fa-hourglass-half"></i> ${waitMessage}</em>`;
+
     const cardEl = _createInfoCard("choiceCard", {
         title,
         description: waitDesc,
@@ -120,9 +145,9 @@ export function startWaitCard({ title = 'WAITING', description = '', waitMessage
         originToken,
         onConfirm: () =>
         {},
-        onCancel: () =>
-        {}
+        onCancel
     });
+
     _updateInfoCard(cardEl, "choiceCard", { choices: [],
         chosenSet: new Set(),
         disabled: true,
@@ -142,11 +167,14 @@ export function startWaitCard({ title = 'WAITING', description = '', waitMessage
 export function getTokenOwnerUserId(token)
 {
     const doc = token?.document;
+
     const playerIds = doc
         ? game.users.filter(u => u.active && !u.isGM && doc.testUserPermission(u, "OWNER")).map(u => u.id)
         : [];
+
     if (playerIds.length > 0)
         return playerIds;
+
     const gm = game.users.activeGM;
     return gm ? [gm.id] : [];
 }
@@ -161,12 +189,14 @@ export function getTokenOwnerUserId(token)
  * @param {string} [options.icon] - Card icon class
  * @param {string} [options.headerClass=""] - Card header CSS class
  * @param {string|string[]|null} [options.userIdControl=null] - userId or array of userIds who control this card. Array = broadcast, first to respond wins. null = show locally. Offline users are dropped with a warning.
+ * @param {Token|null} [options.owner=null] - Routes control to this token's owner, active GM fallback. An explicit userIdControl wins.
  * @param {Object} [options.traceData=null]
  * @param {Token|null} [options.relatedToken=null] - Optional token to show in the card header.
  * @param {Token|null} [options.originToken=null] - Optional origin token to show in the card header (orange border).
  * @param {boolean} [options.forceSocket=false] - If true, treats the current user as a remote target (shows delegated card instead of local)
  * @param {Item|null} [options.item=null] - Item associated with the card
  * @param {boolean} [options.urgent=false] - Jumps the card queue
+ * @param {string|null} [options.cancelKey=null] - Local card only: `cancelChoiceCardByKey(cancelKey)` cancels it, shown or still queued
  * @returns {Promise<{choiceIdx: number|null, responderIds: string[]}|null>} the pick, null if cancelled
  */
 export function startChoiceCard(options = {})
@@ -175,6 +205,7 @@ export function startChoiceCard(options = {})
         return startVoteCard({ ...options, hidden: /** @type {any} */ (options).mode === "vote-hidden" });
 
     const _title = options.title || 'CHOICE';
+
     const {
         mode = "or",
         choices = [],
@@ -182,14 +213,20 @@ export function startChoiceCard(options = {})
         description = "",
         icon,
         headerClass = "",
-        userIdControl = null,
+        userIdControl: explicitUserIdControl = null,
         traceData = null,
         forceSocket = false,
         item = null,
         relatedToken = null,
         originToken = null,
-        urgent = false
+        urgent = false,
+        owner = null,
+        cancelKey = null
     } = /** @type {any} */ (options);
+
+    const userIdControl = (owner && /** @type {any} */ (options).userIdControl === undefined)
+        ? getTokenOwnerUserId(owner)
+        : explicitUserIdControl;
 
     const rawTargets = Array.isArray(userIdControl)
         ? userIdControl
@@ -211,6 +248,7 @@ export function startChoiceCard(options = {})
             const gmId = getActiveGMId();
             if (gmId)
                 activeTargets.push(gmId);
+
             const fallbackName = activeTargets.length > 0 ? (game.users.get(activeTargets[0])?.name ?? activeTargets[0]) : 'local user';
             ui.notifications.warn(localizeFormat('LA.notify.choiceRecipientOfflineFallback', { names: offlineNames, fallback: fallbackName }));
         }
@@ -242,6 +280,7 @@ export function startChoiceCard(options = {})
             {},
             onCancel
         });
+
         _updateInfoCard(cardEl, "choiceCard", { choices,
             chosenSet: new Set(),
             disabled: true,
@@ -254,6 +293,7 @@ export function startChoiceCard(options = {})
     if (activeTargets.length > 0)
     {
         const cardId = foundry.utils.randomID();
+
         const payload = {
             cardId,
             requestingUserId: game.user.id,
@@ -262,12 +302,14 @@ export function startChoiceCard(options = {})
             icon,
             headerClass,
             mode,
-            choices: choices.map(choice => ({ text: choice.text, icon: choice.icon })),
+            choices: choices.map(choice => ({ text: choice.text, icon: choice.icon, disabled: choice.disabled })),
             traceData,
             itemUuid: item?.uuid ?? null,
             relatedTokenId: relatedToken?.id ?? null,
             originTokenId: originToken?.id ?? null
         };
+
+        _earlyGMReplies.set(cardId, []);
 
         if (activeTargets.length === 1)
         {
@@ -294,9 +336,11 @@ export function startChoiceCard(options = {})
                 // SENDER IS A TARGET: Show interactive card to ourselves instead of waiting.
                 let dismissed = false;
                 const chosenSet = new Set();
+
                 const _cancelOthers = (isCancellation = false) =>
                 {
                     const others = activeTargets.filter(id => id !== game.user.id);
+
                     if (others.length > 0)
                     {
                         game.socket.emit('module.lancer-automations', {
@@ -307,10 +351,12 @@ export function startChoiceCard(options = {})
                 };
 
                 let gmTrace = null;
+
                 if (traceData)
                 {
                     const { tokenId, endPos, newEndPos, path, newPath } = traceData;
                     const traceToken = canvas.tokens.get(tokenId);
+
                     if (traceToken)
                         gmTrace = drawMovementTrace(traceToken, endPos, newEndPos, { suppressBroadcast: true, path, newPath });
                 }
@@ -329,6 +375,7 @@ export function startChoiceCard(options = {})
                 {
                     if (dismissed)
                         return;
+
                     const confirm = await Dialog.confirm({
                         title: localize('LA.dialogTitle.cancelChoice'),
                         content: localizeFormat('LA.choiceCard.confirmCancelCard', { title }),
@@ -336,6 +383,7 @@ export function startChoiceCard(options = {})
                         no: () => false,
                         defaultYes: false
                     });
+
                     if (!confirm)
                         return;
                     _cancelOthers(true);
@@ -358,11 +406,12 @@ export function startChoiceCard(options = {})
                     onCancel
                 });
 
-                const keyHandler = (e) =>
+                const keyHandler = (event) =>
                 {
-                    if (e.key === "Escape")
+                    if (claimCardEscape(event, cardEl))
                         onCancel();
                 };
+
                 document.addEventListener('keydown', keyHandler);
 
                 const handleChoose = async (idx) =>
@@ -401,6 +450,7 @@ export function startChoiceCard(options = {})
                 _bindItemChip(cardEl, item);
                 _pendingGMChoices.set(cardId, { resolve, cardEl, choices, mode, chosenSet, activeTargets: new Set(activeTargets) });
                 _updatePendingBadge();
+                _replayEarlyGMReplies(cardId);
 
             }
             else
@@ -415,6 +465,7 @@ export function startChoiceCard(options = {})
                         no: () => false,
                         defaultYes: false
                     });
+
                     if (confirm)
                     {
                         game.socket.emit('module.lancer-automations', {
@@ -424,14 +475,26 @@ export function startChoiceCard(options = {})
                         await resolveGMChoiceCard(cardId, null, game.user.name, game.user.id);
                     }
                 };
+
                 const cardEl = _makeWaitingCard(`Waiting for first response from: ${controllerNames}`, onCancel);
                 _pendingGMChoices.set(cardId, { resolve, cardEl, choices, mode, chosenSet: new Set(), activeTargets: new Set(activeTargets) });
+                _replayEarlyGMReplies(cardId);
             }
         }), title);
     }
 
-    return _queueCard(() => new Promise((resolve) =>
+    const keyed = cancelKey ? { cancelled: false, cancel: null } : null;
+    if (keyed)
+        _keyedChoiceCards.set(cancelKey, keyed);
+
+    const localCard = _queueCard(() => new Promise((resolve) =>
     {
+        if (keyed?.cancelled)
+        {
+            resolve(null);
+            return;
+        }
+
         if (choices.length === 0)
         {
             resolve({ choiceIdx: null, responderIds: [game.user.id] });
@@ -456,6 +519,9 @@ export function startChoiceCard(options = {})
             resolve(null);
         };
 
+        if (keyed)
+            keyed.cancel = onCancel;
+
         const cardEl = _createInfoCard("choiceCard", {
             title,
             icon,
@@ -471,9 +537,10 @@ export function startChoiceCard(options = {})
 
         const keyHandler = (event) =>
         {
-            if (event.key === "Escape")
+            if (claimCardEscape(event, cardEl))
                 onCancel();
         };
+
         document.addEventListener('keydown', keyHandler);
 
         const handleChoose = async (idx) =>
@@ -515,6 +582,28 @@ export function startChoiceCard(options = {})
         _bindItemChip(cardEl, item);
         _updatePendingBadge();
     }), _title, { urgent });
+
+    if (!keyed)
+        return localCard;
+
+    const forget = () =>
+    {
+        if (_keyedChoiceCards.get(cancelKey) === keyed)
+            _keyedChoiceCards.delete(cancelKey);
+    };
+
+    localCard.then(forget, forget);
+    return localCard;
+}
+
+export function cancelChoiceCardByKey(cancelKey)
+{
+    const keyed = _keyedChoiceCards.get(cancelKey);
+    if (!keyed)
+        return;
+
+    keyed.cancelled = true;
+    keyed.cancel?.();
 }
 
 /**
@@ -549,9 +638,8 @@ export async function confirmCard(options = {})
  */
 export async function askCard(options = {})
 {
-    const { yesText = 'Use', yesIcon = 'fas fa-check', noText = 'Skip', noIcon = 'fas fa-times', owner = null, ...rest } = /** @type {any} */ (options);
-    if (owner && rest.userIdControl === undefined)
-        rest.userIdControl = getTokenOwnerUserId(owner) ?? getActiveGMId();
+    const { yesText = 'Use', yesIcon = 'fas fa-check', noText = 'Skip', noIcon = 'fas fa-times', ...rest } = /** @type {any} */ (options);
+
     const result = await startChoiceCard({
         ...rest,
         choices: [
@@ -559,6 +647,7 @@ export async function askCard(options = {})
             { text: noText, icon: noIcon }
         ]
     });
+
     return { confirmed: result?.choiceIdx === 0, responderIds: result?.responderIds ?? [] };
 }
 
@@ -574,6 +663,7 @@ export async function pickCard(entries, options = {})
 {
     const { label = null, entryIcon = null, ...rest } = /** @type {any} */ (options);
     let picked = null;
+
     const toText = (entry) =>
     {
         if (typeof label === 'function')
@@ -582,6 +672,7 @@ export async function pickCard(entries, options = {})
             return String(entry?.[label] ?? entry);
         return String(entry?.name ?? entry?.text ?? entry);
     };
+
     const toIcon = (entry) => typeof entryIcon === 'function' ? entryIcon(entry) : entryIcon;
     await startChoiceCard({
         ...rest,
@@ -605,6 +696,7 @@ export async function showUserIdControlledChoiceCard({ cardId, requestingUserId,
     const cancelOthers = () =>
     {
         const otherTargets = (allTargetUserIds ?? []).filter(id => id !== game.user.id);
+
         if (otherTargets.length > 0)
         {
             game.socket.emit('module.lancer-automations', {
@@ -656,9 +748,10 @@ export async function showUserIdControlledChoiceCard({ cardId, requestingUserId,
 
         const keyHandler = (event) =>
         {
-            if (event.key === "Escape")
+            if (claimCardEscape(event, cardEl))
                 onCancel();
         };
+
         document.addEventListener('keydown', keyHandler);
 
         // Register cancel hook so the requester's dismissal can close this card silently.
@@ -721,14 +814,18 @@ export async function showUserIdControlledChoiceCard({ cardId, requestingUserId,
 }
 
 /**
- * Called on the player's client (via socket) to resolve a pending GM-controlled choice.
+ * Called to resolve a pending GM-controlled choice card.
  * @returns {Promise<void>}
  */
 export async function resolveGMChoiceCard(cardId, choiceIdx, responderName, responderUserId = null)
 {
     const pending = _pendingGMChoices.get(cardId);
+
     if (!pending)
+    {
+        _earlyGMReplies.get(cardId)?.push([choiceIdx, responderName, responderUserId]);
         return;
+    }
 
     if (choiceIdx === null || choiceIdx === undefined)
     {
@@ -773,6 +870,7 @@ export async function resolveGMChoiceCard(cardId, choiceIdx, responderName, resp
                 _removeInfoCard(pending.cardEl);
             pending.resolve(null);
         }
+
         return;
     }
 
@@ -791,6 +889,7 @@ export async function resolveGMChoiceCard(cardId, choiceIdx, responderName, resp
         if (pending.chosenSet)
         {
             pending.chosenSet.add(choiceIdx);
+
             if (pending.chosenSet.size === pending.choices.length)
             {
                 _pendingGMChoices.delete(cardId);
@@ -821,6 +920,7 @@ export async function resolveGMChoiceCard(cardId, choiceIdx, responderName, resp
 export function cancelBroadcastChoiceCard(cardId, responderName, isCancellation = false)
 {
     const cancel = _pendingBroadcastCards.get(cardId);
+
     if (cancel)
     {
         if (isCancellation)
@@ -849,6 +949,7 @@ export function cancelBroadcastChoiceCard(cardId, responderName, isCancellation 
 export function startVoteCard(options = {})
 {
     const _title = /** @type {any} */ (options).title || 'VOTE';
+
     const {
         choices = [],
         title,
@@ -860,9 +961,11 @@ export function startVoteCard(options = {})
     } = /** @type {any} */ (options);
 
     const cardId = foundry.utils.randomID();
+
     const rawVoters = Array.isArray(userIdControl)
         ? userIdControl
         : (userIdControl ? [userIdControl] : []);
+
     const activeVoters = rawVoters.filter(id => id && game.users.get(id)?.active);
 
     // Emit to all voters (socket reaches everyone including self, filtered on receiver side)
@@ -937,13 +1040,16 @@ export function startVoteCard(options = {})
         {
             if (dismissed)
                 return;
+
             if (votes.size === 0)
             {
                 ui.notifications.warn(localize('LA.notify.noVotesCastYet'));
                 return;
             }
+
             const counts = choices.map((_, i) => [...votes.values()].filter(voteIdx => voteIdx === i).length);
             const maxCount = Math.max(...counts);
+
             const winners = counts.reduce((acc, count, i) =>
             {
                 if (count === maxCount)
@@ -951,6 +1057,7 @@ export function startVoteCard(options = {})
             }, /** @type {number[]} */ ([]));
 
             let winnerIdx;
+
             if (winners.length === 1)
                 winnerIdx = winners[0];
             else
@@ -961,12 +1068,14 @@ export function startVoteCard(options = {})
                     tieButtons[`choice_${i}`] = { label: choices[i].text, callback: () => i };
                 tieButtons.cancel = cancelButton(() => null);
                 const tiedNames = winners.map(i => `<b>${choices[i].text}</b>`).join(', ');
+
                 const picked = await Dialog.wait({
                     title: localize('LA.dialogTitle.voteTie'),
                     content: localizeFormat('LA.choiceCard.voteTieBody', { names: tiedNames }),
                     buttons: tieButtons,
                     default: "cancel"
                 });
+
                 if (picked === null || picked === undefined)
                     return;
                 winnerIdx = picked;
@@ -1000,6 +1109,7 @@ export function startVoteCard(options = {})
         {
             if (dismissed)
                 return;
+
             const confirm = await Dialog.confirm({
                 title: localize('LA.dialogTitle.cancelVote'),
                 content: localizeFormat('LA.choiceCard.confirmCancelVote', { title }),
@@ -1007,11 +1117,13 @@ export function startVoteCard(options = {})
                 no: () => false,
                 defaultYes: false
             });
+
             if (!confirm)
                 return;
             dismissed = true;
             doCleanup();
             _pendingVoteCards.delete(cardId);
+
             if (activeVoters.length > 0)
             {
                 game.socket.emit('module.lancer-automations', {
@@ -1019,6 +1131,7 @@ export function startVoteCard(options = {})
                     payload: { cardId, allVoterUserIds: activeVoters }
                 });
             }
+
             resolve(null);
         };
 
@@ -1038,11 +1151,12 @@ export function startVoteCard(options = {})
             onCancel
         });
 
-        const keyHandler = (e) =>
+        const keyHandler = (event) =>
         {
-            if (e.key === "Escape")
+            if (claimCardEscape(event, cardEl))
                 onCancel();
         };
+
         document.addEventListener('keydown', keyHandler);
 
         _pendingVoteCards.set(cardId, { resolve, cardEl, choices, votes, allVoters: activeVoters, hidden, refreshCreatorCard });
@@ -1104,11 +1218,12 @@ export async function showVoteCardOnVoter({ cardId, requestingUserId, allVoterUs
             onCancel
         });
 
-        const keyHandler = (e) =>
+        const keyHandler = (event) =>
         {
-            if (e.key === "Escape")
+            if (claimCardEscape(event, cardEl))
                 onCancel();
         };
+
         document.addEventListener('keydown', keyHandler);
 
         const refreshVoterCard = () =>

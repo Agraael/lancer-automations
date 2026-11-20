@@ -10,10 +10,10 @@ Custom action menu attached to the token: actions, weapons, systems, frame abili
 
 <img align="right" src="../img/hud-overview.png" width="40%"/>
 
-It is on out of the box, from the **Enable Token Action HUD** setting (**`tahEnabled`**, needs a reload). It attaches near the top-left of the screen:
+It's on by default, from the **Enable Token Action HUD** setting (**`tahEnabled`**, needs a reload). It attaches near the top-left of the screen:
 
 - **Move it** by dragging, after unlocking it: the HUD starts locked, so click the 🔒 on the title bar first. It stays unlocked until you select another token. The **reset** button puts it back. Stays above open actor sheets (`tah.aboveActorSheets`).
-- Categories open on **hover** by default, or set **Open Menus** (**`tah.openMode`**) to **On click**. With hover, `tah.hoverCloseDelay` controls how long the menu lingers after the mouse leaves, and `tah.maxColumnItems` makes long columns scroll.
+- Categories open on **hover** by default, or set **Open Menus** (**`tah.openMode`**) to **On click**. With hover, `tah.hoverCloseDelay` controls how long the menu lingers after the mouse leaves. `tah.maxColumnItems` makes long columns scroll.
 
 Its settings live in the **Token Action HUD** tab.
 
@@ -27,11 +27,11 @@ Its settings live in the **Token Action HUD** tab.
 
 The bar at the top of the HUD shows:
 
-- the **token name** - click it to open the actor sheet (shows "N TOKENS" when several are selected). Names past 500 px are cut and scroll on hover,
+- the **token name** ("N TOKENS" when several are selected). Click it to open the actor sheet. Names past 500 px are cut and scroll on hover,
 - a **license chip** before the name: LL for pilots and their mechs, T for NPCs,
 - a **combat toggle** (the swords icon) to add or remove the token from combat. In combat it turns red, joined to the chip,
 - an optional **team / disposition stripe** at the end of the bar (`tah.showDisposition`, uses Token Factions teams if installed, otherwise the disposition). Hover it to show the label,
-- a **portrait** above the bar: token art (default), actor portrait, or none (`tah.portrait.mode`), overridable per token in the L.A tab of the token config.
+- a **portrait** above the bar: token art, actor portrait, or none. It's set per actor type (**Mech / Pilot / NPC / Deployable Portrait**), and overridable per token in the L.A tab of the token config.
 
 ---
 
@@ -49,9 +49,9 @@ A compact readout under the header: **HP**, structure, overshield, repairs, and 
 
 Appears while combat is running:
 
-- **Activation pips** - click to spend one (start your turn), right-click to toggle availability by hand.
+- **Activation pips**: click to spend one (start your turn), right-click to toggle availability by hand.
 - An **end-turn** button (right-click to end the turn *and* give back one activation).
-- **Action-status icons** (protocol / move / full / quick / reaction) you can toggle.
+- **Action-status icons** (protocol / move / full / quick / reaction / free) you can toggle.
 - Buttons to **reset actions**, **revert your last move**, and **clear movement history** (movement itself lives in [Movement](./MOVEMENT.md)).
 
 <br clear="right"/>
@@ -66,8 +66,8 @@ The left column lists categories. Opening one cascades its items out to the righ
 
 | Category | Holds |
 |----------|-------|
-| **Actions** | Basic quick and full actions, an **Attacks** submenu (below), plus your quick / full / reaction / protocol / free actions, and a Deactivate group for active items |
-| **Attacks** (in Actions) | Skirmish, Barrage, Ram, Grapple, Improvised Attack (mech / NPC), Fight (pilot), then a Tools group: Basic Attack, Damage, Throw Weapon, Pickup Weapon |
+| **Actions** | Basic quick and full actions, an **Attacks** submenu (below), plus your quick / full / reaction / protocol / free actions, **Activations** (items with the Activation type), and a Deactivate group for active items |
+| **Attacks** (in Actions) | Skirmish, Barrage, Ram, Grapple, Improvised Attack (mech / NPC), Fight (pilot), End Grapple (while you hold someone), Break Free (while you're held), then a Tools group: Basic Attack, Damage, Throw Weapon, Pickup Weapon |
 | **Weapons** | Equipped weapons, grouped by mount (mech) or listed flat (NPC / pilot) |
 | **Tech** | Basic Tech, Scan, Lock On, Bolster, Invade |
 | **Systems** | Equipped systems (mech) or system features (NPC) |
@@ -76,11 +76,13 @@ The left column lists categories. Opening one cascades its items out to the righ
 | **Talents / Skills** | Talent ranks and skill checks |
 | **Deployables** | Deploy, recall, and link buttons, plus the actor's deployables |
 | **Resources** | Counter cells for resources, extra trackables, and ammo |
-| **Utility** | Six submenus: **Gameplay** (full repair, structure, overheat, resurrect, recharge, reload, generate scan, Effect Manager, reinforcement, hide/reveal), **Movement** (knockback, teleport, fall, revert, reset history), **Measures** (see below), **Log**, **Glossary**, and **Misc** (Vote, Downtime, Reserve, Rest, Add Extra) |
+| **Utility** | Six submenus: **Gameplay** (full repair, structure, overheat, resurrect, recharge, reload, generate scan, Effect Manager, reinforcement, leave battlefield, hide/reveal), **Movement** (knockback, teleport, fall, revert, reset history), **Measures** (see below), **Log**, **Glossary**, and **Misc** (Vote, Downtime, Reserve, Rest, Add Extra) |
 | **Statuses** | Opens the status panel (below) |
 | **Macros** | Your pinned macros (`tah.macroList`), right-click a slot to edit it |
 
 Counters show their value with ▲ ▼ arrows.
+
+An action with two costs (e.g. Quick or Full) asks which one to spend.
 
 Toggle `tah.showAidHandleInteractSqueeze` to show or hide the **Aid**, **Handle**, **Interact**, and **Squeeze** entries in the Actions category. These come from PPG (Prototype Pattern Group).
 
@@ -92,23 +94,32 @@ See also: movement actions → [Movement](./MOVEMENT.md), resurrect → [Wrecks]
 
 <img align="right" src="../img/hud-popup.png" width="45%"/>
 
-Right-click any item for a **detail popup** with its description, tags, range / activation, and action-type icon. Items with v3 LCP data (from Lancer NPC Import) also show its chips under the matching text, like on the sheets. Rows with a popup show a small triangle in their corner on hover. Clicking a weapon in the Weapons menu doesn't attack: use the **Attack** button in its popup. Menu rows and popups also carry the small markers below.
+Right-click any item for a **detail popup** with its description, tags, range / activation, and action-type icon. Items with v3 LCP data (from Lancer NPC Import) also show that data as chips under the matching text, like on the sheets. Rows with a popup show a small triangle in their corner on hover. Clicking a weapon in the Weapons menu doesn't attack: use the **Attack** button in its popup. With the free move key (V) on, the click rolls a plain attack. Menu rows and popups also carry the small markers below.
 
 <br clear="right"/>
 
 <img align="right" src="../img/hud-automation-indicator.png" width="45%"/>
 
-**Automation indicator** - a tiny triangle on the menu row, and ⚡ in the popup header, mean the item or action has automation.
+**Automation indicator**: a tiny triangle on the menu row, and ⚡ in the popup header, mean the item or action has automation.
 
 <br clear="right"/>
 
 <img align="right" src="../img/hud-extra-action-dot.png" width="45%"/>
 
-**Extra-action dot** - an orange ● before an action's name means it was added by extras-UI code (e.g. via `addExtraActions`, or attached to an item by a registered activation) rather than by the system itself.
+**Extra-action dot**: an orange ● before an action's name means it was added by Add Extra or an automation, not by the system.
 
 <br clear="right"/>
 
-**Disable / destroy toggles** appear on items that support them (grayed when off, colored when on), and **status badges** show an item as available, active, destroyed (striped), or locked by a status (faded, clicking still fires it with a warning).
+**Disable / destroy toggles** appear on items that support them (grayed when off, colored when on).
+
+**Status badges** show an item as:
+
+- available
+- active
+- destroyed (striped)
+- locked by a status (faded)
+
+Clicking a locked item still fires it, with a warning.
 
 ---
 
@@ -121,7 +132,7 @@ Press Shift+Z (or click the Statuses row) to open it. Search and toggle statuses
 - lists the token's **bonuses** with the item or actor they come from (a trash button removes them, an eye button turns off a [v3 data bonus](./EFFECTS_AND_BONUSES.md#bonuses-from-v3-lcp-data)),
 - links to the **Effect Manager** (see [Effects & Bonuses](./EFFECTS_AND_BONUSES.md)),
 - has a **clear-all-effects** button,
-- and shows your **custom statuses** when Temporary Custom Statuses is installed.
+- has a **Custom** group for your custom statuses (with Temporary Custom Statuses installed), a **+ New status** tile, and your Effect Manager presets.
 
 <br clear="right"/>
 
@@ -147,39 +158,39 @@ The scans you've run, shown with portraits and names and searchable by name. Cli
 
 <img align="right" src="../img/hud-search.png" width="35%"/>
 
-**Search** - press Shift+F (or click the search icon in the Menu band) to filter every category at once. Matches update as you type, and Enter uses the selected one, or the first.
+**Search**: press Shift+F (or click the search icon in the Menu band) to filter every category at once. Matches update as you type, and Enter uses the selected one, or the first.
 
 <br clear="right"/>
 
 <img align="right" src="../img/hud-favorites.png" width="35%"/>
 
-**Favorites** - Ctrl+right-click an item to pick its wheel (1 to 3). The star in the Menu band gathers your favorites, and Shift+X opens or closes that column.
+**Favorites**: Ctrl+right-click an item to pick its wheel (1 to 3). The star in the Menu band gathers your favorites, and Shift+X opens or closes that column.
 
 <br clear="right"/>
 
 <img align="right" src="../vid/hud-action-wheel.gif" width="35%"/>
 
-**Action Wheel** - press **F** on a selected token to get your favorites as a wheel around it. Click to use, right-click for details, hover for the range preview. **Tab** cycles through the wheels that have favorites.
+**Action Wheel**: press **F** on a selected token to get your favorites as a wheel around it. Click to use, right-click for details, hover for the range preview. **Tab** cycles through the wheels that have favorites.
 
 <br clear="right"/>
 
-**Status Wheel** - press **G** for the token's statuses and your starred ones. Click to apply, right-click to remove. The second page holds constant and v3 data bonuses: right-click removes a constant bonus, or turns a data bonus off and on.
+**Status Wheel**: press **G** for the token's statuses and your starred ones. Click to apply, right-click to remove. The second page holds constant and v3 data bonuses: right-click removes a constant bonus, or turns a data bonus off and on.
 
 <br clear="right"/>
 
-**Wheel size** - *Wheel Radius Offset* under Opening & Layout moves the ring in or out.
+**Wheel size**: *Wheel Radius Offset* under Opening & Layout moves the ring in or out.
 
 <br clear="right"/>
 
 <img align="right" src="../img/hud-macro-slot.png" width="45%"/>
 
-**Macro slots** - right-click a slot in the Macros row to open its edit dialog, then drop a macro from the hotbar onto the drop zone to assign it.
+**Macro slots**: right-click a slot in the Macros row to open its edit dialog, then drop a macro from the hotbar onto the drop zone to assign it.
 
 <br clear="right"/>
 
 <img align="right" src="../img/hud-lock.png" width="35%"/>
 
-**HUD position** - the 🔒 icon on the title bar unlocks the HUD for dragging (cursor turns to grab, ↺ resets to default). It stays unlocked until you select another token.
+**HUD position**: hover the title bar to show the 🔒, click it to unlock, then drag the HUD where you want it. ↺ puts it back at the default spot. It locks again when you select another token.
 
 <br clear="right"/>
 
@@ -203,23 +214,41 @@ The nav keys are rebindable under **TAH: Move / Activate / Context / Row / Back 
 
 <img align="right" src="../vid/hud-range-hover.gif" width="35%"/>
 
-**Hover preview** - hovering a weapon or action pulses its range on the canvas (`tah.rangePreview`). The attack card can pulse the attacker's range too (`tah.rangePreviewOnAttackCard`). Works standalone, no extra module needed.
+**Hover preview**: hovering a weapon or action pulses its range on the canvas (`tah.rangePreview`). The attack card can pulse the attacker's range too (`tah.rangePreviewOnAttackCard`). Works standalone, no extra module needed.
 
 <br clear="right"/>
 
 <img align="right" src="../vid/hud-measures.gif" width="35%"/>
 
-**Range measures** - toggles in the Utility → Measures menu, run through the [Advanced Measure tool](./ATTACK_TARGETING.md#advanced-measure-tool). **Threat**, **Sensors** and **Max Reach** pin a range ring on the token, and it stays until you toggle it off, even with the measure toolbar closed. A **Custom** measure lets you set a size and pin it the same way. When the Lancer ruler is on, **Movement** turns on the toolbar's movement reach.
+**Range measures**: toggles in the Utility → Measures menu, run through the [Advanced Measure tool](./ATTACK_TARGETING.md#advanced-measure-tool). **Threat**, **Sensors** and **Max Reach** pin a range ring on the token, and it stays until you toggle it off, even with the measure toolbar closed. A **Custom** measure lets you set a size and pin it the same way. When the Lancer ruler is on, **Movement** turns on the toolbar's movement reach.
 
 <br clear="right"/>
 
-**3D Areas by Default** (`tah.areaElevationAware`) - not a measure, it is the default for the area pickers (blast, cone, and the like). When on, areas become 3D volumes that clip to terrain.
+**3D Areas by Default** (`tah.areaElevationAware`): not a measure, it's the default for the area pickers (blast, cone, and the like). When on, areas become 3D volumes that clip to terrain.
 
 ---
 
 ## Narrative mode
 
-With **`tah.narrativeMode`** on (default), the HUD still shows when no token is selected, linked to one of your pilots (pick it from the header). Exposes the pilot-relevant categories: pilot, skills, resources, utility, macros.
+With **`tah.narrativeMode`** on (default), the HUD still shows when no token is selected, linked to one of your pilots (pick it from the header). It shows the pilot categories: pilot, skills, resources, utility, macros, plus the world [clocks](./CLOCKS.md).
+
+---
+
+## Combat Carousel
+
+<img src="../img/hud-carousel.png" width="100%"/>
+
+Combatants as cards in team lanes at the top of the screen. Turn it on with **Enable Combat Carousel** (`combatCarousel`) in the **Combat & Movement** tab.
+
+- Lanes use the teams from [my Token Factions fork](https://github.com/Agraael/foundryvtt-token-factions), otherwise dispositions.
+- Card bars follow the canvas [visibility rules](./TOKEN_DISPLAY.md#visibility-and-defaults).
+- Controls work like Carousel Combat Tracker. Double-click a card to activate it. Double-click the acting card to end its turn.
+- **Add Event** (GM) adds a timed entry that expires after its duration in rounds.
+- Planned [reinforcements](./GAMEPLAY_AUTOMATION.md#reinforcement) get their own slots, and deployables show as chips under their owner's card.
+- Clicking a card you don't own pans to that token.
+- **Leave Battlefield** is in its menu, and the **DROP ON MAP** bar opens from it.
+
+Per-player options: **Portrait Size**, **Carousel Length**, **Deck Max Overlap** (overlap before the strip scrolls) and **Deck Slide**.
 
 ## Notable options
 
@@ -234,24 +263,8 @@ With **`tah.narrativeMode`** on (default), the HUD still shows when no token is 
 | **Hover Close Delay (seconds)** | How long the HUD stays open after the mouse leaves. |
 | **Max items per column** | Rows per column before it scrolls (20 by default, 0 = no cap, top menu never capped). |
 | **HUD Scale** | Size of the Token Action HUD, its popups and the measure toolbar. |
-| **HUD Portrait** | Artwork above the name bar: none, token art (default), or actor portrait. Tokens can override it in the L.A tab. |
-| **Portrait Applies To** | All actors (default), or mechs and pilots only. |
+| **Mech / Pilot / NPC / Deployable Portrait** | Artwork above the name bar, per actor type: none, token art, or actor portrait. Tokens can override it in the L.A tab. |
 | **Mechs Use Pilot Art** | Draw the linked pilot's image instead of the mech's. |
 | **Portrait Scale** | Size of the portrait. |
 | **Weapon Range Preview** | Show weapon range on the map when hovering items in the HUD. Works standalone, no extra module needed. |
 | **Aid / Handle / Interact / Squeeze Actions** | Show these actions in the Actions category. They come from PPG (Prototype Pattern Group). |
-
----
-
-## Combat Carousel
-
-<img src="../img/hud-carousel.png" width="100%"/>
-
-Combatants as cards in team lanes at the top of the screen. Turn it on with **Enable Combat Carousel** (`combatCarousel`) in the **Combat & Movement** tab.
-
-- Lanes use the teams from [my Token Factions fork](https://github.com/Agraael/foundryvtt-token-factions), otherwise dispositions.
-- Card bars follow the canvas [visibility rules](./TOKEN_DISPLAY.md#visibility-and-defaults).
-- Controls work like Carousel Combat Tracker. Double-click a card to activate it, or to end the turn on the acting card.
-- **Add Event** (GM) adds a timed entry that expires after its duration in rounds.
-
-Per-player options: **Portrait Size**, **Carousel Length**, **Deck Max Overlap** (overlap before the strip scrolls) and **Deck Slide**.

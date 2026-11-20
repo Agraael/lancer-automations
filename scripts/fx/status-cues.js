@@ -31,11 +31,13 @@ function cueColor(token)
     const statuses = token?.actor?.statuses;
     if (!statuses)
         return null;
+
     for (const [statusId, color] of CUE_STATUSES)
     {
         if (statuses.has(statusId))
             return color;
     }
+
     return null;
 }
 
@@ -84,6 +86,7 @@ function circleOutline(token)
 
     const points = [];
     const corners = [];
+
     for (let index = 0; index < CIRCLE_POINTS; index++)
     {
         const angle = (index / CIRCLE_POINTS) * Math.PI * 2;
@@ -91,6 +94,7 @@ function circleOutline(token)
         if (index % CIRCLE_CORNER_STEP === 0)
             corners.push(index);
     }
+
     return { points, corners };
 }
 
@@ -102,9 +106,11 @@ function footprintOutline(token)
 
     const edgeCount = new Map();
     const edges = [];
+
     for (const offset of offsets)
     {
         const vertices = canvas.grid.getVertices({ i: offset.row, j: offset.col });
+
         for (let index = 0; index < vertices.length; index++)
         {
             const from = vertices[index];
@@ -118,10 +124,12 @@ function footprintOutline(token)
     }
 
     const neighbours = new Map();
+
     for (const edge of edges)
     {
         if (edgeCount.get(edge.key) !== 1)
             continue;
+
         for (const [point, other] of [[edge.from, edge.to], [edge.to, edge.from]])
         {
             const key = pointKey(point);
@@ -138,6 +146,7 @@ function footprintOutline(token)
     const walked = [];
     let current = start;
     let previous = null;
+
     while (current && walked.length <= neighbours.size)
     {
         const [x, y] = current.split(',').map(Number);
@@ -180,9 +189,11 @@ function drawCue(cue, shape, color, scale)
 
     const reach = BRACKET_REACH * scale;
     const points = shape.points;
+
     for (const index of shape.corners)
     {
         const vertex = points[index];
+
         const toward = (point) =>
         {
             const length = Math.hypot(point.x - vertex.x, point.y - vertex.y) || 1;
@@ -192,6 +203,7 @@ function drawCue(cue, shape, color, scale)
                 y: vertex.y + ((point.y - vertex.y) / length * step)
             };
         };
+
         const from = toward(points[(index - 1 + points.length) % points.length]);
         const to = toward(points[(index + 1) % points.length]);
         art.moveTo(from.x, from.y);
@@ -209,6 +221,7 @@ export function refreshStatusCue(token)
     const mode = cueMode();
     const shown = mode !== 'off' && (mode !== 'combat' || !!game.combat);
     const color = cueColor(token);
+
     if (!shown || color === null || token.document.hidden || !token.visible)
     {
         removeCue(id);
@@ -219,6 +232,7 @@ export function refreshStatusCue(token)
     const key = [doc.x, doc.y, doc.width, doc.height, doc.shape, color, canvas.grid.size].join(':');
 
     let cue = cues.get(id);
+
     if (!cue)
     {
         cue = /** @type {CueLayer} */ (/** @type {any} */ (new PIXI.Container()));
@@ -244,11 +258,13 @@ export function refreshStatusCue(token)
     cueKeys.set(id, key);
 
     const shape = footprintOutline(token);
+
     if (shape.points.length < 3)
     {
         removeCue(id);
         return;
     }
+
     drawCue(cue, shape, color, canvas.grid.size / BASE_GRID);
 }
 
@@ -262,6 +278,7 @@ function refreshActorCues(actor)
 {
     if (!actor || !canvas?.ready)
         return;
+
     for (const token of canvas.tokens?.placeables ?? [])
     {
         if (token.actor === actor || token.actor?.id === actor.id)

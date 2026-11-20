@@ -2,10 +2,60 @@ import globals from "globals";
 import stylistic from "@stylistic/eslint-plugin";
 import { defineConfig } from "eslint/config";
 
+const isDeclaration = node => node?.type === "VariableDeclaration" && ["const", "let"].includes(node.kind);
+
+const blankAfterDeclarationGroup = {
+    meta: {
+        type: "layout",
+        fixable: "whitespace",
+        messages: { missing: "Expected a blank line between a group of declarations and this if." }
+    },
+    create(context)
+    {
+        const { sourceCode } = context;
+        const eol = sourceCode.text.includes("\r\n") ? "\r\n" : "\n";
+
+        const hasBlankLine = (previous, next) =>
+        {
+            const tokens = [previous, ...sourceCode.getCommentsBefore(next), next];
+            return tokens.some((token, index) => index > 0 && token.loc.start.line - tokens[index - 1].loc.end.line > 1);
+        };
+
+        const check = statements => statements.forEach((statement, index) =>
+        {
+            const first = statements[index - 2];
+            const previous = statements[index - 1];
+            if (statement.type !== "IfStatement" || !isDeclaration(first) || !isDeclaration(previous))
+                return;
+
+            if (hasBlankLine(first, previous) || hasBlankLine(previous, statement))
+                return;
+
+            context.report({
+                node: statement,
+                messageId: "missing",
+                fix: fixer =>
+                {
+                    const trailing = sourceCode.getCommentsBefore(statement).filter(comment => comment.loc.start.line === previous.loc.end.line);
+                    return fixer.insertTextAfter(trailing.at(-1) ?? previous, eol);
+                }
+            });
+        });
+
+        return {
+            "Program, BlockStatement, StaticBlock": node => check(node.body),
+            SwitchCase: node => check(node.consequent)
+        };
+    }
+};
+
 export default defineConfig([
     {
         files: ["**/*.js"],
-        plugins: { "@stylistic": stylistic },
+        plugins: {
+            "@stylistic": stylistic,
+            local: { rules: { "blank-after-declaration-group": blankAfterDeclarationGroup } }
+        },
         languageOptions: {
             ecmaVersion: "latest",
             sourceType: "module",
@@ -69,7 +119,9 @@ export default defineConfig([
                 Sequence: "readonly",
                 MidiQOL: "readonly",
                 $: "readonly",
-                jQuery: "readonly"
+                jQuery: "readonly",
+                TurnMarker: "readonly",
+                StartTurnMarker: "readonly"
             }
         },
         rules: {
@@ -104,7 +156,15 @@ export default defineConfig([
 
             "@stylistic/object-property-newline": ["error", {
                 allowAllPropertiesOnSameLine: true
-            }]
+            }],
+
+            "@stylistic/padding-line-between-statements": ["error",
+                { blankLine: "always", prev: "*", next: ["multiline-block-like", "multiline-const", "multiline-let"] },
+                { blankLine: "always", prev: ["multiline-block-like", "multiline-const", "multiline-let"], next: "*" },
+                { blankLine: "always", prev: ["if", "for", "while", "multiline-expression"], next: ["const", "let"] }
+            ],
+
+            "local/blank-after-declaration-group": "error"
         }
     }
 ]);

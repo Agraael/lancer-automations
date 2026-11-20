@@ -4,7 +4,7 @@ import { applyEffectsToTokens } from "../bonuses/flagged-effects.js";
 import { executeReactorMeltdown } from "../tools/misc-tools.js";
 import { altStructButton, pushEmbedButton, destroyMech } from "./alt-struct-helpers.js";
 import { localize } from "../tools/string-utils.js";
-import { describeDestruction, destroyTraumaChoice, getValidSystems, getValidWeaponMounts, hasUniquePhysiology, isValidActor, showSystemTraumaDialog } from "./structure.js";
+import { describeDestruction, destroyTraumaChoice, getValidSystems, getValidWeaponMounts, hasUniquePhysiology, isValidActor, tearOffChoice } from "./structure.js";
 
 const UNTIL_NEXT_TURN = { label: 'end', turns: 1, rounds: 0 };
 
@@ -12,11 +12,13 @@ const UNTIL_NEXT_TURN = { label: 'end', turns: 1, rounds: 0 };
 function countOnes(roll)
 {
     let dice = roll;
+
     if (dice?.terms?.[0]?.rolls?.length > 1)
     {
         const kept = dice.terms[0].results.findIndex(result => !result.discarded);
         dice = dice.terms[0].rolls[kept] || dice;
     }
+
     return dice?.terms?.[0]?.results?.filter(result => result.result === 1).length ?? 0;
 }
 
@@ -25,6 +27,7 @@ async function applyStatus(actor, effectNames, note, duration)
     const token = actor.getActiveTokens()?.[0];
     if (!token)
         return;
+
     try
     {
         await applyEffectsToTokens({ tokens: [token], effectNames, note, ...(duration ? { duration } : {}) });
@@ -99,10 +102,12 @@ export async function baseInsertHullCheckButton(state)
         return false;
 
     const roll = state.data?.result?.roll;
+
     if (roll && countOnes(roll) <= 1 && roll.total === 1 && state.data.remStruct === 2)
     {
         pushEmbedButton(state, hullCheckOpts(actor));
     }
+
     return true;
 }
 
@@ -113,11 +118,13 @@ export async function baseHandleHullCheckResult(actor, success)
         return null;
 
     const title = localize('LA.altStruct.directHit');
+
     if (!success)
     {
         await destroyMech(actor);
         return { title, description: localize('LA.altStruct.result.hullFailedDestroyed') };
     }
+
     if (hasUniquePhysiology(actor))
         return { title, description: localize('LA.altStruct.result.hullSavePassed') };
 
@@ -137,7 +144,7 @@ export async function baseSelectDestructionTarget(state)
         throw new TypeError(`Secondary Structure check hasn't been rolled yet!`);
 
     const hadValidItems = getValidWeaponMounts(actor).length > 0 || getValidSystems(actor).length > 0;
-    const choice = await showSystemTraumaDialog(actor, roll.total <= 3 ? "weapon" : "system");
+    const choice = await tearOffChoice(state, roll.total <= 3 ? "weapon" : "system");
     // stops printGenericCard from re-printing the tear-off dice
     delete state.data.result;
     state.data.tags = [];
@@ -173,6 +180,7 @@ async function baseDirectHitFallback(state, actor)
         await destroyMech(actor);
         state.data.description = `${lead} ${localize('LA.altStruct.result.mechDestroyed')}`;
     }
+
     return true;
 }
 
@@ -234,6 +242,7 @@ export async function baseInsertEngCheckButton(state)
         return false;
 
     const roll = state.data?.result?.roll;
+
     if (roll && countOnes(roll) <= 1 && roll.total === 1 && state.data.remStress === 2)
     {
         pushEmbedButton(state, {
@@ -244,6 +253,7 @@ export async function baseInsertEngCheckButton(state)
             attrs: { 'check-type': 'eng' }
         });
     }
+
     return true;
 }
 
@@ -254,6 +264,7 @@ export async function baseHandleEngCheckResult(actor, success)
         return null;
 
     const title = localize('LA.altStruct.meltdownTitle');
+
     if (success)
     {
         await applyStatus(actor, ["exposed"], "Meltdown (ENGINEERING check success)");
@@ -267,6 +278,7 @@ export async function baseHandleEngCheckResult(actor, success)
         label: 'LA.altStruct.meltdown',
         attrs: { 'countdown-formula': '1d6' }
     });
+
     return { title, description: `${localize('LA.altStruct.result.engFailedMeltdown6')}<br>${meltdown}` };
 }
 

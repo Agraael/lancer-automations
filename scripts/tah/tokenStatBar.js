@@ -41,6 +41,7 @@ export { _resolveExtraBarValues, _defaultExtraBar, reinjectAutoBarsForActor, rei
 
 import { getModuleSetting } from "../tools/settings-utils.js";
 import { localize, localizeFormat } from "../tools/string-utils.js";
+import { touchesFlagsBesidesMoveTracking } from "../tools/flag-utils.js";
 
 export { FLAG_EXTRAS };
 
@@ -50,10 +51,12 @@ function redrawAllBars()
 {
     if (!isEnabled() || !canvas?.tokens)
         return;
+
     for (const tok of canvas.tokens.placeables)
     {
         if (!isLancerCombatant(tok.actor))
             continue;
+
         try
         {
             tok.drawBars();
@@ -104,6 +107,7 @@ export function registerTokenStatBarSettings()
         default: false,
         onChange: redrawAllBars,
     });
+
     for (const [actorType, key] of Object.entries(SETTING_TOKEN_WIDTH))
     {
         game.settings.register(MODULE_ID, key, {
@@ -114,6 +118,7 @@ export function registerTokenStatBarSettings()
             onChange: redrawAllBars,
         });
     }
+
     game.settings.register(MODULE_ID, SETTING_VIS_OUT_OF_COMBAT, {
         scope: 'world', config: false, type: String, default: VIS_OWNER,
     });
@@ -167,6 +172,7 @@ export function registerTokenStatBarSettings()
         {
             if (!isExecutorGM() || !canvas?.ready)
                 return;
+
             for (const token of canvas.tokens?.placeables ?? [])
             {
                 if (isLancerCombatant(token.actor))
@@ -203,10 +209,12 @@ export async function applyDefaultsToCurrentScene()
         ui.notifications?.warn(localize('LA.notify.noActiveScene'));
         return;
     }
+
     const defaultHidden = getWorldSetting(SETTING_DEFAULT_HIDDEN, false);
     const defaultCombatOnly = getWorldSetting(SETTING_DEFAULT_COMBAT_ONLY, false);
     const defaultRowHeight = getWorldSetting(SETTING_DEFAULT_ROW_HEIGHT, 0);
     const updates = [];
+
     for (const tok of canvas.tokens?.placeables ?? [])
     {
         if (!isLancerCombatant(tok.actor))
@@ -221,11 +229,13 @@ export async function applyDefaultsToCurrentScene()
             [`flags.${MODULE_ID}.-=${FLAG_VIS_IN_COMBAT}`]: null,
         });
     }
+
     if (updates.length === 0)
     {
         ui.notifications?.info(localize('LA.notify.noLancerTokensOnThisScene'));
         return;
     }
+
     try
     {
         await canvas.scene.updateEmbeddedDocuments('Token', updates);
@@ -246,6 +256,7 @@ function _laHitContains(token, x, y)
         return true;
     if (!token.mesh)
         return false;
+
     const lx = token.mesh.position.x - token.position.x;
     const ly = token.mesh.position.y - token.position.y;
     const hw = (token.w ?? 0) / 2;
@@ -271,6 +282,7 @@ function refreshLancerToken(token)
             console.warn(`${MODULE_ID} | drawBars on refresh failed`, e);
         }
     }
+
     if (!_overlayHubs.has(token.id))
         return;
     // Position sync (updates wrapper.position to active mesh.position).
@@ -284,9 +296,11 @@ function refreshLancerToken(token)
 
     const entry = _overlayHubs.get(token.id);
     const nameplate = token.nameplate;
+
     if (nameplate)
     {
         const iso = _getIsoState(token);
+
         // Only cache base when iso is off; otherwise we'd trap an iso-shifted position.
         if (!iso)
         {
@@ -294,12 +308,14 @@ function refreshLancerToken(token)
                 token._laBaseNameplateY = nameplate.position.y;
             if (token._laBaseNameplateX === undefined)
                 token._laBaseNameplateX = nameplate.position.x;
+
             if (nameplate.anchor && token._laBaseNameplateAnchorX === undefined)
             {
                 token._laBaseNameplateAnchorX = nameplate.anchor.x;
                 token._laBaseNameplateAnchorY = nameplate.anchor.y;
             }
         }
+
         if (iso && token.mesh && entry?.wrapper && entry?.hub)
         {
             nameplate.anchor?.set(0.5, 0.5);
@@ -308,9 +324,11 @@ function refreshLancerToken(token)
             const isoScale = 0.76;
             nameplate.scale.set(isoScale, 1 / isoScale);
             entry.wrapper.transform.updateLocalTransform();
+
             const localBelow = show
                 ? new PIXI.Point(0, entry.hub.position.y + (entry.hub.height || 0) + 8)
                 : new PIXI.Point(0, (token.h ?? 0) / 2 + 8);
+
             const wp = entry.wrapper.localTransform.apply(localBelow);
             nameplate.position.set(wp.x - token.position.x, wp.y - token.position.y);
         }
@@ -321,6 +339,7 @@ function refreshLancerToken(token)
             nameplate.rotation = 0;
             nameplate.skew.set(0, 0);
             nameplate.scale.set(1, 1);
+
             if (nameplate.visible && entry)
             {
                 nameplate.position.x = token.w / 2;
@@ -336,12 +355,15 @@ function refreshLancerToken(token)
     {
         if (!effects || effects.destroyed)
             continue;
+
         if (token[`${baseKey}X`] === undefined)
         {
             token[`${baseKey}X`] = effects.position.x;
             token[`${baseKey}Y`] = effects.position.y;
         }
+
         const isoFx = _getIsoState(token);
+
         if (isoFx && token.mesh)
         {
             effects.pivot.set(0, 0);
@@ -371,16 +393,19 @@ function refreshLancerToken(token)
     // Reticle would draw under our overlay bars, so move it into the overlay. In iso, also re-center it.
     const isoTgt = _getIsoState(token, ISO_SETTING_RETICLE);
     const tgtOverlay = getHubOverlay();
+
     for (const graphic of [token.targetArrows, token.targetPips])
     {
         if (!graphic || graphic.destroyed)
             continue;
+
         if (tgtOverlay)
         {
             if (graphic.parent !== tgtOverlay)
                 tgtOverlay.addChild(graphic);
             graphic.zIndex = 1;
         }
+
         if (isoTgt && token.mesh)
         {
             graphic.rotation = isoTgt.reverseRotation;
@@ -449,13 +474,16 @@ export function initTokenStatBar()
     else
     {
         const origDrawBars = CONFIG.Token.objectClass.prototype.drawBars;
+
         CONFIG.Token.objectClass.prototype.drawBars = function (...args)
         {
             if (isEnabled() && isLancerCombatant(this.actor))
                 return drawStatHub.call(this);
             return origDrawBars.call(this, ...args);
         };
+
         const origGetBarAttribute = CONFIG.Token.documentClass.prototype.getBarAttribute;
+
         CONFIG.Token.documentClass.prototype.getBarAttribute = function (...args)
         {
             if (isEnabled() && isLancerCombatant(this.actor))
@@ -480,6 +508,7 @@ export function initTokenStatBar()
             return;
         animateActorChanges(actor);
     };
+
     Hooks.on('createActiveEffect', onActorEffectChange);
     Hooks.on('updateActiveEffect', onActorEffectChange);
     Hooks.on('deleteActiveEffect', onActorEffectChange);
@@ -489,6 +518,7 @@ export function initTokenStatBar()
     Hooks.on('canvasPan', () =>
     {
         const growth = _elevationBadgeGrowth();
+
         for (const token of /** @type {any[]} */ (canvas.tokens?.placeables ?? []))
         {
             const badge = token._laBadge;
@@ -525,19 +555,17 @@ export function initTokenStatBar()
     const sweepLancerTokens = () =>
     {
         // Clear stale overlay hubs from previous canvas.
-        for (const [, entry] of _overlayHubs)
-        {
-            if (!entry.wrapper.destroyed)
-                entry.wrapper.destroy({ children: true });
-        }
-        _overlayHubs.clear();
+        for (const tokenId of [..._overlayHubs.keys()])
+            _removeOverlayHub(tokenId);
         resetHubOverlay();
         if (!isEnabled())
             return;
+
         for (const tok of canvas.tokens?.placeables ?? [])
         {
             if (!isLancerCombatant(tok.actor))
                 continue;
+
             try
             {
                 tok.drawBars();
@@ -549,6 +577,7 @@ export function initTokenStatBar()
             }
         }
     };
+
     if (canvas?.ready)
         sweepLancerTokens();
     Hooks.on('canvasReady', sweepLancerTokens);
@@ -558,8 +587,10 @@ export function initTokenStatBar()
     {
         if (scene.id !== canvas.scene?.id)
             return;
+
         const touchesIso = foundry.utils.hasProperty(changes, 'flags.isometric-perspective')
             || foundry.utils.hasProperty(changes, 'flags.grape_juice-isometrics');
+
         if (!touchesIso)
             return;
         requestAnimationFrame(() =>
@@ -568,6 +599,7 @@ export function initTokenStatBar()
             {
                 if (!isLancerCombatant(tok.actor))
                     continue;
+
                 try
                 {
                     tok.drawBars();
@@ -585,6 +617,7 @@ export function initTokenStatBar()
     Hooks.on('destroyToken', (token) =>
     {
         _removeOverlayHub(token.id);
+
         // reticle lives in the overlay now, so the token's own destroy won't reach it
         for (const graphic of [token.targetArrows, token.targetPips])
         {
@@ -600,6 +633,7 @@ export function initTokenStatBar()
     {
         if (!isEnabled() || !isLancerCombatant(token?.actor))
             return;
+
         try
         {
             token.drawBars();
@@ -615,6 +649,7 @@ export function initTokenStatBar()
     {
         if (!isEnabled())
             return;
+
         const actor = tokenDoc.actor ?? game.actors?.get(data?.actorId);
         if (!isLancerCombatant(actor))
             return;
@@ -626,11 +661,14 @@ export function initTokenStatBar()
     {
         if (!isEnabled() || !canvas?.scene || !game.user?.isGM)
             return;
+
         const updates = [];
+
         for (const tok of canvas.tokens?.placeables ?? [])
         {
             if (!isLancerCombatant(tok.actor))
                 continue;
+
             if (tok.document.displayBars !== CONST.TOKEN_DISPLAY_MODES.NONE)
             {
                 updates.push({
@@ -639,6 +677,7 @@ export function initTokenStatBar()
                 });
             }
         }
+
         if (updates.length > 0)
         {
             try
@@ -651,6 +690,7 @@ export function initTokenStatBar()
             }
         }
     };
+
     if (canvas?.ready)
         sweepDisplayBars();
     Hooks.on('canvasReady', sweepDisplayBars);
@@ -662,16 +702,20 @@ export function initTokenStatBar()
             return;
         if (!isExecutorGM())
             return;
+
         const talentsOn = getModuleSetting(SETTING_AUTO_INJECT_TALENTS);
         const flagsOn = altFlags.isActive() && getModuleSetting(SETTING_AUTO_INJECT_CUSTOM_FLAGS);
+
         if (!talentsOn && !flagsOn)
             return;
+
         for (const token of canvas.tokens?.placeables ?? [])
         {
             if (isLancerCombatant(token.actor))
                 _autoInjectCounters(token.document);
         }
     };
+
     if (canvas?.ready)
         _sweepAutoInjectCounters();
     Hooks.on('canvasReady', _sweepAutoInjectCounters);
@@ -691,9 +735,11 @@ export function initTokenStatBar()
             return;
         if (altFlags.flagsChanged(changes) || altFlags.barLinkChanged(changes))
             _onCustomFlagsChanged(actor, changes, options);
+
         const touched = !!(changes?.system?.loadout
             || changes?.items
             || foundry.utils.hasProperty(changes ?? {}, 'system.pilot'));
+
         if (!touched)
             return;
         for (const tok of actor.getActiveTokens())
@@ -707,24 +753,29 @@ export function initTokenStatBar()
             return;
         if (item?.type !== 'talent' && item?.type !== 'frame')
             return;
+
         const parentActor = item.parent;
         if (!parentActor)
             return;
+
         const actors = [];
         if (isLancerCombatant(parentActor))
             actors.push(parentActor);
+
         // Mechs that have this pilot also see the change.
         for (const otherActor of game.actors ?? [])
         {
             if (otherActor.type === 'mech' && resolvePilot(otherActor)?.id === parentActor.id)
                 actors.push(otherActor);
         }
+
         for (const affectedActor of actors)
         {
             for (const tok of affectedActor.getActiveTokens())
             {
                 const prev = _lastValues.get(tok.id) ?? { extras: {} };
                 _autoInjectCounters(tok.document);
+
                 try
                 {
                     tok.drawBars();
@@ -733,6 +784,7 @@ export function initTokenStatBar()
                 {
                     console.warn(`${MODULE_ID} | updateItem drawBars`, err);
                 }
+
                 const next = snapshotValues(affectedActor, tok.document);
                 const flashed = flashChangedExtras(tok, prev, next);
                 _lastValues.set(tok.id, next);
@@ -752,13 +804,17 @@ export function initTokenStatBar()
             return;
         if (!isLancerCombatant(tokenDoc?.actor))
             return;
-        const touchesFlags = foundry.utils.hasProperty(change, `flags.${MODULE_ID}`);
+
+        const touchesFlags = touchesFlagsBesidesMoveTracking(change, true);
         const touchesElevation = change.elevation !== undefined;
+
         if (!touchesFlags && !touchesElevation)
             return;
+
         const tok = tokenDoc.object;
         if (!tok)
             return;
+
         if (touchesElevation)
         {
             try
@@ -768,11 +824,14 @@ export function initTokenStatBar()
             catch
             { /* ignore */ }
         }
+
         // Manual-value edits to extras: diff vs the seeded snapshot, then redraw.
         const extrasTouched = foundry.utils.hasProperty(change, `flags.${MODULE_ID}.${FLAG_EXTRAS}`);
         const prev = _lastValues.get(tok.id) ?? { extras: {} };
+
         if (!touchesFlags)
             return;
+
         try
         {
             tok.drawBars();
@@ -781,6 +840,7 @@ export function initTokenStatBar()
         {
             console.warn(`${MODULE_ID} | drawBars on flag update failed`, e);
         }
+
         if (extrasTouched)
         {
             const next = snapshotValues(tokenDoc.actor, tokenDoc);
@@ -789,6 +849,7 @@ export function initTokenStatBar()
             if (flashed)
                 scheduleFlashFade(tok);
         }
+
         fadeBars(tok, shouldShowBars(tok) ? 1 : 0);
     });
 
@@ -797,6 +858,7 @@ export function initTokenStatBar()
     {
         if (!isEnabled())
             return;
+
         for (const tok of canvas.tokens?.placeables ?? [])
         {
             if (!isLancerCombatant(tok.actor))
@@ -806,6 +868,7 @@ export function initTokenStatBar()
             fadeBars(tok, shouldShowBars(tok) ? 1 : 0);
         }
     };
+
     Hooks.on('combatStart', refreshAllForCombat);
     Hooks.on('deleteCombat', refreshAllForCombat);
     Hooks.on('createCombatant', refreshAllForCombat);
@@ -815,6 +878,7 @@ export function initTokenStatBar()
     {
         if (!isEnabled())
             return;
+
         const actor = hud.object?.actor;
         if (!isLancerCombatant(actor))
             return;

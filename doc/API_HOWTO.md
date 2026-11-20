@@ -19,7 +19,7 @@ api.getUserHelper(name)               // retrieve it by name
 api.helpers                            // the same entries as a tree, a dotted name nests
 ```
 
-Shares logic and constants between activation scripts. Re-register on every load: the startup file runs at `ready`.
+Shares logic and constants between automation scripts. Re-register on every load. The startup file runs at `ready`, so register there.
 
 | Param | Type | Description |
 |:------|:-----|:------------|
@@ -46,14 +46,14 @@ api.helpers.rotary.launcherLid;
 <br>
 
 ```js
-api.registerDefaultItemReactions(reactions)      // object mapping item LIDs to activation groups
+api.registerDefaultItemReactions(reactions)      // object mapping item LIDs to automation groups
 api.registerDefaultGeneralReactions(reactions)   // object mapping names to groups or single entries
 ```
 
-Item reactions only fire for tokens carrying that LID. General reactions fire for every token.
+Item automations only fire for tokens carrying that LID. General automations fire for every token.
 
 Item entries must be **groups**, `{ reactions: [ ... ] }`. The engine reads `entry.reactions` without a guard,
-so a bare activation object throws. General entries may be flat.
+so a bare automation object throws. General entries may be flat.
 
 ```js
 api.registerDefaultItemReactions({
@@ -74,7 +74,7 @@ api.registerDefaultItemReactions({
 
 ---
 
-### How-To: Register Activations
+### How-To: Register Automations
 
 ```javascript
 Hooks.on('lancer-automations.ready', (api) => {
@@ -171,8 +171,7 @@ onInit: async function (token, item, api) {
 ```
 
 `executeContestedCheck` and `openHaseContestCard` take `sourceItem` / `sourceAction` in their options.
-`executeStatRoll` takes `sourceItemUuid` / `sourceAction` inside its `extraData` argument instead. Either way
-both surface on `onInitCheck` / `onCheck` as `item` / `actionName`.
+`executeStatRoll` takes `sourceItemUuid` / `sourceAction` inside its `extraData` argument instead. Either way, on `onInitCheck` / `onCheck` the source item shows up as `item`, and the source action as `actionName`.
 
 ---
 
@@ -224,9 +223,12 @@ A **one-shot** binds to a single move, so boosting twice does not repeat it:
 api.recordMovementExtra(reactorToken, api.tokenSpeed(reactorToken), { leg: 'boost' });
 ```
 
-`leg` is `'standard'`, `'boost'` or `'current'`, and defaults to `'current'`, the granted leg the spent distance
-sits in. `'boost'` lands on the Boost already taken this turn, or waits for the next one if none has been. Both
-feed the ruler bands and the movement cap, so the yellow band and the cap move together.
+`leg` is `'standard'`, `'boost'` or `'current'`, and defaults to `'current'`.
+
+- `'current'`: the granted leg the spent distance sits in.
+- `'boost'`: lands on the Boost already taken this turn, or waits for the next one if none has been.
+
+Both shapes feed the ruler bands and the movement cap, so the yellow band and the cap move together.
 
 ---
 
@@ -254,17 +256,22 @@ Wrapper accepts a JS `function` in place of a macro ID. LaSossis GAA fork: store
 
 Rules for `function`:
 - `api` inside it is this module's api.
-- Nothing else from the defining file exists. Register it with `registerUserHelper` and read `api.helpers.*`, pass it in `scope`, or write it inside.
+- Nothing else from the defining file exists. To use anything else, either:
+    - register it with `registerUserHelper` and read `api.helpers.*`
+    - pass it in `scope`
+    - or write it inside.
 - `api.helpers`: live lookup, a fix reaches placed auras. `scope`: a copy frozen into that aura.
 - A placed aura keeps its code until recreated.
+- It runs once, on the active GM's client. Preview modes run on the dragging client. A choice for a player needs a card with `owner`.
 
-Whenever an owning actor and token can be resolved, the wrapper deep-merges a default config underneath yours, so
-a five-line call still comes out looking like the module's own auras. The defaults: one `unified` aura named
-`lancer-automations-aura`, an animated dashed stroke (`lineType: 2`, width 2, 5/5 dashes), a `fillType: 2` fill at
-`fillOpacity: 0.15` with the templatemacro hatching texture when that module is installed, owner visibility on,
-and non-owner visibility on only when the owner's disposition is FRIENDLY. `fillColor` comes from token-factions,
-or failing that the actor's folder color, and only while the owner still has a reaction available. Otherwise it
-stays white. Any key you pass wins over its default.
+Whenever an owning actor and token can be resolved, the wrapper deep-merges a default config underneath yours, so a five-line call still comes out looking like the module's own auras. Any key you pass wins over its default. The defaults:
+
+- one `unified` aura named `lancer-automations-aura`
+- an animated dashed stroke (`lineType: 2`, width 2, 5/5 dashes)
+- a `fillType: 2` fill at `fillOpacity: 0.15` with the templatemacro hatching texture when that module is installed
+- owner visibility on
+- non-owner visibility on only when the owner's disposition is FRIENDLY
+- `fillColor` from token-factions when it is active, else the actor's folder color, and only while the owner still has a Reaction available. Otherwise it stays white.
 
 **`macros` Function Example:**
 ```javascript
@@ -417,7 +424,40 @@ await api.createAura(token, api.scaleAuraStroke({ name: 'Suppression', radius: 3
 
 ## Sequencer Presets
 
-Requires [Sequencer](https://foundryvtt.com/packages/sequencer). Used through Sequencer's `.preset()`, not through `api`.
+Requires [Sequencer](https://foundryvtt.com/packages/sequencer).
+
+<details id="playBurstFX">
+<summary><b><code>playBurstFX</code></b> <sup>async</sup> → <code>Promise&lt;void&gt;</code></summary>
+
+<br>
+
+```js
+await api.playBurstFX(location, { file, size, sound, volume })
+```
+
+Plays one effect sized to a Burst around `location`, with an optional sound, using the `la_scaleToBurst` preset below. Does nothing without Sequencer, `file` or `location`.
+
+| Param | Type | Default | Description |
+|:------|:-----|:--------|:------------|
+| <kbd>location</kbd> | `Token\|{ x, y }` | *required* | Center. A point counts as size 1 |
+| **inside the options** | | | |
+| <kbd>file</kbd> | `string` | *required* | Sequencer database path or file |
+| <kbd>size</kbd> | `number` | `0` | Burst value. `0` is the token itself |
+| <kbd>sound</kbd> | `string` | `null` | Sound file |
+| <kbd>volume</kbd> | `number` | `null` | Sound volume |
+
+```js
+api.playBurstFX(triggerData.target, {
+    file: "jb2a.lava_spout.001.001.complete.orangeyellow",
+    size: 1,
+    sound: "modules/lancer-automations/FX/audio/extra/melt.wav",
+    volume: 0.75
+});
+```
+
+</details>
+
+The preset is used through Sequencer's `.preset()`, not through `api`.
 
 <details id="la_scaleToBurst">
 <summary><b><code>la_scaleToBurst</code></b> → <code>EffectSection</code></summary>

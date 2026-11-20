@@ -43,22 +43,76 @@ export function pointerToWorld(event)
     return canvas.stage.worldTransform.applyInverse(event.global);
 }
 
+export const dragResistancePx = () => foundry.canvas?.interaction?.MouseInteractionManager?.DEFAULT_DRAG_RESISTANCE_PX ?? 10;
+
+const RIGHT_WATCH_EVENTS = ['pointerdown', 'pointermove', 'pointerup', 'pointercancel'];
+
+export function watchRightClick(handler)
+{
+    let start = null;
+
+    const onPointer = (event) =>
+    {
+        const held = (event.buttons & 2) !== 0;
+
+        if (event.type === 'pointercancel')
+        {
+            start = null;
+            return;
+        }
+
+        if (event.button === 2 && held && !start)
+        {
+            if (event.target?.id === 'board')
+                start = { x: event.clientX, y: event.clientY, moved: false };
+            return;
+        }
+
+        if (!start)
+            return;
+        if (held && !start.moved && Math.hypot(event.clientX - start.x, event.clientY - start.y) >= dragResistancePx())
+            start.moved = true;
+
+        if (event.button === 2 && !held)
+        {
+            const wasClick = !start.moved;
+            start = null;
+            if (wasClick)
+                handler(event);
+        }
+    };
+
+    for (const type of RIGHT_WATCH_EVENTS)
+        document.addEventListener(type, onPointer, true);
+
+    return () =>
+    {
+        for (const type of RIGHT_WATCH_EVENTS)
+            document.removeEventListener(type, onPointer, true);
+    };
+}
+
 const _LA_PICKER_OVERRIDE = Symbol('la-picker-override');
 
 /** Suppress TokenLayer's release-on-click. Returns a restorer that only undoes our override. */
 export function suppressTokenLayerClick()
 {
     const layer = canvas.tokens;
+
     if (!layer)
     {
         return () =>
         {};
     }
+
     const prev = layer._onClickLeft;
+
     const stub = () =>
     {};
+
     stub[_LA_PICKER_OVERRIDE] = true;
     layer._onClickLeft = stub;
+
     return () =>
     {
         if (canvas.tokens?._onClickLeft === stub)
@@ -72,6 +126,7 @@ export function suppressTokenInteraction()
     const prevInteractive = canvas.tokens.interactiveChildren;
     canvas.tokens.interactiveChildren = false;
     const restoreLayerClick = suppressTokenLayerClick();
+
     return () =>
     {
         canvas.tokens.interactiveChildren = prevInteractive;
@@ -79,9 +134,15 @@ export function suppressTokenInteraction()
     };
 }
 
-// Scene change wipes any orphan picker stub left behind by a crashed handler.
+const _openPickerSessions = new Set();
+
+// Scene change cancels open pickers and wipes any orphan picker stub left behind by a crashed handler.
 Hooks.on('canvasTearDown', () =>
 {
+    for (const cancel of [..._openPickerSessions])
+        cancel();
+    _openPickerSessions.clear();
+
     const layer = canvas.tokens;
     if (layer?._onClickLeft?.[_LA_PICKER_OVERRIDE])
         delete layer._onClickLeft;
@@ -99,6 +160,7 @@ export function makeSafe(label, onError)
         catch (e)
         {
             console.error(`lancer-automations | ${label} handler crash, cleaning up:`, e);
+
             try
             {
                 onError?.();
@@ -114,40 +176,72 @@ export function createPickerSession(label, onCrash)
 {
     const safe = makeSafe(label, onCrash);
     let handlers = null;
+    let unwatchRight = null;
+
+    const cancelOnTearDown = () =>
+    {
+        try
+        {
+            onCrash?.();
+        }
+        catch (error)
+        {
+            console.error(`lancer-automations | ${label} cancel on scene change failed:`, error);
+        }
+    };
+
     return {
         safe,
         // clickFirst preserves moveToken's click-before-pointermove attach order.
-        bind({ move, click, key, wheel = null, rightClick = null, clickFirst = false })
+        bind({ move, click = null, key, wheel = null, rightClick = null, press = null, release = null, clickFirst = false })
         {
-            handlers = { move: safe(move), click: safe(click), key: safe(key), wheel: wheel ? safe(wheel) : null, rightClick: rightClick ? safe(rightClick) : null };
+            handlers = {
+                move: safe(move), click: click ? safe(click) : null, key: safe(key), wheel: wheel ? safe(wheel) : null,
+                rightClick: rightClick ? safe(rightClick) : null, press: press ? safe(press) : null, release: release ? safe(release) : null,
+            };
+
             if (clickFirst)
             {
-                canvas.stage.on('click', handlers.click);
+                if (handlers.click)
+                    canvas.stage.on('click', handlers.click);
                 canvas.stage.on('pointermove', handlers.move);
             }
             else
             {
                 canvas.stage.on('pointermove', handlers.move);
-                canvas.stage.on('click', handlers.click);
+                if (handlers.click)
+                    canvas.stage.on('click', handlers.click);
             }
+
             if (handlers.rightClick)
-                canvas.stage.on('rightdown', handlers.rightClick);
+                unwatchRight = watchRightClick(handlers.rightClick);
             document.addEventListener('keydown', handlers.key, true);
             // Capture phase + non-passive so wheel handlers can preventDefault before Foundry's canvas zoom listener.
             if (handlers.wheel)
                 document.addEventListener('wheel', handlers.wheel, { capture: true, passive: false });
+            if (handlers.press)
+                document.addEventListener('pointerdown', handlers.press, true);
+            if (handlers.release)
+                document.addEventListener('pointerup', handlers.release, true);
+            _openPickerSessions.add(cancelOnTearDown);
         },
         unbind()
         {
+            _openPickerSessions.delete(cancelOnTearDown);
             if (!handlers)
                 return;
-            canvas.stage.off('click', handlers.click);
+            if (handlers.click)
+                canvas.stage.off('click', handlers.click);
             canvas.stage.off('pointermove', handlers.move);
-            if (handlers.rightClick)
-                canvas.stage.off('rightdown', handlers.rightClick);
+            unwatchRight?.();
+            unwatchRight = null;
             document.removeEventListener('keydown', handlers.key, true);
             if (handlers.wheel)
                 document.removeEventListener('wheel', handlers.wheel, { capture: true });
+            if (handlers.press)
+                document.removeEventListener('pointerdown', handlers.press, true);
+            if (handlers.release)
+                document.removeEventListener('pointerup', handlers.release, true);
             handlers = null;
         },
     };
@@ -158,10 +252,12 @@ export function createCursorPreview()
 {
     const cursorPreview = new PIXI.Graphics();
     canvas.stage.addChild(cursorPreview).eventMode = 'none';
+
     const cursorPulse = () =>
     {
         cursorPreview.alpha = 0.75 + 0.25 * Math.sin(performance.now() / 250);
     };
+
     canvas.app.ticker.add(cursorPulse);
     return {
         graphics: cursorPreview,
@@ -199,10 +295,12 @@ export function createMultiPlusIndicator({ modifier = 'Shift' } = {})
         strokeThickness: gridLineWidth(4),
         fontWeight: 'bold',
     });
+
     label.anchor.set(0.5);
     label.visible = false;
     canvas.stage.addChild(label).eventMode = 'none';
     let lastCursorPos = null;
+
     const place = (modifierHeld) =>
     {
         if (modifierHeld && lastCursorPos)
@@ -214,11 +312,13 @@ export function createMultiPlusIndicator({ modifier = 'Shift' } = {})
         else
             label.visible = false;
     };
+
     const onKey = (event) =>
     {
         if (event.key === modifier)
             place(event.type === 'keydown');
     };
+
     document.addEventListener('keydown', onKey, true);
     document.addEventListener('keyup', onKey, true);
     return {
@@ -249,25 +349,30 @@ export function createCtrlMarkIndicator({ queryMarked, alwaysOn = false })
         strokeThickness: gridLineWidth(4),
         fontWeight: 'bold',
     });
+
     label.anchor.set(0.5);
     label.visible = false;
     canvas.stage.addChild(label).eventMode = 'none';
     let held = alwaysOn || (game.keyboard?.isModifierActive?.('Shift') ?? false);
     let lastPos = null;
+
     const place = () =>
     {
         const marked = (held && lastPos) ? queryMarked(lastPos.x, lastPos.y) : null;
+
         if (marked === null || marked === undefined)
         {
             label.visible = false;
             return;
         }
+
         label.text = marked ? '-' : '+';
         label.tint = marked ? TG.markRemove : TG.markAdd;
         label.x = lastPos.x + canvas.grid.size * 0.4;
         label.y = lastPos.y - canvas.grid.size * 0.4;
         label.visible = true;
     };
+
     const onKey = (event) =>
     {
         if (!alwaysOn && event.key === 'Shift')
@@ -276,6 +381,7 @@ export function createCtrlMarkIndicator({ queryMarked, alwaysOn = false })
             place();
         }
     };
+
     const onBlur = () =>
     {
         if (alwaysOn)
@@ -283,6 +389,7 @@ export function createCtrlMarkIndicator({ queryMarked, alwaysOn = false })
         held = false;
         place();
     };
+
     document.addEventListener('keydown', onKey, true);
     document.addEventListener('keyup', onKey, true);
     window.addEventListener('blur', onBlur);
@@ -313,6 +420,7 @@ export function createTokenTether({ color = TG.reference, alpha = 0.7 } = {})
     graphic.eventMode = 'none';
     canvas.tokens.addChild(graphic);
     let pairs = [];
+
     const redraw = () =>
     {
         if (graphic.destroyed)
@@ -320,14 +428,18 @@ export function createTokenTether({ color = TG.reference, alpha = 0.7 } = {})
         graphic.clear();
         if (!pairs.length)
             return;
+
         const edges = [];
+
         for (const [from, to] of pairs)
         {
             if (from?.center && to?.center && from.id !== to.id)
                 edges.push([from.center, to.center]);
         }
+
         if (!edges.length)
             return;
+
         const dash = canvas.grid.size * 0.16;
         const gap = canvas.grid.size * 0.14;
         const phase = -performance.now() * 0.02;
@@ -337,6 +449,7 @@ export function createTokenTether({ color = TG.reference, alpha = 0.7 } = {})
             lineAlpha: alpha,
         });
     };
+
     canvas.app.ticker.add(redraw);
     return {
         setPairs(next)
@@ -351,14 +464,16 @@ export function createTokenTether({ color = TG.reference, alpha = 0.7 } = {})
     };
 }
 
-function footprintPerimeterEdges(cells)
+export function footprintPerimeterEdges(cells)
 {
     const counts = new Map();
     const segs = new Map();
     const roundKey = (point) => `${Math.round(point.x)},${Math.round(point.y)}`;
+
     for (const [col, row] of cells)
     {
         const pts = _cellCorners(col, row);
+
         for (let idx = 0; idx < pts.length; idx++)
         {
             const from = pts[idx];
@@ -370,12 +485,15 @@ function footprintPerimeterEdges(cells)
                 segs.set(key, [from, to]);
         }
     }
+
     const edges = [];
+
     for (const [key, count] of counts)
     {
         if (count === 1)
             edges.push(segs.get(key));
     }
+
     return edges;
 }
 
@@ -384,11 +502,13 @@ export function paintDashedFootprint(graphic, cells, color, { halo = false } = {
 {
     if (!cells.length)
         return;
+
     const dash = canvas.grid.size * 0.16;
     const gap = canvas.grid.size * 0.11;
     const phase = performance.now() * 0.013;
     graphic.lineStyle(0);
     graphic.beginFill(color, 0.12);
+
     for (const [col, row] of cells)
     {
         const flat = [];
@@ -396,13 +516,16 @@ export function paintDashedFootprint(graphic, cells, color, { halo = false } = {
             flat.push(pt.x, pt.y);
         graphic.drawPolygon(flat);
     }
+
     graphic.endFill();
     const edges = footprintPerimeterEdges(cells);
+
     if (halo)
     {
         graphic.lineStyle(gridLineWidth(6), 0x000000, 0.55);
         drawDashedEdges(graphic, edges, dash, gap, phase);
     }
+
     graphic.lineStyle(gridLineWidth(3), color, 0.95);
     drawDashedEdges(graphic, edges, dash, gap, phase);
 }
@@ -437,6 +560,7 @@ export function hitLabelAnchor(token)
     const gap = gridLineWidth(3);
     const iso = getIsoProvider();
     const mesh = token?.mesh;
+
     if (iso && mesh && !mesh.destroyed)
     {
         const zoom = canvas.stage.scale.x || 1;
@@ -444,6 +568,7 @@ export function hitLabelAnchor(token)
         screen.y -= ((token.h ?? canvas.grid.size) * ISO_HIT_LABEL_LIFT + gap) * zoom;
         return canvas.stage.worldTransform.applyInverse(screen);
     }
+
     return { x: token.center.x, y: token.bounds.top - gap };
 }
 
@@ -463,6 +588,7 @@ export function makeHitLabel(container)
 export function rollHitCritChance(bonus, netAcc, defense)
 {
     const accDiceOutcomes = [];
+
     if (netAcc === 0)
         accDiceOutcomes.push({ value: 0, probability: 1 });
     else
@@ -473,20 +599,24 @@ export function rollHitCritChance(bonus, netAcc, defense)
         for (let faceValue = 1; faceValue <= 6; faceValue++)
             accDiceOutcomes.push({ value: sign * faceValue, probability: (faceValue ** diceCount - (faceValue - 1) ** diceCount) / denominator });
     }
+
     let hit = 0;
     let crit = 0;
+
     for (let d20 = 1; d20 <= 20; d20++)
     {
         for (const outcome of accDiceOutcomes)
         {
             const total = d20 + bonus + outcome.value;
             const probability = outcome.probability / 20;
+
             if (total >= defense)
                 hit += probability;
             if (total >= 20)
                 crit += probability;
         }
     }
+
     return { hit, crit };
 }
 
@@ -513,6 +643,7 @@ export function applyTargetInfoLabel(label, labelData)
         label.style.fill = labelData.fill ?? 0xffffff;
         return;
     }
+
     const isCrit = labelData.crit >= 0.999;
     label.text = isCrit ? 'CRIT' : `${Math.round(labelData.hit * 100)}%`;
     label.style.fill = isCrit ? TG.crit : hitChanceColor(labelData.hit);
@@ -523,16 +654,19 @@ export function paintSingleMarkCursor(graphic, worldX, worldY, { caster = null, 
 {
     graphic.clear();
     const candidates = tokens ?? canvas.tokens.placeables;
+
     const hoveredToken = candidates.find(token =>
     {
         const bounds = token.bounds;
         return worldX >= bounds.left && worldX <= bounds.right && worldY >= bounds.top && worldY <= bounds.bottom;
     }) || null;
+
     const cursorCell = pixelToOffset(worldX, worldY);
     const rangeTarget = hoveredToken ?? getHexCenter(cursorCell.col, cursorCell.row);
     const outOfRange = range !== null && caster && !isPositionInRange(caster, rangeTarget, range);
     const color = outOfRange ? TG.outOfRange : (hoveredToken ? TG.target : TG.inRange);
     const gridSize = canvas.grid.size;
+
     const drawGeometry = (target) =>
     {
         if (hoveredToken)
@@ -553,6 +687,7 @@ export function paintSingleMarkCursor(graphic, worldX, worldY, { caster = null, 
             target.drawRect(center.x - gridSize / 2, center.y - gridSize / 2, gridSize, gridSize);
         }
     };
+
     paintWithHalo(graphic, drawGeometry, { color, lineWidth: hoveredToken ? 4 : 2, lineAlpha: 0.8, fillAlpha: hoveredToken ? 0.2 : 0.4 });
     return { hoveredToken, outOfRange };
 }
@@ -590,26 +725,31 @@ export function showOverlapStackPicker(tokens, screenX, screenY, { isSelected = 
     let popupEl = null;
     let outsideHandler = null;
     let escHandler = null;
+
     const close = () =>
     {
         if (popupEl)
         {
             popupEl.remove(); popupEl = null;
         }
+
         if (outsideHandler)
         {
             document.removeEventListener('pointerdown', outsideHandler, true);
             outsideHandler = null;
         }
+
         if (escHandler)
         {
             document.removeEventListener('keydown', escHandler, true);
             escHandler = null;
         }
     };
+
     const el = document.createElement('div');
     el.className = 'la-stack-picker';
     el.style.cssText = `position:fixed;left:${screenX}px;top:${screenY}px;z-index:10000;background:#1c1c1c;border:2px solid #ff6400;border-radius:4px;padding:4px;min-width:160px;max-height:300px;overflow-y:auto;box-shadow:0 4px 12px rgba(0,0,0,0.5);font-family:Signika,sans-serif;`;
+
     for (const token of tokens)
     {
         const selected = !!isSelected(token);
@@ -635,6 +775,7 @@ export function showOverlapStackPicker(tokens, screenX, screenY, { isSelected = 
         });
         el.appendChild(row);
     }
+
     document.body.appendChild(el);
     popupEl = el;
     const rect = el.getBoundingClientRect();
@@ -642,11 +783,13 @@ export function showOverlapStackPicker(tokens, screenX, screenY, { isSelected = 
         el.style.left = `${Math.max(0, window.innerWidth - rect.width - 4)}px`;
     if (rect.bottom > window.innerHeight)
         el.style.top = `${Math.max(0, window.innerHeight - rect.height - 4)}px`;
+
     outsideHandler = (event) =>
     {
         if (popupEl && !popupEl.contains(/** @type {Node} */ (event.target)))
             close();
     };
+
     escHandler = (event) =>
     {
         if (event.key === 'Escape')
@@ -654,6 +797,7 @@ export function showOverlapStackPicker(tokens, screenX, screenY, { isSelected = 
             event.preventDefault(); close();
         }
     };
+
     setTimeout(() =>
     {
         document.addEventListener('pointerdown', outsideHandler, true);

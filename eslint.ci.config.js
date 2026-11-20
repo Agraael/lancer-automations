@@ -15,7 +15,9 @@ export default [
             "@stylistic/no-trailing-spaces": "off",
             "@stylistic/eol-last": "off",
             "@stylistic/max-len": "off",
-            "@stylistic/object-property-newline": "off"
+            "@stylistic/object-property-newline": "off",
+            "@stylistic/padding-line-between-statements": "off",
+            "local/blank-after-declaration-group": "off"
         }
     }
 ];

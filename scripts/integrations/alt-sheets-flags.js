@@ -42,14 +42,18 @@ export function listFlags(actor)
     const key = flagKeyForActor(actor);
     if (!key || !isActive())
         return [];
+
     const map = actor?.getFlag?.(ID, key);
     if (!map || typeof map !== 'object')
         return [];
+
     const flagList = [];
+
     for (const [id, flag] of Object.entries(map))
     {
         if (!flag || typeof flag !== 'object')
             continue;
+
         const content = flag.content ?? {};
         flagList.push({
             id,
@@ -66,6 +70,7 @@ export function listFlags(actor)
             maxPath: `flags.${ID}.${key}.${id}.content.max`,
         });
     }
+
     return flagList;
 }
 
@@ -83,13 +88,16 @@ export async function createFractionFlag(actor, { name = '', value = 0, max = 1,
 {
     const key = flagKeyForActor(actor);
     const flags = flagsApi();
+
     if (!key || !flags)
         return null;
+
     // addCustomFlag returns the setFlag promise, not the id, so diff the key set.
     const before = new Set(Object.keys(flags.getCustomFlags(actor, key) ?? {}));
     await flags.addCustomFlag(actor, key);
     const after = flags.getCustomFlags(actor, key) ?? {};
     const id = Object.keys(after).find(existing => !before.has(existing));
+
     if (!id)
         return null;
     await flags.updateCustomFlag(actor, key, id, {
@@ -109,9 +117,11 @@ export async function writeFlagValue(actor, id, value)
     const path = valuePath(actor, id);
     if (!path)
         return null;
+
     const current = Number(foundry.utils.getProperty(actor, path) ?? 0);
     const input = String(value).trim();
     const next = /^[+-]/.test(input) ? current + Number(input) : Number(input);
+
     if (!Number.isFinite(next))
         return null;
     await actor.update({ [path]: next }, { laFlagValueWrite: true });
@@ -122,6 +132,7 @@ export async function deleteFlag(actor, id)
 {
     const key = flagKeyForActor(actor);
     const flags = flagsApi();
+
     if (!key || !flags)
         return;
     await flags.deleteCustomFlag(actor, key, id);
@@ -138,25 +149,31 @@ export function structuralChange(changes)
     const scope = foundry.utils.getProperty(changes ?? {}, `flags.${ID}`);
     if (!scope || typeof scope !== 'object')
         return false;
+
     for (const key of Object.values(FLAG_KEYS))
     {
         const map = scope[key];
         if (!map || typeof map !== 'object')
             continue;
+
         for (const [id, flag] of Object.entries(map))
         {
             if (id.startsWith('-='))
                 return true; // deletion
             if (!flag || typeof flag !== 'object')
                 return true; // whole-flag add/replace
+
             // value + max are path-bound (read live), so a content-only edit needs no reinject.
             const flagKeys = Object.keys(flag);
+
             const contentOnly = flagKeys.length === 1 && flagKeys[0] === 'content'
                 && Object.keys(flag.content ?? {}).every(field => field === 'value' || field === 'max');
+
             if (!contentOnly)
                 return true;
         }
     }
+
     return false;
 }
 
@@ -200,29 +217,35 @@ export function injectBarToggles(app, html)
 {
     if (!isActive())
         return;
+
     const actor = app?.actor ?? app?.document;
     if (!actor || !flagKeyForActor(actor))
         return;
+
     const jHtml = html instanceof $ ? html : $(html);
     jHtml.find('.la-collapsegroup__wrapper[data-la-collapse-id^="custom."]').each(function ()
     {
         const match = /^custom\.([A-Za-z0-9]+)$/.exec(this.getAttribute('data-la-collapse-id') || '');
         if (!match)
             return; // ".assist" sub-wrapper
+
         const select = this.querySelector('select.la-customvalue__select');
         if (!select || select.value !== 'fraction')
             return; // bars are fraction-only
         if (this.querySelector('.la-bar-link-toggle'))
             return;
+
         const sidebarRow = this.querySelector('input[type="checkbox"].-widthfull')?.closest('.la-effectbox');
         if (!sidebarRow)
             return;
+
         const id = match[1];
         const row = sidebarRow.cloneNode(true);
         row.classList.add('la-bar-link-toggle');
         const label = row.querySelector('.la-effectbox__span');
         if (label)
             label.textContent = localize('LA.extras.showInTokenBar');
+
         const checkbox = row.querySelector('input[type="checkbox"]');
         if (!checkbox)
             return;

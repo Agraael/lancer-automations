@@ -4,20 +4,24 @@
 /* global canvas, PIXI */
 
 let _altHeld = false;
+
 export function isAltHeld()
 {
     return _altHeld;
 }
+
 export function setAltHeld(held)
 {
     _altHeld = held;
 }
 
 let _originalDrawBars = null;
+
 export function getOriginalDrawBars()
 {
     return _originalDrawBars;
 }
+
 export function setOriginalDrawBars(fn)
 {
     _originalDrawBars = fn;
@@ -31,10 +35,12 @@ export const _countFrom = new Map();
 
 // Overlay on canvas.tokens; hubs render above all tokens.
 let _hubOverlay = null;
+
 export function getHubOverlay()
 {
     if (!canvas?.tokens)
         return null;
+
     // detached but not destroyed: re-attach, the wrappers it already holds stay valid
     if (_hubOverlay && !_hubOverlay.destroyed)
     {
@@ -42,6 +48,7 @@ export function getHubOverlay()
             canvas.tokens.addChild(_hubOverlay);
         return _hubOverlay;
     }
+
     _hubOverlay = new PIXI.Container();
     _hubOverlay.name = 'la-stat-bar-overlay';
     _hubOverlay.sortableChildren = true;
@@ -49,6 +56,7 @@ export function getHubOverlay()
     canvas.tokens.addChild(_hubOverlay);
     return _hubOverlay;
 }
+
 export function resetHubOverlay()
 {
     _hubOverlay = null;

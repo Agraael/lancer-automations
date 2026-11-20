@@ -2,6 +2,7 @@
 
 import { ISO_SETTINGS, isIsoPerspectiveFeatureEnabled, ISO_PERSPECTIVE_ID } from '../setup/iso-settings.js';
 import { getModuleSetting } from '../tools/settings-utils.js';
+import { CLIMB_WAYPOINTS_SETTING } from './jump-rules.js';
 
 const ISO_MODULE_ID = ISO_PERSPECTIVE_ID;
 
@@ -10,6 +11,7 @@ function _isoActive(scene)
     const mod = game.modules.get(ISO_MODULE_ID);
     if (!mod?.active)
         return false;
+
     try
     {
         if (!game.settings.get(ISO_MODULE_ID, 'worldIsometricFlag'))
@@ -19,6 +21,7 @@ function _isoActive(scene)
     {
         return false;
     }
+
     return !!(scene ?? canvas.scene)?.getFlag(ISO_MODULE_ID, 'isometricEnabled');
 }
 
@@ -41,22 +44,27 @@ function _laIsoDebug(token, frame)
     const debugGlobals = /** @type {any} */ (globalThis);
     if (!debugGlobals._laIsoDebugOn)
         return;
+
     const id = token.document?.id;
     if (!id)
         return;
     debugGlobals._laIsoDebug = debugGlobals._laIsoDebug ?? {};
     let buf = debugGlobals._laIsoDebug[id];
+
     if (!buf)
     {
         buf = { tokenName: token.document?.name, tokenId: id, autoClimbOn: null, frames: [] };
+
         try
         {
-            buf.autoClimbOn = !!getModuleSetting('enableClimbWaypoints');
+            buf.autoClimbOn = !!getModuleSetting(CLIMB_WAYPOINTS_SETTING);
         }
         catch
         { /* ignore */ }
+
         debugGlobals._laIsoDebug[id] = buf;
     }
+
     buf.frames.push(frame);
 }
 
@@ -72,6 +80,7 @@ Hooks.on('refreshToken', (token) =>
         return; // drag-preview clone: leave it at its own elevation, no bump
     if (token.document?.getFlag(ISO_MODULE_ID, 'isoTokenDisabled'))
         return;
+
     try
     {
         if (!game.settings.get(ISO_MODULE_ID, 'enableHeightAdjustment'))
@@ -88,19 +97,23 @@ Hooks.on('refreshToken', (token) =>
     const width = token.w, height = token.h;
     const animGround = _thtGroundAt({ x: doc.x + width / 2, y: doc.y + height / 2 });
     const elev = doc.elevation ?? 0;
+
     const isMoving = !!movement && token.animationContexts.has(token.movementAnimationName) && (
         movement.origin.x !== movement.destination.x
         || movement.origin.y !== movement.destination.y
         || (movement.origin.elevation ?? 0) !== (movement.destination.elevation ?? 0)
     );
+
     let target = 0;
     let _dbgStartGround, _dbgDestGround, _dbgInterpolatedTerrain, _dbgDElev, _dbgLerpT, _dbgElevClimbed, _dbgClimbing;
+
     if (isMoving)
     {
         const startGround = _thtGroundAt({ x: movement.origin.x + width / 2, y: movement.origin.y + height / 2 });
         const destGround = _thtGroundAt({ x: movement.destination.x + width / 2, y: movement.destination.y + height / 2 });
         _dbgStartGround = startGround; _dbgDestGround = destGround;
         let interpolatedTerrain;
+
         if (startGround === destGround)
             interpolatedTerrain = startGround;
         else
@@ -111,6 +124,7 @@ Hooks.on('refreshToken', (token) =>
             _dbgDElev = dElev; _dbgLerpT = lerpT;
             interpolatedTerrain = startGround + (destGround - startGround) * lerpT;
         }
+
         _dbgInterpolatedTerrain = interpolatedTerrain;
         _dbgElevClimbed = elev - (movement.origin.elevation ?? 0);
         if ((movement.origin.elevation ?? 0) === startGround && (movement.destination.elevation ?? 0) === destGround)
@@ -141,10 +155,12 @@ Hooks.on('refreshToken', (token) =>
     }
 
     let bumpState = _smoothBump.get(token);
+
     if (!bumpState)
     {
         bumpState = { value: target, raf: null }; _smoothBump.set(token, bumpState);
     }
+
     bumpState.value += (target - bumpState.value) * BUMP_EASE;
     if (Math.abs(bumpState.value - target) < 0.02)
         bumpState.value = target;
@@ -174,21 +190,27 @@ Hooks.once('ready', () =>
     const mod = game.modules.get(ISO_MODULE_ID);
     if (!mod?.active)
         return;
+
     const restore = (token) =>
     {
         if (!isIsoPerspectiveFeatureEnabled(ISO_SETTINGS.restoreAnchor))
             return;
         if (!token?.mesh)
             return;
+
         const sceneIso = _isoActive(token.scene);
         const tokenDisabled = !!token.document?.getFlag(ISO_MODULE_ID, 'isoTokenDisabled');
+
         if (sceneIso && !tokenDisabled)
             return;
+
         const ax = token.document?.texture?.anchorX ?? 0.5;
         const ay = token.document?.texture?.anchorY ?? 0.5;
+
         if (token.mesh.anchor.x !== ax || token.mesh.anchor.y !== ay)
             token.mesh.anchor.set(ax, ay);
     };
+
     Hooks.on('refreshToken', restore);
     Hooks.on('updateToken', (doc) => restore(doc.object));
 });

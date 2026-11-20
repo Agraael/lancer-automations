@@ -1,9 +1,11 @@
-import { getOccupiedOffsets } from "./grid-helpers.js";
+import { getOccupiedOffsets, neighborKeys } from "./grid-helpers.js";
 import { getLAFlag, setLAFlag, unsetLAFlag } from "../tools/flag-utils.js";
-import { getImmunityBonuses, consumeImmunityUse } from "../bonuses/genericBonuses.js";
+import { getMovementBonuses, consumeMovementUse } from "../bonuses/genericBonuses.js";
 import { startChoiceCard, getActiveGMId } from "../interactive/network.js";
 import { localize, localizeFormat } from "../tools/string-utils.js";
 import { getEnvironmentActor } from "../tools/template-actors.js";
+import { groundBandsAtCell, groundTop, solidTokenBandsAtCell, restingSurface } from "../movement/ground.js";
+import { laTokenGameplayHeight } from "../tools/token-height.js";
 
 /**
  * Get all grid cells occupied by a token.
@@ -29,16 +31,19 @@ Hooks.on('terrain-height-tools.updateTerrain', () => { _terrainCache.timestamp =
 function _refreshSolidCache(terrainAPI)
 {
     const now = Date.now();
+
     if (now - _terrainCache.timestamp > _terrainCache.ttl)
     {
         const terrainTypes = terrainAPI.getTerrainTypes?.() || [];
         _terrainCache.solidMap.clear();
         _terrainCache.cellStacks.clear();
+
         for (const terrainType of terrainTypes)
         {
             if (terrainType.usesHeight && terrainType.isSolid)
                 _terrainCache.solidMap.set(terrainType.id, terrainType);
         }
+
         _terrainCache.timestamp = now;
     }
 }
@@ -49,11 +54,13 @@ function _cellTerrainStack(terrainAPI, col, row)
 {
     const key = `${col},${row}`;
     let stack = _terrainCache.cellStacks.get(key);
+
     if (stack === undefined)
     {
         stack = terrainAPI.getCell(col, row) || [];
         _terrainCache.cellStacks.set(key, stack);
     }
+
     return stack;
 }
 
@@ -62,25 +69,20 @@ function _cellTerrainStack(terrainAPI, col, row)
  * @param {number} col
  * @param {number} row
  * @param {Object} [terrainAPI]
+ * @param {{excludeTokenId?: string|null, solidTokens?: boolean}} [options]
  * @returns {number}
  */
-export function getHexGroundElevation(col, row, terrainAPI = globalThis.terrainHeightTools)
+export function getHexGroundElevation(col, row, terrainAPI = globalThis.terrainHeightTools, options = {})
 {
-    if (!terrainAPI)
-        return 0;
-    _refreshSolidCache(terrainAPI);
-    let maxTopElevation = 0;
-    const terrainStack = _cellTerrainStack(terrainAPI, col, row);
-    for (const terrain of terrainStack)
+    let terrainStack = [];
+
+    if (terrainAPI)
     {
-        if (_terrainCache.solidMap.has(terrain.terrainTypeId))
-        {
-            const topElevation = (terrain.elevation || 0) + (terrain.height || 0);
-            if (topElevation > maxTopElevation)
-                maxTopElevation = topElevation;
-        }
+        _refreshSolidCache(terrainAPI);
+        terrainStack = _cellTerrainStack(terrainAPI, col, row);
     }
-    return maxTopElevation;
+
+    return groundTop(groundBandsAtCell(terrainStack, _terrainCache.solidMap, col, row, options));
 }
 
 /**
@@ -91,11 +93,14 @@ export function getHexGroundElevation(col, row, terrainAPI = globalThis.terrainH
  * @param {Object} [terrainAPI]
  * @returns {boolean}
  */
-export function isHexUnderTerrain(col, row, elevation, terrainAPI = globalThis.terrainHeightTools)
+export function isHexUnderTerrain(col, row, elevation, terrainAPI = globalThis.terrainHeightTools, excludeTokenId = null)
 {
+    if (solidTokenBandsAtCell(col, row, excludeTokenId).some(band => band.bottom > elevation))
+        return true;
     if (!terrainAPI)
         return false;
     _refreshSolidCache(terrainAPI);
+
     for (const terrain of _cellTerrainStack(terrainAPI, col, row))
     {
         if (!_terrainCache.solidMap.has(terrain.terrainTypeId))
@@ -103,6 +108,7 @@ export function isHexUnderTerrain(col, row, elevation, terrainAPI = globalThis.t
         if ((terrain.elevation || 0) > elevation)
             return true;
     }
+
     return false;
 }
 
@@ -115,14 +121,46 @@ export function isHexUnderTerrain(col, row, elevation, terrainAPI = globalThis.t
 export function getMaxGroundHeightUnderToken(token, terrainAPI)
 {
     const cells = getTokenCells(token);
+    const excludeTokenId = token?.document?.id ?? token?.id ?? null;
     let maxGroundElevation = 0;
+
     for (const [row, col] of cells)
     {
-        const cellElevation = getHexGroundElevation(col, row, terrainAPI);
+        const cellElevation = getHexGroundElevation(col, row, terrainAPI, { excludeTokenId });
         if (cellElevation > maxGroundElevation)
             maxGroundElevation = cellElevation;
     }
+
     return maxGroundElevation;
+}
+
+/**
+ * Surface the token would land on, per cell the highest one at or below it with room for its body, highest cell wins.
+ * @param {Token} token
+ * @param {any} terrainAPI
+ * @param {{x: number, y: number, elevation?: number}|null} [position] Top-left to test instead of the token's own.
+ * @returns {number}
+ */
+export function getRestingElevationUnderToken(token, terrainAPI, position = null)
+{
+    const doc = /** @type {TokenDocument} */ (token?.document ?? token);
+    const excludeTokenId = doc?.id ?? null;
+    const height = position?.elevation ?? doc?.elevation ?? 0;
+    const zHeight = laTokenGameplayHeight(doc);
+    let resting = 0;
+
+    if (terrainAPI)
+        _refreshSolidCache(terrainAPI);
+
+    for (const offset of getOccupiedOffsets(token, position))
+    {
+        const stack = terrainAPI ? _cellTerrainStack(terrainAPI, offset.col, offset.row) : [];
+        const bands = groundBandsAtCell(stack, _terrainCache.solidMap, offset.col, offset.row, { excludeTokenId });
+        const surface = restingSurface(bands, zHeight, height, 'ground');
+        resting = Math.max(resting, Number.isFinite(surface) ? surface : groundTop(bands));
+    }
+
+    return resting;
 }
 
 /**
@@ -133,28 +171,24 @@ export function getMaxGroundHeightUnderToken(token, terrainAPI)
  */
 export function hasTallerSolidAdjacent(token, terrainAPI = globalThis.terrainHeightTools)
 {
-    if (!terrainAPI)
-        return false;
     const tokenElevation = token?.document?.elevation || 0;
+    const excludeTokenId = token?.document?.id ?? token?.id ?? null;
     const ownCells = getTokenCells(token);
     const ownCellKeys = new Set(ownCells.map(([row, col]) => row + "," + col));
+
     for (const [row, col] of ownCells)
     {
-        for (let rowDelta = -1; rowDelta <= 1; rowDelta++)
+        for (const neighborKey of neighborKeys(col + "," + row))
         {
-            for (let colDelta = -1; colDelta <= 1; colDelta++)
-            {
-                if (rowDelta === 0 && colDelta === 0)
-                    continue;
-                const neighborRow = row + rowDelta;
-                const neighborCol = col + colDelta;
-                if (ownCellKeys.has(neighborRow + "," + neighborCol))
-                    continue;
-                if (getHexGroundElevation(neighborCol, neighborRow, terrainAPI) > tokenElevation)
-                    return true;
-            }
+            const [neighborCol, neighborRow] = neighborKey.split(',').map(Number);
+
+            if (ownCellKeys.has(neighborRow + "," + neighborCol))
+                continue;
+            if (getHexGroundElevation(neighborCol, neighborRow, terrainAPI, { excludeTokenId }) > tokenElevation)
+                return true;
         }
     }
+
     return false;
 }
 
@@ -171,6 +205,7 @@ async function _runDangerousZone(token, damageType, damageValue)
     const actor = token?.actor;
     if (!actor)
         return;
+
     const currentRound = game.combat?.round || 0;
     const lastTriggeredRound = getLAFlag(actor,"dangerousZoneRound");
 
@@ -200,7 +235,9 @@ async function _runDangerousZone(token, damageType, damageValue)
         const DamageRollFlow = game.lancer?.flows?.get?.("DamageRollFlow");
         if (!DamageRollFlow)
             return;
+
         const source = await getEnvironmentActor() ?? actor;
+
         const damageFlow = new DamageRollFlow(source.uuid, {
             title: "Dangerous Terrain",
             damage: [{ val: String(damageValue), type: damageTypeLabels[String(damageType).toLowerCase()] || "Kinetic" }],
@@ -208,13 +245,14 @@ async function _runDangerousZone(token, damageType, damageValue)
             hit_results: [],
             has_normal_hit: true
         });
+
         await damageFlow.begin();
     }
 }
 
 /**
  * Roll an ENG check; on a result below 10 target the token and roll damage.
- * If the actor is terrain-immune (status or `terrain` immunity bonus) shows a
+ * If the actor is terrain-immune (status or `terrain_immunity` movement bonus) shows a
  * choice card to ignore the trigger or apply it anyway.
  * Dedupes to once per combat round per actor.
  * @param {Token | TokenDocument} token
@@ -228,8 +266,9 @@ export async function triggerDangerousZoneFlow(token, damageType = "kinetic", da
     if (!actor)
         return;
 
-    const immunityBonuses = getImmunityBonuses(actor, "terrain");
+    const immunityBonuses = getMovementBonuses(actor, "terrain_immunity");
     const hasStatusImmunity = !!actor.statuses?.has?.("terrain_immunity");
+
     if (!hasStatusImmunity && immunityBonuses.length === 0)
         return _runDangerousZone(token, damageType, damageValue);
 
@@ -237,6 +276,7 @@ export async function triggerDangerousZoneFlow(token, damageType = "kinetic", da
         ...immunityBonuses.map(bonus => bonus.name || bonus.id),
         ...(hasStatusImmunity ? ["Terrain Immunity"] : [])
     ];
+
     const tokenPlaceable = /** @type {any} */ (token).object ?? token;
     const actorName = actor.name ?? "Token";
     await startChoiceCard({
@@ -254,7 +294,7 @@ export async function triggerDangerousZoneFlow(token, damageType = "kinetic", da
                 {
                     ui.notifications.info(localizeFormat('LA.notify.ignoredDangerousTerrain', { name: actorName }));
                     if (immunityBonuses.length > 0)
-                        await consumeImmunityUse(actor, 'terrain');
+                        await consumeMovementUse(actor, 'terrain_immunity');
                 }
             },
             {
@@ -274,6 +314,7 @@ export const TerrainAPI = {
     getHexGroundElevation,
     isHexUnderTerrain,
     getMaxGroundHeightUnderToken,
+    getRestingElevationUnderToken,
     hasTallerSolidAdjacent,
     triggerDangerousZoneFlow
 };

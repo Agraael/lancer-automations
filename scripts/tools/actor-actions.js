@@ -1,5 +1,4 @@
-import { getLAFlag } from "./flag-utils.js";
-import { getItemActions, linkTierGate, isPrimaryActionHidden, gateActions } from "../interactive/deployables.js";
+import { getItemActions, isPrimaryActionHidden, getHeldActions } from "../interactive/deployables.js";
 import { resolvePilot } from "../utils/lancer-token.js";
 
 /** Maps activation type strings to the NPC feature tag LID that signals that activation. */
@@ -47,21 +46,27 @@ export function getActorActionItems(actor, activationType)
     if (actor?.type === 'npc')
     {
         const tagLid = ACTIVATION_TAG_MAP[activationType];
+
         for (const item of (actor.items ?? []))
         {
             if (item.type !== 'npc_feature')
                 continue;
+
             const itemTags = item.system?.tags ?? [];
             const tagMatched = tagLid ? itemTags.some(tag => tag.lid === tagLid) : false;
             const hidePrimary = isPrimaryActionHidden(item);
+
             const extraActions = getItemActions(item, { extraOnly: hidePrimary }).filter(action =>
                 action.activation === activationType || action.activation === activationType + ' Action'
             );
+
             // Fallback: match by system.type when no tag and no explicit actions found
             const typeActivation = item.system?.type === 'Tech'
                 ? (item.system?.tech_type === 'Full' ? 'Full Tech' : 'Quick Tech')
                 : item.system?.type;
+
             const typeMatched = !tagMatched && !extraActions.length && typeActivation === activationType;
+
             if (!hidePrimary && (tagMatched || typeMatched))
             {
                 results.push({
@@ -81,6 +86,7 @@ export function getActorActionItems(actor, activationType)
                     sourceItem: item,
                 });
             }
+
             for (const action of extraActions)
                 results.push({ action, sourceItem: item });
         }
@@ -92,17 +98,20 @@ export function getActorActionItems(actor, activationType)
             const item = systemSlot?.value;
             if (!item)
                 continue;
+
             for (const action of getItemActions(item, { extraOnly: isPrimaryActionHidden(item) }))
             {
                 if (action.activation === activationType)
                     results.push({ action, sourceItem: item });
             }
         }
+
         for (const mount of (actor?.system?.loadout?.weapon_mounts ?? []))
         {
             for (const slot of (mount.slots ?? []))
             {
                 const weapon = slot.weapon?.value;
+
                 if (weapon)
                 {
                     for (const action of getItemActions(weapon, { extraOnly: isPrimaryActionHidden(weapon) }))
@@ -111,7 +120,9 @@ export function getActorActionItems(actor, activationType)
                             results.push({ action, sourceItem: weapon });
                     }
                 }
+
                 const mod = slot.mod?.value;
+
                 if (mod)
                 {
                     for (const action of getItemActions(mod, { extraOnly: isPrimaryActionHidden(mod) }))
@@ -122,10 +133,13 @@ export function getActorActionItems(actor, activationType)
                 }
             }
         }
+
         const frame = actor?.system?.loadout?.frame?.value;
+
         if (frame)
         {
             const coreSystem = frame.system?.core_system;
+
             if (coreSystem?.activation === activationType)
             {
                 results.push({
@@ -134,16 +148,19 @@ export function getActorActionItems(actor, activationType)
                     _coreActive: true,
                 });
             }
+
             for (const action of (coreSystem?.active_actions ?? []))
             {
                 if (action.activation === activationType)
                     results.push({ action, sourceItem: frame, _coreGranted: !isCoreActivationAction(coreSystem, action) });
             }
+
             for (const action of (coreSystem?.passive_actions ?? []))
             {
                 if (action.activation === activationType)
                     results.push({ action, sourceItem: frame });
             }
+
             for (const trait of (frame.system?.traits ?? []))
             {
                 for (const action of (trait.actions ?? []))
@@ -171,6 +188,7 @@ export function getActorActionItems(actor, activationType)
         else
         {
             const pilot = resolvePilot(actor);
+
             if (pilot)
             {
                 for (const item of (pilot.items ?? []))
@@ -178,6 +196,7 @@ export function getActorActionItems(actor, activationType)
                     if (item.type === 'talent')
                     {
                         const currRank = item.system?.curr_rank ?? 0;
+
                         for (let rankIndex = 0; rankIndex < currRank; rankIndex++)
                         {
                             for (const action of (item.system?.ranks?.[rankIndex]?.actions ?? []))
@@ -200,12 +219,8 @@ export function getActorActionItems(actor, activationType)
         }
     }
 
-    // Actor-level extra actions (stored on actor flag via addExtraActions(actor, ...))
-    const actorExtraActions = gateActions(
-        (getLAFlag(actor,'extraActions') || []).filter((/** @type {any} */ action) => linkTierGate(action, actor)),
-        actor
-    );
-    for (const action of actorExtraActions)
+    // Actor-level extra actions: stored via addExtraActions(actor, ...) or granted by its effects
+    for (const action of getHeldActions(actor))
     {
         if (action.activation === activationType)
             results.push({ action: { ...action, _isExtra: true }, sourceItem: null });

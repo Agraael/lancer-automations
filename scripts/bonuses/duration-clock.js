@@ -23,6 +23,7 @@ export function normalizeDuration(duration)
     const out = { ...(duration ?? {}) };
     const raw = String(out.label ?? '').trim();
     const roundCount = /^(\d+)\s*rounds?$/i.exec(raw);
+
     if (!raw || raw === 'unlimited')
         out.label = 'indefinite';
     else if (raw === 'round' || roundCount)
@@ -31,6 +32,7 @@ export function normalizeDuration(duration)
         if (roundCount && !out.rounds)
             out.rounds = Number(roundCount[1]);
     }
+
     if (TURN_LABELS.has(out.label) && !Number.isFinite(Number(out.turns)))
         out.turns = 1;
     return out;
@@ -46,17 +48,20 @@ export function sceneActors(scene)
 {
     const seen = new Set();
     const actors = [];
+
     for (const tokenDoc of scene?.tokens ?? [])
     {
         const actor = tokenDoc.actor;
         if (!actor)
             continue;
+
         const key = tokenDoc.actorLink ? `actor:${actor.id}` : `token:${tokenDoc.id}`;
         if (seen.has(key))
             continue;
         seen.add(key);
         actors.push(actor);
     }
+
     return actors;
 }
 
@@ -82,8 +87,10 @@ export function buildEntry(duration, originID, stack, tokenDoc)
     const normalized = normalizeDuration(duration);
     const entry = { label: normalized.label, originID: originID ?? null, stack: entryStack({ stack }) };
     const combat = combatForScene(tokenDoc?.parent ?? canvas.scene);
+
     if (combat)
         entry.combatId = combat.id;
+
     if (TURN_LABELS.has(entry.label))
         entry.turns = Number(normalized.turns);
     else if (ROUND_LABELS.has(entry.label))
@@ -98,6 +105,7 @@ export function buildEntry(duration, originID, stack, tokenDoc)
         else
             entry.round = null;
     }
+
     return entry;
 }
 
@@ -106,8 +114,10 @@ export function durationEntries(effect)
     const flags = getLAFlags(effect) ?? {};
     const stack = effectStack(effect);
     const stored = Array.isArray(flags.durationEntries) ? flags.durationEntries.filter(Boolean) : [];
+
     if (!stored.length)
         return [{ ...entryDuration(normalizeDuration(flags.duration)), turns: flags.duration?.turns ?? null, originID: flags.originID ?? null, stack }];
+
     const counted = stored.reduce((total, entry) => total + entryStack(entry), 0);
     return counted < stack ? [...stored, { label: 'indefinite', originID: null, stack: stack - counted }] : stored;
 }
@@ -122,6 +132,7 @@ export function roundsLeft(entry)
     const combat = entry?.combatId ? game.combats?.get(entry.combatId) : null;
     if (!combat || !ROUND_LABELS.has(entry.label) || !Number.isFinite(Number(entry.round)))
         return null;
+
     const left = entry.label === 'roundEnd' ? entry.round - combat.round + 1 : entry.round - combat.round;
     return Math.max(0, left);
 }
@@ -144,37 +155,46 @@ export async function rewriteEntries(effect, transform)
     const after = [];
     let removed = 0;
     let changed = false;
+
     for (const entry of before)
     {
         const next = transform(entry);
+
         if (next === entry)
         {
             after.push(entry);
             continue;
         }
+
         changed = true;
         if (next)
             after.push(next);
         else
             removed += entryStack(entry);
     }
+
     if (!changed)
         return;
+
     const newStack = effectStack(effect) - removed;
+
     if (!after.length || newStack <= 0)
     {
-        await effect.delete();
+        await effect.delete({ laReason: 'expired' });
         return;
     }
+
     const update = {
         [`flags.${MODULE_ID}.durationEntries`]: after,
         [`flags.${MODULE_ID}.duration`]: entryDuration(after.at(-1))
     };
+
     if (removed > 0)
     {
         update['flags.statuscounter.value'] = newStack;
         update['flags.statuscounter.visible'] = newStack > 1;
     }
+
     await effect.update(update);
 }
 
@@ -199,8 +219,10 @@ export function tickTurnEntries(effect, triggerLabel, triggeringTokenId)
     {
         const ticks = entry.label === ANY_TURN_LABEL[triggerLabel]
             || (entry.label === triggerLabel && entry.originID === triggeringTokenId);
+
         if (!ticks)
             return entry;
+
         const turns = Number(entry.turns);
         if (!Number.isFinite(turns))
             return entry;
@@ -212,11 +234,13 @@ export async function processRoundEntries(combat, newRound, phase)
 {
     if (!isExecutorGM() || !combat)
         return;
+
     const label = phase === 'end' ? 'roundEnd' : 'roundStart';
     await rewriteSceneEntries(combat.scene ?? canvas.scene, entry =>
     {
         if (entry.label !== label || entry.combatId !== combat.id || !Number.isFinite(Number(entry.round)))
             return entry;
+
         const ends = phase === 'end' ? newRound > entry.round : newRound >= entry.round;
         return ends ? null : entry;
     });
@@ -251,12 +275,15 @@ export function resolveTurnOrigin(originID, holderDoc)
 {
     const scene = holderDoc?.parent ?? canvas.scene;
     const combat = combatForScene(scene);
+
     if (!combat || !originID || actsInCombat(combat, originID))
         return { originID, fallback: false };
+
     const ownerRef = scene?.tokens?.get(originID)?.actor?.system?.owner;
     const ownerKey = typeof ownerRef === 'string' ? ownerRef : ownerRef?.id ?? null;
     const owner = ownerKey ? (fromUuidSync(ownerKey) ?? game.actors?.get(ownerKey) ?? null) : null;
     const ownerCombatant = owner ? combat.combatants.find((/** @type {any} */ combatant) => combatant.actorId === owner.id && !combatant.isDefeated) : null;
+
     if (ownerCombatant?.tokenId)
         return { originID: ownerCombatant.tokenId, fallback: false };
     if (holderDoc && holderDoc.id !== originID && actsInCombat(combat, holderDoc.id))

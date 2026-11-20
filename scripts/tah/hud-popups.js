@@ -1,8 +1,8 @@
 /* global $ */
 
-import { laDetailPopup, laBindPopupBehavior, laRenderItemExtras } from '../interactive/detail-renderers.js';
+import { laDetailPopup, laBindPopupBehavior, laRenderItemExtras, laRenderActionDetail, laFormatDetailHtml } from '../interactive/detail-renderers.js';
 import { getModuleSetting } from '../tools/settings-utils.js';
-import { ReactionManager } from '../activations/reaction-manager.js';
+import { AutomationManager } from '../activations/automation-manager.js';
 import { playUiSound } from './sound.js';
 import { bindConsumeStatusToggles } from '../interactive/extra-config.js';
 import { appendItemPips } from './item-helpers.js';
@@ -15,8 +15,8 @@ const LA_DIRECT_AUTOMATED = new Set([
     'skirmish', 'barrage', 'fight', 'stabilize', 'boot up', 'shut down',
     'basic tech', 'invade', 'basic attack', 'prepare', 'reload', 'interact',
     'handle', 'standing up', 'stand up', 'self destruct',
-    'improvised attack', 'damage', 'throw weapon', 'pickup weapon',
-    'deploy item', 'recall item', 'recall'
+    'improvised attack', 'damage', 'throw weapon', 'pickup weapon', 'pickup',
+    'deploy item', 'recall item', 'recall', 'return to owner'
 ]);
 
 function _entryIsAutomated(entry)
@@ -33,22 +33,28 @@ export function hasAutomation(itemOrName)
 {
     if (!itemOrName)
         return false;
+
     const lid = itemOrName?.system?.lid ?? (typeof itemOrName?.lid === 'string' ? itemOrName.lid : null);
-    if (lid && _entryIsAutomated(ReactionManager.getReactions(lid)))
+    if (lid && _entryIsAutomated(AutomationManager.getAutomations(lid)))
         return true;
+
     const raw = typeof itemOrName === 'string' ? itemOrName : (itemOrName?.name ?? '');
     const name = String(raw).replace(/<[^>]*>/g, '').trim();
+
     if (!name)
         return false;
-    if (_entryIsAutomated(ReactionManager.getGeneralReaction(name)))
+    if (_entryIsAutomated(AutomationManager.getGeneralAutomation(name)))
         return true;
-    const generals = ReactionManager.getGeneralReactions?.() ?? {};
+
+    const generals = AutomationManager.getGeneralAutomations?.() ?? {};
     const lcName = name.toLowerCase();
+
     for (const key of Object.keys(generals))
     {
         if (key.toLowerCase() === lcName && _entryIsAutomated(generals[key]))
             return true;
     }
+
     return LA_DIRECT_AUTOMATED.has(lcName);
 }
 
@@ -68,6 +74,7 @@ function v3Anchor(root, placement)
     const candidates = selector => [...root.querySelectorAll(selector)].filter(element => !element.closest('.la-weapon-mod') && element.closest('.la-mod-body')?.style.display !== 'none');
     const section = label => candidates('.la-popup-section-label').find(span => span.textContent.trim() === label)?.parentElement ?? null;
     const text = () => candidates('.la-popup-effect')[0] ?? null;
+
     if (placement.type === 'box')
         return section(V3_BOX_LABELS[placement.key]) ?? section('EFFECT') ?? text();
     if (placement.type === 'action')
@@ -80,12 +87,14 @@ function v3Anchor(root, placement)
 export function v3ActionPath(item, action)
 {
     const lists = [['system.actions', item?.system?.actions], ...(item?.system?.ranks ?? []).map((rank, index) => [`system.ranks.${index}.actions`, rank?.actions])];
+
     for (const [path, actions] of lists)
     {
         const index = actions?.findIndex(entry => entry === action || entry?.name === action?.name) ?? -1;
         if (index >= 0)
             return `${path}.${index}`;
     }
+
     return null;
 }
 
@@ -98,7 +107,9 @@ export function withV3Chips(html, item, scope = null, rows = v3RowsFor(item, sco
 {
     if (!rows.length)
         return html;
+
     const root = htmlToElement(`<div>${html || ''}</div>`);
+
     for (const row of rows)
     {
         const anchor = v3Anchor(root, row.placement);
@@ -107,7 +118,98 @@ export function withV3Chips(html, item, scope = null, rows = v3RowsFor(item, sco
         else
             anchor.insertAdjacentHTML(anchor.classList.contains('la-popup-effect') ? 'afterend' : 'beforeend', row.html);
     }
+
     return root.innerHTML;
+}
+
+const showWithoutHud = (popup, anchor) => showPopupAt(popup, anchor, { cancelCollapse: () => undefined, scheduleCollapse: () => undefined });
+
+export function invadePopupOptions(opt)
+{
+    const tier = opt.item?.parent?.system?.tier ?? 1;
+    let bodyHtml;
+
+    if (opt.action)
+        bodyHtml = laRenderActionDetail(opt.action, { tier });
+    else
+    {
+        const detail = laFormatDetailHtml(opt.detail);
+        bodyHtml = detail
+            ? `<div style="margin:0;font-size:0.82em;line-height:1.5;">${detail}</div>`
+            : '<div style="font-size:0.82em;color:#888;margin:0;">No description.</div>';
+    }
+
+    const isWeapon = opt.item?.type?.includes('weapon');
+    const sourceType = isWeapon ? ' (Weapon)' : (opt.item?.system?.type ? ` (${opt.item.system.type})` : '');
+    const sourceLabel = !opt.isFragmentSignal && opt.item?.name ? ` · ${opt.item.name}${sourceType}` : '';
+
+    return {
+        cssClass: 'la-hud-popup la-hud-invade-popup',
+        dataKey: 'invade-name',
+        dataValue: opt.name,
+        title: opt.name,
+        theme: 'invade',
+        subtitle: (opt.isFragmentSignal ? 'Fragment Signal · Quick Tech' : 'Invade · Quick Tech') + sourceLabel,
+        bodyHtml,
+        item: opt.item,
+        pips: !!(opt.item && opt.action),
+        pipsArgs: opt.action ? { action: opt.action } : undefined,
+    };
+}
+
+export function openRowActionsPopup(title, subtitle, actions, anchorRow, show = showWithoutHud)
+{
+    document.querySelectorAll('.la-hud-popup').forEach(node => node.remove());
+    const sectioned = actions.some(action => action.section);
+    const baseStyle = `padding:3px 8px;cursor:pointer;font-size:0.78em;display:flex;align-items:center;gap:5px;font-family:inherit;${sectioned ? 'width:auto;flex:1 1 auto;justify-content:center;' : ''}`;
+
+    const styleOf = (action) =>
+    {
+        if (action.danger)
+            return `${baseStyle}background:#3a1818;border:1px solid #803333;color:#ffaaaa;`;
+        return `${baseStyle}${action.isActive?.() ? 'background:#2a2a2a;border:1px solid #8fe0b8;color:#fff;' : 'background:#2a2a2a;border:1px solid #444;color:#ddd;'}`;
+    };
+
+    const buttonRowStyle = sectioned ? 'display:flex;flex-wrap:wrap;gap:4px;' : 'display:flex;flex-direction:column;gap:4px;';
+    const bodyParts = [];
+    let buttonRow = [];
+
+    const closeButtonRow = () =>
+    {
+        if (buttonRow.length)
+            bodyParts.push(`<div style="${buttonRowStyle}">${buttonRow.join('')}</div>`);
+        buttonRow = [];
+    };
+
+    actions.forEach((action, idx) =>
+    {
+        if (action.section)
+        {
+            closeButtonRow();
+            bodyParts.push(`<div style="margin-top:3px;font-size:0.66em;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:#8a8a8a;">${action.section}</div>`);
+            return;
+        }
+
+        const iconColor = action.iconColor ? ` style="color:${action.iconColor};"` : '';
+        buttonRow.push(`<button data-action-idx="${idx}" style="${styleOf(action)}"><i class="${action.icon}"${iconColor}></i>${action.label}</button>`);
+    });
+    closeButtonRow();
+    const bodyHtml = `<div style="display:flex;flex-direction:column;gap:4px;">${bodyParts.join('')}</div>`;
+    const popup = laDetailPopup('la-hud-popup la-tah-row-popup', title, subtitle, bodyHtml, 'default');
+    popup.css({ minWidth: 0, width: sectioned ? 300 : 'auto', maxWidth: sectioned ? 300 : 200 });
+    popup.children().eq(0).css({ padding: '4px 8px' });
+    popup.children().eq(0).find('div').first().css({ fontSize: '0.82em' });
+    popup.children().eq(1).css({ padding: '4px 8px' });
+    popup.find('button[data-action-idx]').on('click', async (ev) =>
+    {
+        const action = actions[Number($(ev.currentTarget).data('actionIdx'))];
+        if (!action?.stayOpen)
+            popup.remove();
+        await action?.onClick();
+        if (action?.stayOpen)
+            popup.find('button[data-action-idx]').each((_idx, button) => button.setAttribute('style', styleOf(actions[Number(button.dataset.actionIdx)])));
+    });
+    show(popup, anchorRow);
 }
 
 /**
@@ -125,27 +227,33 @@ export function showPopupAt(popup, anchorEl, { cancelCollapse, scheduleCollapse 
     uiScale = Number(getModuleSetting('tah.uiScale')) || 1;
     if (uiScale !== 1)
         popup.css({ transform: `scale(${uiScale})`, 'transform-origin': 'top left' });
+
     const rect = anchorEl[0]?.getBoundingClientRect() ?? { left: 300, top: 100, right: 380, height: 30 };
     const popupW = popup.outerWidth() * uiScale, popupH = popup.outerHeight() * uiScale;
     const viewportW = window.innerWidth,  viewportH = window.innerHeight;
     let popupLeft = rect.right + 2;
     const flipped = popupLeft + popupW > viewportW - 10;
+
     if (flipped)
         popupLeft = rect.left - popupW - 2;
+
     let popupTop = rect.top;
     if (popupTop + popupH > viewportH - 10)
         popupTop = viewportH - popupH - 10;
+
     const finalLeft = Math.max(10, popupLeft);
     popup.css({ position: 'fixed', left: finalLeft, top: Math.max(10, popupTop), opacity: 0 });
     popup.animate({ opacity: 1 }, { duration: 150, easing: 'swing' });
     laBindPopupBehavior(popup);
     // Hovering the popup keeps columns alive
     popup.on('mouseenter', cancelCollapse).on('mouseleave', scheduleCollapse);
+
     // Invisible bridge over the anchor-to-popup gap: stops mouseleave firing mid-crossing.
     if (!flipped)
     {
         const anchorRight = rect.right;
         const bridgeWidth = finalLeft - anchorRight;
+
         if (bridgeWidth > 0)
         {
             const bridge = $(htmlToElement('<div class="la-hud-popup-bridge"></div>')).css({
@@ -157,8 +265,10 @@ export function showPopupAt(popup, anchorEl, { cancelCollapse, scheduleCollapse 
                 zIndex: 9998,
                 pointerEvents: 'all',
             });
+
             bridge.on('mouseenter', cancelCollapse).on('mouseleave', scheduleCollapse);
             bridge.appendTo(document.body);
+
             const observer = new MutationObserver(() =>
             {
                 if (!document.contains(popup[0]))
@@ -166,6 +276,7 @@ export function showPopupAt(popup, anchorEl, { cancelCollapse, scheduleCollapse 
                     bridge.remove(); observer.disconnect();
                 }
             });
+
             observer.observe(document.body, { childList: true });
         }
     }
@@ -185,22 +296,30 @@ export function showPopupAt(popup, anchorEl, { cancelCollapse, scheduleCollapse 
  *   item?:         any,
  *   row:           any,
  *   showPopupAt:   (popup: any, row: any) => void,
- *   postRender?:   (popup: any) => void
+ *   postRender?:   (popup: any) => void,
+ *   pipsItem?:     any,
+ *   pipsArgs?:     any,
+ *   pips?:         boolean,
+ *   skipExtras?:   boolean,
+ *   v3Scope?:      any
  * }} opts
  */
 export async function toggleDetailPopup({ cssClass, dataKey, dataValue, title, subtitle, bodyHtml, theme = 'default', item = null, row, showPopupAt: showAt, postRender = null, pipsItem, pipsArgs, pips = true, skipExtras = false, v3Scope = undefined })
 {
     const selector = '.' + cssClass.trim().split(/\s+/).pop(); // last class is the specific one
     const existing = $(selector);
+
     if (existing.length && existing.data(dataKey) === dataValue)
     {
         existing.remove();
         return;
     }
+
     existing.remove();
     const chipScope = v3Scope === undefined ? (skipExtras ? false : null) : v3Scope;
     const chipRows = chipScope === false ? [] : v3RowsFor(item, chipScope);
     let composedBody = chipScope === false ? bodyHtml : withV3Chips(bodyHtml, item, chipScope, chipRows);
+
     if (item && !skipExtras)
     {
         try
@@ -214,6 +333,7 @@ export async function toggleDetailPopup({ cssClass, dataKey, dataValue, title, s
             console.warn('lancer-automations | render item extras failed:', err);
         }
     }
+
     const stateBannerHtml = () =>
     {
         if (item?.system?.destroyed)
@@ -224,10 +344,13 @@ export async function toggleDetailPopup({ cssClass, dataKey, dataValue, title, s
             return `<p class="la-popup-state-banner" style="margin:0 0 6px 0;padding:4px 6px;background:rgba(90,68,34,0.3);border-left:3px solid #a07744;font-size:0.85em;color:#e0c8a0;"><strong>Disabled</strong></p>`;
         return '';
     };
+
     composedBody = stateBannerHtml() + (composedBody || '');
     if (!composedBody)
         return;
+
     const popup = laDetailPopup(cssClass, title, subtitle, composedBody, theme);
+
     const refreshStateBanner = () =>
     {
         popup.find('.la-popup-state-banner').remove();
@@ -235,10 +358,13 @@ export async function toggleDetailPopup({ cssClass, dataKey, dataValue, title, s
         if (html)
             popup.children().last().prepend(html);
     };
+
     const closeBtn = popup.find('.la-detail-close');
     const headerBtns = [];
+
     if (item && hasAutomation(item))
         headerBtns.push($(htmlToElement(`<span style="color:#e8a020;font-size:0.9em;cursor:default;" title="Has automation">⚡</span>`)));
+
     // Disable/Destroy toggles for items that support them
     if (item?.system && item.update)
     {
@@ -257,6 +383,7 @@ export async function toggleDetailPopup({ cssClass, dataKey, dataValue, title, s
             });
             headerBtns.push(disableBtn);
         }
+
         if (canMarkCascading(item))
         {
             const cascadeTitle = (/** @type {boolean} */ cascading) => localize(cascading ? 'LA.lancerModif.markNotCascading' : 'LA.lancerModif.markCascading');
@@ -273,6 +400,7 @@ export async function toggleDetailPopup({ cssClass, dataKey, dataValue, title, s
             });
             headerBtns.push(cascadeBtn);
         }
+
         if ('destroyed' in item.system)
         {
             const isDestroyed = !!item.system.destroyed;
@@ -289,7 +417,9 @@ export async function toggleDetailPopup({ cssClass, dataKey, dataValue, title, s
             headerBtns.push(destroyBtn);
         }
     }
+
     const runAction = row?.data?.('laRunAction');
+
     if (runAction && row.data('laFreeUse'))
     {
         const freeBtn = $(htmlToElement(`<span class="la-detail-attack la-detail-free" title="${localize('LA.tokenHud.useFree')}"><i class="cci cci-free-action"></i></span>`));
@@ -301,13 +431,16 @@ export async function toggleDetailPopup({ cssClass, dataKey, dataValue, title, s
         });
         headerBtns.push(freeBtn);
     }
+
     if (headerBtns.length)
     {
         closeBtn.wrap('<div style="display:flex;align-items:center;gap:4px;"></div>');
         for (const btn of headerBtns)
             closeBtn.before(btn);
     }
+
     popup.data(dataKey, dataValue);
+
     if (item)
     {
         try
@@ -319,6 +452,7 @@ export async function toggleDetailPopup({ cssClass, dataKey, dataValue, title, s
             console.warn('lancer-automations | bind consume toggles failed:', err);
         }
     }
+
     if (pips !== false)
     {
         try
@@ -330,6 +464,7 @@ export async function toggleDetailPopup({ cssClass, dataKey, dataValue, title, s
             console.warn('lancer-automations | append item pips failed:', err);
         }
     }
+
     if (postRender)
         postRender(popup);
     showAt(popup, row);
