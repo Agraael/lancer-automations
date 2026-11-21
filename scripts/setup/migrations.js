@@ -510,6 +510,8 @@ const MIGRATIONS = [
     },
 ];
 
+export const MIGRATION_SETTING_KEYS = [SETTING_INSTALL_STATE, ...MIGRATIONS.map(migration => migration.id)];
+
 Hooks.once('init', () =>
 {
     for (const m of MIGRATIONS)

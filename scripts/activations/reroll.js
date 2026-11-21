@@ -30,6 +30,33 @@ const _restoreSimpleRoll = (state, snap) =>
         state.data.result = { roll: snap.roll };
 };
 
+const _snapshotTableRoll = (state) => ({
+    data: { ...state.data, result: state.data?.result ? { ...state.data.result } : state.data?.result }
+});
+
+const _restoreTableRoll = (state, snap) =>
+{
+    state.data = snap.data;
+};
+
+const _STRUCTURE_PATHS = ['system.structure.value', 'system.hp.value'];
+
+const _structureValues = (actor) => Object.fromEntries(_STRUCTURE_PATHS.map(path => [path, foundry.utils.getProperty(actor, path)]));
+
+async function _setStructureValues(actor, values)
+{
+    if (!actor || !values)
+        return;
+
+    const [structurePath, hpPath] = _STRUCTURE_PATHS;
+    const order = values[structurePath] === 0 ? _STRUCTURE_PATHS : [hpPath, structurePath];
+    for (const path of order)
+    {
+        if (foundry.utils.getProperty(actor, path) !== values[path])
+            await actor.update({ [path]: values[path] });
+    }
+}
+
 const ROLL_TYPES = {
     attackRoll: {
         flows: ['BasicAttackFlow', 'WeaponAttackFlow'],
@@ -175,11 +202,18 @@ const ROLL_TYPES = {
         flows: ['StructureFlow'],
         insertBefore: 'noStructureRemaining',
         rerollStepName: 'rollStructureTable',
+        captureBefore: 'rollStructureTable',
+        capture: (state) => _structureValues(state.actor),
         getRoll: (state) => state.data?.result?.roll ?? null,
         getSuccess: () => undefined,
         getTargets: () => undefined,
-        snapshot: _snapshotSimpleRoll,
-        restore: _restoreSimpleRoll,
+        snapshot: (state) => ({ ..._snapshotTableRoll(state), actor: _structureValues(state.actor) }),
+        restore: async (state, snap) =>
+        {
+            _restoreTableRoll(state, snap);
+            await _setStructureValues(state.actor, snap.actor);
+        },
+        beforeReroll: (state) => _setStructureValues(state.actor, state.la_rerollBase),
         applyChangeRoll: (state, newTotal) =>
         {
             const roll = state.data?.result?.roll;
@@ -194,8 +228,8 @@ const ROLL_TYPES = {
         getRoll: (state) => state.data?.result?.roll ?? null,
         getSuccess: () => undefined,
         getTargets: () => undefined,
-        snapshot: _snapshotSimpleRoll,
-        restore: _restoreSimpleRoll,
+        snapshot: _snapshotTableRoll,
+        restore: _restoreTableRoll,
         applyChangeRoll: (state, newTotal) =>
         {
             const roll = state.data?.result?.roll;
@@ -466,7 +500,7 @@ async function _runRerollWithSubtype(def, state, subtype, chooseHandler)
     const originalTotal = def.getRoll(state)?.total ?? null;
 
     if (def.beforeReroll)
-        def.beforeReroll(state);
+        await def.beforeReroll(state);
 
     const primaryStep = game.lancer?.flowSteps?.get(def.rerollStepName);
     if (typeof primaryStep !== 'function')
@@ -494,7 +528,7 @@ async function _runRerollWithSubtype(def, state, subtype, chooseHandler)
     // 'retry' default: keep alt, no restore.
 
     if (keptOriginal && snap && def.restore)
-        def.restore(state, snap);
+        await def.restore(state, snap);
 
     return { originalTotal, altTotal, keptOriginal };
 }
@@ -622,5 +656,17 @@ export function registerRerollFlowSteps(flowSteps, flows)
         flowSteps.set(stepName, makeOnRollStep(rollType));
         for (const flowName of def.flows)
             flows.get(flowName)?.insertStepBefore(def.insertBefore, stepName);
+
+        if (!def.captureBefore)
+            continue;
+
+        const captureName = `lancer-automations:onRollBase:${rollType}`;
+        flowSteps.set(captureName, (state) =>
+        {
+            state.la_rerollBase = def.capture(state);
+            return true;
+        });
+        for (const flowName of def.flows)
+            flows.get(flowName)?.insertStepBefore(def.captureBefore, captureName);
     }
 }

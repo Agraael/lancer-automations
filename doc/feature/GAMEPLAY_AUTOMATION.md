@@ -164,12 +164,15 @@ For units that arrive partway through a fight. GM only.
 
 Open the **DROP ON MAP** bar from the combat carousel, **TAH > Utility > Gameplay > Reinforcement**, or the Reinforcement macro. Pick when the units land, a **Round** or a world **Clock** (an existing one, or a **New clock** that can tick at each round change), then drop actors or tokens on the map. Nothing is placed on the scene until they land.
 
+The bar's second row shows the tokens selected on the map. **Add** takes them off the map and plans them as they are, damage, statuses and items included.
+
 <img align="right" src="../img/ga-reinforcement-marker.png" width="45%"/>
 
-Each planned unit gets a marker with a countdown. Drag it to move the landing spot. Right-click it to:
+Each planned unit gets a marker with a countdown. Drag it to move the landing spot, double-click it to open its sheet. Right-click it to:
 
 - land it one round sooner or later
 - **Edit token…** for this unit only. The prototype token and the actor stay as they are.
+- **Edit sheet…** opens its sheet. On an unlinked token the changes stay on this unit only. A linked token opens its actor.
 - set what players see: **Secret** (nothing), **Exact** (the marker, not the unit) or **Full** (the unit)
 - show or hide its team or disposition from players
 - **Land now** or **Remove**

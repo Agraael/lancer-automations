@@ -8,13 +8,12 @@ export const DEPARTURE_FLAG = 'departure';
 const SLIDE_MS = 1300;
 const DEPART_MARGIN_MS = 200;
 const FLAG_CLEAR_MS = 5000;
-const TOKEN_SORT_LAYER = 700;
 
 const pending = new Set();
 const landing = new Set();
 const departing = new Set();
 
-/** @typedef {PIXI.Sprite & { elevation: number, sortLayer: number, sort: number }} ArrivalSprite */
+let slideLayer = null;
 
 export function nearestEdge(rect, point)
 {
@@ -44,6 +43,12 @@ function edgePoint(token)
     }
 }
 
+function meshEdgePoint(token)
+{
+    const edge = edgePoint(token);
+    return { x: edge.x + token.mesh.x - token.center.x, y: edge.y + token.mesh.y - token.center.y };
+}
+
 function setShown(token, shown)
 {
     token.renderable = shown;
@@ -51,18 +56,28 @@ function setShown(token, shown)
         token.mesh.renderable = shown;
 }
 
+function slideContainer()
+{
+    if (!slideLayer || slideLayer.destroyed || slideLayer.parent !== canvas.interface)
+    {
+        slideLayer = new PIXI.Container();
+        canvas.interface.addChild(slideLayer);
+    }
+
+    return slideLayer;
+}
+
 function slideSprite(token, from, to, arriving)
 {
     const mesh = token.mesh;
-    const sprite = /** @type {ArrivalSprite} */ (new PIXI.Sprite(mesh.texture));
-    sprite.anchor.set(0.5);
+    const sprite = new PIXI.Sprite(mesh.texture);
+    sprite.anchor.copyFrom(mesh.anchor);
     sprite.scale.copyFrom(mesh.scale);
-    sprite.elevation = token.document.elevation ?? 0;
-    sprite.sortLayer = TOKEN_SORT_LAYER;
-    sprite.sort = token.document.sort ?? 0;
+    sprite.skew.copyFrom(mesh.skew);
+    sprite.rotation = mesh.rotation;
     sprite.alpha = arriving ? 0 : 1;
     sprite.position.set(from.x, from.y);
-    canvas.primary.addChild(sprite);
+    slideContainer().addChild(sprite);
 
     const began = performance.now();
 
@@ -100,17 +115,24 @@ async function playEdgeArrival(token)
 
     landing.add(token.id);
     setShown(token, false);
-    const sprite = await slideSprite(token, edgePoint(token), { x: mesh.x, y: mesh.y }, true);
+    let sprite = null;
 
-    landing.delete(token.id);
-    if (!token.destroyed)
+    try
     {
-        setShown(token, true);
-        token.renderFlags.set({ refreshVisibility: true });
-        token.applyRenderFlags();
+        sprite = await slideSprite(token, meshEdgePoint(token), { x: mesh.x, y: mesh.y }, true);
     }
-    if (!sprite.destroyed)
-        sprite.destroy();
+    finally
+    {
+        landing.delete(token.id);
+        if (sprite && !sprite.destroyed)
+            sprite.destroy();
+        if (!token.destroyed)
+        {
+            setShown(token, true);
+            token.renderFlags.set({ refreshVisibility: true });
+            token.applyRenderFlags();
+        }
+    }
 }
 
 async function playEdgeDeparture(token)
@@ -123,9 +145,17 @@ async function playEdgeDeparture(token)
     if (!visible)
         return;
 
-    const sprite = await slideSprite(token, { x: mesh.x, y: mesh.y }, edgePoint(token), false);
-    if (!sprite.destroyed)
-        sprite.destroy();
+    let sprite = null;
+
+    try
+    {
+        sprite = await slideSprite(token, { x: mesh.x, y: mesh.y }, meshEdgePoint(token), false);
+    }
+    finally
+    {
+        if (sprite && !sprite.destroyed)
+            sprite.destroy();
+    }
 }
 
 export async function departToEdge(tokenDocs)

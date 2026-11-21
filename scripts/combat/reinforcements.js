@@ -172,6 +172,18 @@ async function entryFromActor(actor, point, tokenData, scene, snap)
     return { actorUuid: source.uuid, tokenData: data, sceneId: scene.id };
 }
 
+function planEntry(base, { round, clock, visibility, teamHidden }, combat)
+{
+    return {
+        id: foundry.utils.randomID(),
+        ...base,
+        round: round ?? (combat.round ?? 0) + 1,
+        clock: clock || null,
+        visibility: VISIBILITIES.includes(visibility) ? visibility : 'exact',
+        teamHidden: !!teamHidden,
+    };
+}
+
 export async function scheduleReinforcement({ actor = null, token = null, x = 0, y = 0, elevation = 0, round = null, clock = null, visibility = 'exact', teamHidden = false, tokenData = {}, snap = true, combat = game.combat, scene = canvas.scene } = {})
 {
     if (!gmOnly())
@@ -187,20 +199,42 @@ export async function scheduleReinforcement({ actor = null, token = null, x = 0,
     if (!base?.actorUuid)
         return null;
 
-    const entry = {
-        id: foundry.utils.randomID(),
-        ...base,
-        round: round ?? (combat.round ?? 0) + 1,
-        clock: clock || null,
-        visibility: VISIBILITIES.includes(visibility) ? visibility : 'exact',
-        teamHidden: !!teamHidden,
-    };
+    const entry = planEntry(base, { round, clock, visibility, teamHidden }, combat);
 
     await savePlan(combat, [...getReinforcements(combat), entry]);
     if (token)
         await (token.document ?? token).delete();
     pushUndo(combat, [[entry.id, null]]);
     return entry.id;
+}
+
+export async function scheduleTokens(tokens, { round = null, clock = null, visibility = 'exact', teamHidden = false, combat = game.combat } = {})
+{
+    if (!gmOnly() || !tokens.length)
+        return [];
+
+    if (!combat)
+    {
+        ui.notifications.warn(localize('LA.notify.youMustBeInCombatToUse'));
+        return [];
+    }
+
+    const docs = tokens.map(token => token.document ?? token).filter(doc => doc?.parent);
+    const planned = docs.map(doc => ({ doc, entry: planEntry(entryFromToken(doc), { round, clock, visibility, teamHidden }, combat) }))
+        .filter(({ entry }) => entry.actorUuid);
+    if (!planned.length)
+        return [];
+
+    await savePlan(combat, [...getReinforcements(combat), ...planned.map(({ entry }) => entry)]);
+
+    const byScene = new Map();
+    for (const { doc } of planned)
+        byScene.set(doc.parent, [...(byScene.get(doc.parent) ?? []), doc.id]);
+    for (const [scene, ids] of byScene)
+        await scene.deleteEmbeddedDocuments('Token', ids);
+
+    pushUndo(combat, planned.map(({ entry }) => [entry.id, null]));
+    return planned.map(({ entry }) => entry.id);
 }
 
 export async function addReinforcements(entries, combat = game.combat)
@@ -243,7 +277,7 @@ export async function updateReinforcement(id, changes, combat = game.combat)
     await updateReinforcements([{ id, changes }], combat);
 }
 
-async function saveTokenData(byId, combat)
+async function saveTokenData(byId, combat, undo = true)
 {
     const before = planBefore(combat, [...byId.keys()]);
     await savePlan(combat, getReinforcements(combat).map((entry) =>
@@ -254,7 +288,8 @@ async function saveTokenData(byId, combat)
         delete data._id;
         return { ...entry, tokenData: data, edited: true };
     }));
-    pushUndo(combat, before);
+    if (undo)
+        pushUndo(combat, before);
 }
 
 export async function editReinforcementTokens(ids, changes, combat = game.combat)
@@ -278,11 +313,11 @@ export async function editReinforcementToken(id, changes, combat = game.combat)
     await editReinforcementTokens([id], changes, combat);
 }
 
-export async function replaceReinforcementToken(id, tokenData, combat = game.combat)
+export async function replaceReinforcementToken(id, tokenData, combat = game.combat, { undo = true } = {})
 {
     if (!gmOnly() || !combat || !getReinforcements(combat).some(entry => entry.id === id))
         return;
-    await saveTokenData(new Map([[id, tokenData]]), combat);
+    await saveTokenData(new Map([[id, tokenData]]), combat, undo);
 }
 
 export function isPlanChange(changed)

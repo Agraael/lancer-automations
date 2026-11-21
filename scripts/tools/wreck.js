@@ -33,7 +33,8 @@ Hooks.on('lancer.preFlow.StructureFlow', (flow) =>
         resolve = resolver;
     });
 
-    _activeStructureFlows.set(uuid, { promise, resolve });
+    _activeStructureFlows.get(uuid)?.resolve();
+    _activeStructureFlows.set(uuid, { promise, resolve, flow });
 });
 
 Hooks.on('lancer.postFlow.StructureFlow', (flow) =>
@@ -44,12 +45,21 @@ Hooks.on('lancer.postFlow.StructureFlow', (flow) =>
 
     const entry = _activeStructureFlows.get(uuid);
 
-    if (entry)
+    if (entry?.flow === flow)
     {
         entry.resolve();
         _activeStructureFlows.delete(uuid);
     }
 });
+
+const STRUCTURE_FLOW_MAX_WAIT_MS = 300000;
+
+async function waitForStructureFlowsToEnd(actorUuid)
+{
+    const deadline = Date.now() + STRUCTURE_FLOW_MAX_WAIT_MS;
+    while (_activeStructureFlows.has(actorUuid) && Date.now() < deadline)
+        await Promise.race([_activeStructureFlows.get(actorUuid).promise, new Promise(resolve => setTimeout(resolve, deadline - Date.now()))]);
+}
 
 async function waitForStructureFlow(actorUuid, timeoutMs = 3000)
 {
@@ -520,8 +530,22 @@ export async function preLoadImageForAll(src, push = false)
 
 // Core wreck logic
 
+const _deferredStructureUpdates = new Set();
+
 export async function updateStructure(token)
 {
+    const uuid = token.actor?.uuid;
+    if (uuid && _activeStructureFlows.has(uuid))
+    {
+        if (_deferredStructureUpdates.has(uuid))
+            return '';
+        _deferredStructureUpdates.add(uuid);
+        await waitForStructureFlowsToEnd(uuid);
+        _deferredStructureUpdates.delete(uuid);
+        if (token.destroyed || !token.actor)
+            return '';
+    }
+
     let statusMessage = '';
     const structure = token.actor.system.structure.value;
 
@@ -711,6 +735,7 @@ async function wreckIt(token)
                                 displayBars: CONST.TOKEN_DISPLAY_MODES.NONE,
                                 displayName: CONST.TOKEN_DISPLAY_MODES.NONE,
                                 delta: {
+                                    ownership: foundry.utils.duplicate(token.actor?.ownership ?? null),
                                     system: {
                                         stats: { hp: wreckHP, size: gameplaySize },
                                         hp: { value: wreckHP, max: wreckHP, min: 0 },

@@ -373,7 +373,7 @@ export function openWorldClocksDialog()
         tabs: [{ kind: 'clocks', label: localize('LA.clocks.tab.clocks'), enabled: true }],
         note: '',
         width: 640,
-        addFieldsHtml: `<select id="la-clock-tone" style="flex:0 0 auto;width:auto;">${toneOptionsHtml('progress')}</select><select id="la-clock-audience" style="flex:0 0 130px;width:130px;">${audienceOptionsHtml()}</select>`,
+        addFieldsHtml: `<select id="la-clock-tone" style="flex:0 0 auto;width:auto;">${toneOptionsHtml('progress')}</select><select id="la-clock-audience" style="flex:0 0 130px;width:130px;">${audienceOptionsHtml({ visibility: 'gm' })}</select>`,
         rowFieldsHtml: clock => `<select class="la-clock-row-field" data-field="tone" style="flex:0 0 76px;width:76px;${rowSelect}">${toneOptionsHtml(clock.tone)}</select><select class="la-clock-row-field" data-field="audience" style="flex:0 0 110px;width:110px;${rowSelect}">${audienceOptionsHtml(clock)}</select>`,
         setRowField: (index, field, value) => (field === 'tone' ? setWorldClockTone(lidAt(index), value) : patchClock(lidAt(index), audienceOfChoice(value))),
         list: () => getWorldClocks(),

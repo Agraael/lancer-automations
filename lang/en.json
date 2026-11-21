@@ -2498,6 +2498,7 @@
     "reinforcement": {
       "arriving": "Arriving",
       "bar": {
+        "add": "Add",
         "clock": "Clock",
         "color": "Color",
         "inRounds": "in {count}",
@@ -2506,6 +2507,7 @@
         "pickClock": "Pick or create a clock first.",
         "round": "Round",
         "segments": "Segments",
+        "selectHint": "Select tokens on the map",
         "show": "Show",
         "tick": "Tick it at each round change",
         "title": "DROP ON MAP"
@@ -2515,6 +2517,7 @@
       "delayAll": "Delay all",
       "due": "{count} due. Untick a unit to delay it one round.",
       "dueBoth": "{arriving} arriving, {leaving} leaving. Untick a unit to delay it or keep it here.",
+      "editSheet": "Edit sheet…",
       "editToken": "Edit token…",
       "edited": "Edited copy",
       "gmOnly": "Only the GM can plan reinforcements.",
@@ -5808,6 +5811,7 @@
         "reinforcementArriveIs": "Land on a round, picked with − and +, or switch to <b>Clock</b>: they land when that world clock fills. <b>New clock</b> makes one, and it can tick by itself each round.",
         "reinforcementVisibilityIs": "<b>Secret</b>: players see nothing. <b>Exact</b>: they see the marker. <b>Full</b>: the marker and the art.",
         "reinforcementTeamIs": "Show or hide the unit's team, or its disposition, from players.",
+        "reinforcementSelectedIs": "Tokens selected on the map show here. <b>Add</b> takes them off the map and plans them with the round, visibility and team above, kept exactly as they are.",
         "reinforcementMarkerIs": "A reinforcement is a unit the GM planned to arrive later. Its marker shows where it lands, and the number counts the rounds left. The GM can drag it, right-click it, and select it like a token.",
         "leaveBattlefieldIntro": "A unit can leave the fight, to retreat or escape. It goes by the nearest map edge at the start of the next round and leaves the encounter. The Battle Log marks it as left.",
         "leaveBattlefieldIs": "Use <b>Leave Battlefield</b> in the TAH's <b>Utility &gt; Gameplay</b>, or right-click the unit's carousel card. The Leaving status and closing rings show it until the next round starts. Use it again to stay.",
@@ -6100,6 +6104,7 @@
         "reinforcementArrive": "When They Land",
         "reinforcementVisibility": "What Players See",
         "reinforcementTeam": "Team",
+        "reinforcementSelected": "Add Selected Tokens",
         "reinforcementMarker": "Reinforcement Marker",
         "leaveBattlefield": "Leave Battlefield",
         "leaveMark": "Mark a Unit",

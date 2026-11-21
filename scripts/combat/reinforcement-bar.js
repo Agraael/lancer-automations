@@ -2,7 +2,7 @@ import { MODULE_ID } from '../tools/constants.js';
 import { escapeHtml, localize, localizeFormat } from '../tools/string-utils.js';
 import { htmlToElement } from '../tools/dom-utils.js';
 import { WORLD_CLOCK_TONES, WorldClocksAPI, getWorldClocks } from '../tools/world-clocks.js';
-import { VISIBILITIES, VISIBILITY_ICONS, scheduleReinforcement, teamHiddenIcon, teamLabelKey, teamShownIcon, trackReinforcementClock } from './reinforcements.js';
+import { VISIBILITIES, VISIBILITY_ICONS, scheduleReinforcement, scheduleTokens, teamHiddenIcon, teamLabelKey, teamShownIcon, trackReinforcementClock } from './reinforcements.js';
 import { showDropPreview, clearDropPreview } from './reinforcement-markers.js';
 
 const BAR_ID = 'la-reinforcement-bar';
@@ -10,6 +10,7 @@ const CAROUSEL_BUTTON = '[data-combat-action="reinforce"]';
 const ARRIVE_MODES = ['round', 'clock'];
 const CLOCK_SEGMENTS = [4, 6, 8];
 const CLOCK_SHOWS = ['all', 'gm', 'hidden'];
+const SELECTED_FACES = 6;
 
 /**
  * @typedef {object} ClockForm
@@ -27,6 +28,8 @@ const lastChoice = { visibility: 'exact', teamHidden: false };
 
 /** @type {{ uuid: string, doc: TokenDocument|null, texture: PIXI.Texture|null }|null} */
 let dragged = null;
+
+let selectedFrame = 0;
 
 export const isReinforcementBarOpen = () => !!bar;
 
@@ -77,7 +80,23 @@ function clockFormHtml(state)
         + '</div>';
 }
 
-function barHtml(state, combat)
+function selectedTokens()
+{
+    return (canvas.tokens?.controlled ?? []).filter(token => token.actor && token.document?.parent);
+}
+
+function selectedRowHtml(tokens)
+{
+    const add = `<button type="button" data-action="addSelected"${tokens.length ? '' : ' disabled'}><i class="fas fa-plus"></i> ${localize('LA.reinforcement.bar.add')}</button>`;
+    if (!tokens.length)
+        return `<div class="la-rf-bar-selected"><em>${localize('LA.reinforcement.bar.selectHint')}</em>${add}</div>`;
+
+    const faces = tokens.slice(0, SELECTED_FACES).map(token => `<img src="${escapeHtml(token.document.texture.src ?? '')}" alt="" data-tooltip="${escapeHtml(token.name)}">`).join('');
+    const more = tokens.length > SELECTED_FACES ? `<em>+${tokens.length - SELECTED_FACES}</em>` : '';
+    return `<div class="la-rf-bar-selected"><span class="la-rf-bar-faces">${faces}</span>${more}${add}</div>`;
+}
+
+function barHtml(state, combat, selected = [])
 {
     const visibility = state.visibility;
     const arrive = '<span class="la-rf-bar-arrive">'
@@ -95,6 +114,7 @@ function barHtml(state, combat)
         + `<button type="button" data-action="team" aria-pressed="${!state.teamHidden}">${state.teamHidden ? teamHiddenIcon() : teamShownIcon()} ${localize(teamLabelKey(state.teamHidden ? 'hidden' : 'shown'))}</button>`
         + `<button type="button" class="la-rf-bar-tour" data-action="tour" data-tooltip="${localize('LA.configUi.startTour')}"><i class="fas fa-circle-question"></i></button>`
         + `<button type="button" class="la-rf-bar-close" data-action="close" aria-label="${localize('LA.common.close')}"><i class="fas fa-xmark"></i></button>`
+        + selectedRowHtml(selected)
         + (state.form ? clockFormHtml(state) : '')
         + '</div>';
 }
@@ -145,7 +165,7 @@ function renderBar()
     if (bar.mode === 'clock' && !barClock())
         bar.clock = openClocks()[0]?.lid ?? null;
 
-    const element = htmlToElement(barHtml(bar, combat));
+    const element = htmlToElement(barHtml(bar, combat, selectedTokens()));
     element.addEventListener('click', onBarClick);
     element.addEventListener('change', onBarChange);
 
@@ -154,6 +174,34 @@ function renderBar()
     else
         mountBar(element);
     bar.element = element;
+}
+
+function refreshSelectedRow()
+{
+    cancelAnimationFrame(selectedFrame);
+    selectedFrame = requestAnimationFrame(() =>
+    {
+        const row = bar?.element?.querySelector(':scope > .la-rf-bar-selected');
+        if (row)
+            row.replaceWith(htmlToElement(selectedRowHtml(selectedTokens())));
+    });
+}
+
+async function addSelected()
+{
+    const combat = barCombat();
+    const tokens = selectedTokens();
+    if (!combat || !tokens.length)
+        return;
+
+    const clock = barClock();
+    if (bar.mode === 'clock' && !clock)
+    {
+        ui.notifications.warn(localize('LA.reinforcement.bar.pickClock'));
+        return;
+    }
+
+    await scheduleTokens(tokens, { round: bar.round, clock: clock?.lid ?? null, visibility: bar.visibility, teamHidden: bar.teamHidden, combat });
 }
 
 function stopPreview()
@@ -233,6 +281,12 @@ function onBarClick(event)
     if (action === 'createClock')
     {
         createClock();
+        return;
+    }
+
+    if (action === 'addSelected')
+    {
+        addSelected();
         return;
     }
 
@@ -368,6 +422,12 @@ export function initReinforcementBar()
     {
         if (bar?.mode === 'clock')
             renderBar();
+    });
+
+    Hooks.on('controlToken', () =>
+    {
+        if (bar)
+            refreshSelectedRow();
     });
 
     document.addEventListener('dragstart', onDragStart);

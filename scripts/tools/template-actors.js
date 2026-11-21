@@ -71,6 +71,7 @@ const TEMPLATE_DEFINITIONS = {
             name: "Template Wreck",
             type: 'deployable',
             img: `modules/${MODULE_ID}/icons/tombstone.svg`,
+            ownership: { default: 0 },
             prototypeToken: {
                 actorLink: false,
                 displayBars: CONST.TOKEN_DISPLAY_MODES.NONE,
@@ -96,7 +97,7 @@ const TEMPLATE_DEFINITIONS = {
     }
 };
 
-async function getTemplateFolder()
+export async function getTemplateFolder()
 {
     const folder = game.folders.find(candidate => candidate.type === 'Actor' && getLAFlag(candidate, 'templateFolder'));
     if (folder || !game.user.isGM)
@@ -139,7 +140,8 @@ export async function getOrCreateTemplateActor(key)
     if (!actor)
     {
         const folder = await getTemplateFolder();
-        return Actor.create(/** @type {any} */ ({ ...withTemplateFlags(data, key, definition.version), folder: folder?.id ?? null }));
+        const ownership = game.user.isGM ? data.ownership : { ...data.ownership, [game.user.id]: data.ownership.default };
+        return Actor.create(/** @type {any} */ ({ ...withTemplateFlags(data, key, definition.version), ownership, folder: folder?.id ?? null }));
     }
 
     if (!game.user.isGM)
@@ -202,6 +204,16 @@ export async function syncHardCoverFlags()
 
     await actor.update(Object.fromEntries(changed.map(([key, value]) => [`prototypeToken.flags.${MODULE_ID}.${key}`, value])));
 }
+
+Hooks.once('setup', () =>
+{
+    if (game.user.isGM)
+        return;
+    const actors = /** @type {any} */ (game.actors);
+    const visibleContents = actors._getVisibleTreeContents.bind(actors);
+    actors._getVisibleTreeContents = (...args) => visibleContents(...args).filter(actor => !isEnvironmentActor(actor));
+    actors.initializeTree();
+});
 
 Hooks.once('ready', async () =>
 {

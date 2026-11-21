@@ -5971,3 +5971,45 @@ body.crlngn-ui.crlngn-scene-nav #ui-top > #la-reinforcement-bar:first-child {
     justify-content: center;
     height: 24px;
 }
+
+#la-reinforcement-bar .la-rf-bar-selected {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: -1px;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 4px 8px;
+    border: 1px solid #302831;
+    border-radius: 4px;
+    background: rgba(11, 10, 19, 0.9);
+    box-shadow: 0 4px 18px rgba(0, 0, 0, 0.6);
+    white-space: nowrap;
+}
+
+#la-reinforcement-bar .la-rf-bar-faces {
+    display: inline-flex;
+    gap: 3px;
+}
+
+#la-reinforcement-bar .la-rf-bar-faces img {
+    width: 20px;
+    height: 20px;
+    border: 1px solid #444;
+    border-radius: 3px;
+    background: #1d1b24;
+    object-fit: cover;
+}
+
+#la-reinforcement-bar .la-rf-bar-selected [data-action="addSelected"] {
+    border-color: var(--la-rf-signal);
+}
+
+#la-reinforcement-bar .la-rf-bar-selected [data-action="addSelected"]:not(:disabled) {
+    background: var(--la-rf-signal);
+    color: #111;
+}
+
+#la-reinforcement-bar .la-rf-bar-selected ~ .la-rf-clock-form {
+    top: calc(100% + 38px);
+}

@@ -13,6 +13,21 @@ export { AutomationConfig };
 
 const scriptCache = new Map();
 
+const WORLD_STATE_SETTINGS = new Set([
+    'worldClocks', 'clocks.hiddenForMe', 'deployableArtPools', 'carouselEvents',
+    'tah.narrativeLinkedActorUuid', 'tah.narrativeRosterUuids', 'tah.macroList',
+    'dataInstallId', 'dataConsent', 'dataLastPing',
+    'seenNewsIds', 'respondedPollIds', 'lastNotifiedVersion', 'qolAdvisoryShown', 'compatWarningsShown',
+    'tourCompleted', 'tourResumeAfterReload', 'seenSettingKeys', 'newSettingKeys', 'fcsSoftSeeded',
+    'reviewedDefaultKeys', 'systemHotbarHidden', 'birthdayWishYear', 'birthdayDeclinedYear', 'birthdayBalloonState',
+]);
+
+async function getWorldStateSettings()
+{
+    const { MIGRATION_SETTING_KEYS } = await import('../setup/migrations.js');
+    return new Set([...WORLD_STATE_SETTINGS, ...MIGRATION_SETTING_KEYS]);
+}
+
 export function clearScriptCache()
 {
     console.log("lancer-automations | Clearing script compilation cache.");
@@ -470,6 +485,16 @@ export class AutomationManager
         return value;
     }
 
+    static async dropWorldStateSettings(data)
+    {
+        const worldState = await getWorldStateSettings();
+        for (const key of Object.keys(data?.settings ?? {}))
+        {
+            if (worldState.has(key))
+                delete data.settings[key];
+        }
+    }
+
     static async exportAutomations()
     {
         const itemReactions = AutomationManager.stripWorkshopIds(getModuleSetting(AutomationManager.SETTING_AUTOMATIONS) || {});
@@ -483,6 +508,7 @@ export class AutomationManager
             AutomationManager.SETTING_GENERAL_AUTOMATIONS,
             AutomationManager.SETTING_STARTUP_SCRIPTS,
             AutomationManager.SETTING_FOLDERS,
+            ...await getWorldStateSettings(),
         ]);
 
         const settings = {};

@@ -55,6 +55,7 @@ import { initReinforcements, scheduleReinforcement, getReinforcements, removeRei
 import { initReinforcementMarkers } from "./combat/reinforcement-markers.js";
 import { initReinforcementSelect } from "./combat/reinforcement-select.js";
 import { initReinforcementBar, toggleReinforcementBar } from "./combat/reinforcement-bar.js";
+import { initReinforcementSheets } from "./combat/reinforcement-sheet.js";
 import { initGrappleTether } from "./combat/grapple-tether.js";
 import { initLeaveBattlefield, toggleLeaving } from "./combat/leave-battlefield.js";
 import { initLeavingRings } from "./fx/leaving-rings.js";
@@ -850,6 +851,49 @@ Hooks.once('ready', async () =>
             console.warn('lancer-automations | Could not wrap Combat._manageTurnEvents:', e);
         }
 
+        try
+        {
+            libWrapper.register(MODULE_ID, 'foundry.documents.Combat._onDeleteTokens', function (wrapped, tokens, operation)
+            {
+                if (operation.pack)
+                    return;
+
+                const sceneId = operation.parent.id;
+                const deletedIds = new Set(tokens.map(token => token.id));
+                for (const combat of game.combats)
+                {
+                    if (combat.scene && combat.scene.id !== sceneId)
+                        continue;
+
+                    const updates = [];
+                    const deletions = [];
+                    for (const combatant of combat.combatants)
+                    {
+                        if (combatant.sceneId !== sceneId || !deletedIds.has(combatant.tokenId))
+                            continue;
+
+                        const replacement = operation.replacements?.[combatant.tokenId];
+                        if (replacement)
+                        {
+                            const { primaryId, id } = foundry.utils.parseUuid(replacement);
+                            updates.push({ _id: combatant.id, sceneId: primaryId, tokenId: id });
+                        }
+                        else
+                            deletions.push(combatant.id);
+                    }
+
+                    if (updates.length)
+                        combat.updateEmbeddedDocuments('Combatant', updates);
+                    if (deletions.length)
+                        combat.deleteEmbeddedDocuments('Combatant', deletions);
+                }
+            }, 'MIXED');
+        }
+        catch (e)
+        {
+            console.warn('lancer-automations | Could not wrap Combat._onDeleteTokens:', e);
+        }
+
         // floor the TokenHUD at one grid cell so sub-1x1 tokens don't cram the buttons
         try
         {
@@ -1468,6 +1512,7 @@ Hooks.on('ready', async () =>
     initReinforcementMarkers();
     initReinforcementSelect();
     initReinforcementBar();
+    initReinforcementSheets();
     initGrappleTether();
     initArrivalFx();
     await syncBuiltinStartups();

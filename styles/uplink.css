@@ -976,11 +976,15 @@
 }
 
 #la-world-clocks .lau-bar {
+    background: var(--la-accent);
+    border-left-color: #0a0a0a;
+    color: #fff;
     flex: none;
     flex-wrap: nowrap;
 }
 
 #la-world-clocks .lau-bar button {
+    color: inherit;
     flex: none;
     width: auto;
     height: auto;
@@ -1021,10 +1025,10 @@
     height: 30px;
     padding: 0 8px 0 6px;
     overflow: hidden;
-    background: var(--background-color, #ededed);
-    border-block: 1px solid var(--primary-color, #991e2a);
+    background: var(--la-plate);
+    border-block: 1px solid var(--la-accent);
     border-left: 3px solid var(--lawc-tone);
-    color: var(--dark-text, #191813);
+    color: var(--la-ink);
 }
 
 .lawc-peek .lawc-name {
@@ -1044,7 +1048,7 @@
     width: 1px;
     height: 14px;
     margin-inline: 2px;
-    background: var(--dark-text, #191813);
+    background: var(--la-ink);
     opacity: 0.5;
 }
 
@@ -1074,7 +1078,7 @@
     min-height: 0;
     display: flex;
     padding: 0 1px 1px;
-    background: var(--primary-color, #991e2a);
+    background: var(--la-accent);
 }
 
 .lawc-list {
@@ -1084,9 +1088,9 @@
     overflow-x: hidden;
     overflow-y: auto;
     padding-bottom: 6px;
-    background: var(--background-color, #ededed);
+    background: var(--la-plate);
     scrollbar-width: thin;
-    scrollbar-color: var(--primary-color, #991e2a) transparent;
+    scrollbar-color: var(--la-accent) transparent;
 }
 
 .lawc-banner {
@@ -1096,7 +1100,7 @@
     align-items: center;
     justify-content: center;
     background: var(--lawc-tone);
-    color: var(--light-text, #fff);
+    color: #fff;
     font-family: var(--header-font-family, Orbitron, Helvetica, sans-serif);
     font-size: 13px;
     font-weight: 700;
@@ -1115,7 +1119,7 @@
     justify-items: center;
     padding: 2px 1px;
     scroll-snap-align: start;
-    color: var(--dark-text, #191813);
+    color: var(--la-ink);
     text-align: center;
 }
 
@@ -1130,7 +1134,7 @@
     top: 2px;
     right: calc(50% - 38px);
     margin-top: 0;
-    background: var(--background-color, #ededed);
+    background: var(--la-plate);
 }
 
 .lawc-row .lawc-banner {
@@ -1139,7 +1143,7 @@
 }
 
 .lawc-row--done {
-    background: color-mix(in srgb, var(--lawc-tone) 16%, var(--background-color, #ededed));
+    background: color-mix(in srgb, var(--lawc-tone) 16%, var(--la-plate));
 }
 
 .lawc-name {
@@ -1174,7 +1178,7 @@
 
 .lawc-row--done .lawc-name,
 .lawc-row--done .lawc-count {
-    color: color-mix(in srgb, var(--lawc-tone) 60%, var(--dark-text, #191813));
+    color: color-mix(in srgb, var(--lawc-tone) 60%, var(--la-ink));
     opacity: 1;
 }
 
@@ -1194,15 +1198,15 @@
 }
 
 .lawc-chip--all {
-    color: color-mix(in srgb, #3a9e6e 65%, var(--dark-text, #191813));
+    color: color-mix(in srgb, #3a9e6e 65%, var(--la-ink));
 }
 
 .lawc-chip--gm {
-    color: color-mix(in srgb, #c98a1a 65%, var(--dark-text, #191813));
+    color: color-mix(in srgb, #c98a1a 65%, var(--la-ink));
 }
 
 .lawc-chip--users {
-    color: color-mix(in srgb, #2f86bd 65%, var(--dark-text, #191813));
+    color: color-mix(in srgb, #2f86bd 65%, var(--la-ink));
 }
 
 .lawc-pie {
@@ -1211,8 +1215,8 @@
 }
 
 .lawc-seg {
-    fill: color-mix(in srgb, var(--dark-text, #191813) 8%, var(--background-color, #ededed));
-    stroke: color-mix(in srgb, var(--dark-text, #191813) 33%, var(--background-color, #ededed));
+    fill: color-mix(in srgb, var(--la-ink) 8%, var(--la-plate));
+    stroke: color-mix(in srgb, var(--la-ink) 33%, var(--la-plate));
     stroke-width: 1;
     transform-box: fill-box;
     transform-origin: center;
@@ -1220,7 +1224,7 @@
 
 .lawc-seg--on {
     fill: var(--lawc-tone);
-    stroke: var(--background-color, #ededed);
+    stroke: var(--la-plate);
 }
 
 .lawc-seg--arc,
@@ -1229,7 +1233,7 @@
 }
 
 .lawc-seg--arc {
-    stroke: var(--darken-2, rgba(0, 0, 0, 0.2));
+    stroke: color-mix(in srgb, var(--la-ink) 20%, transparent);
 }
 
 .lawc-seg--arc.lawc-seg--on {
@@ -1237,20 +1241,20 @@
 }
 
 .lawc-ring-number {
-    fill: var(--dark-text, #191813);
+    fill: var(--la-ink);
     font-weight: 600;
     pointer-events: none;
 }
 
 .lawc-pie-edge {
     fill: none;
-    stroke: color-mix(in srgb, var(--dark-text, #191813) 56%, var(--background-color, #ededed));
+    stroke: color-mix(in srgb, var(--la-ink) 56%, var(--la-plate));
     stroke-width: 1;
     pointer-events: none;
 }
 
 .lawc-chip--pin {
-    color: color-mix(in srgb, var(--dark-text, #191813) 70%, transparent);
+    color: color-mix(in srgb, var(--la-ink) 70%, transparent);
 }
 
 .lawc-chip--pin .mdi {
@@ -1267,7 +1271,7 @@
 
 .lawc-section {
     padding: 2px 4px;
-    color: var(--dark-text, #191813);
+    color: var(--la-ink);
     font-family: var(--header-font-family, Orbitron, Helvetica, sans-serif);
     font-size: 9px;
     letter-spacing: 0.12em;

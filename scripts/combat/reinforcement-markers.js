@@ -6,6 +6,7 @@ import { HIT_LABEL_STYLE, dragResistancePx, drawDashedEdges, footprintPerimeterE
 import { _cellCorners } from '../interactive/pulse-los-filter.js';
 import { getReinforcements, isPlanChange, reinforcementClock, updateReinforcements } from './reinforcements.js';
 import { openEntryMenu } from './reinforcement-menu.js';
+import { openReinforcementSheet } from './reinforcement-sheet.js';
 import { tickerToggle } from '../tools/canvas-utils.js';
 import { playUiSound, playTokenSelectSound, playTokenDeselectSound } from '../tah/sound.js';
 
@@ -84,6 +85,7 @@ let generation = 0;
 const toggleRings = tickerToggle(tickRings);
 let drag = null;
 let rightStart = null;
+let lastClick = null;
 
 /** @type {{ key: string, marker: Marker }|null} */
 let preview = null;
@@ -215,6 +217,25 @@ function drawHover(fill, line, geometry)
     }
 }
 
+function stageCounterTransform()
+{
+    const stage = canvas.app?.stage;
+    if (!stage || (!stage.rotation && !stage.skew.x && !stage.skew.y))
+        return null;
+
+    const xAxisX = Math.cos(stage.rotation + stage.skew.y);
+    const xAxisY = Math.sin(stage.rotation + stage.skew.y);
+    const yAxisX = -Math.sin(stage.rotation - stage.skew.x);
+    const yAxisY = Math.cos(stage.rotation - stage.skew.x);
+    const determinant = xAxisX * yAxisY - xAxisY * yAxisX;
+    if (Math.abs(determinant) < 1e-6)
+        return null;
+
+    const corners = [0, xAxisX, yAxisX, xAxisX + yAxisX];
+    const span = (Math.max(...corners) - Math.min(...corners)) / determinant;
+    return new PIXI.Matrix(span * yAxisY, -span * xAxisY, -span * yAxisX, span * xAxisX, 0, 0);
+}
+
 function ghostArt(doc, geometry, texture)
 {
     const width = doc.width * canvas.grid.sizeX * Math.abs(doc.texture.scaleX ?? 1);
@@ -222,8 +243,20 @@ function ghostArt(doc, geometry, texture)
     const sprite = new PIXI.Sprite(texture);
     sprite.anchor.set(doc.texture.anchorX ?? 0.5, doc.texture.anchorY ?? 0.5);
     sprite.scale.set(Math.min(width / texture.width, height / texture.height));
-    sprite.position.set(geometry.center.x, geometry.center.y);
     sprite.alpha = GHOST_ALPHA;
+
+    const counter = stageCounterTransform();
+
+    if (counter)
+    {
+        const upright = new PIXI.Container();
+        upright.transform.setFromMatrix(counter);
+        upright.position.set(geometry.center.x, geometry.center.y);
+        upright.addChild(sprite);
+        return [upright];
+    }
+
+    sprite.position.set(geometry.center.x, geometry.center.y);
 
     const mask = new PIXI.Graphics();
     mask.beginFill(0xffffff);
@@ -830,6 +863,17 @@ async function onDragEnd(event)
         marker.root.cursor = 'grab';
     if (!finished.moved)
     {
+        const now = Date.now();
+        const doubleClickMs = foundry.canvas.interaction?.MouseInteractionManager?.DOUBLE_CLICK_TIME_MS ?? 250;
+        if (lastClick?.id === finished.id && now - lastClick.time <= doubleClickMs)
+        {
+            lastClick = null;
+            if (marker)
+                openReinforcementSheet(marker.entry, marker.combat);
+            return;
+        }
+
+        lastClick = { id: finished.id, time: now };
         clickMarker(finished);
         return;
     }

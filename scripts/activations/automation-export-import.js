@@ -72,6 +72,7 @@ export class AutomationImport extends FormApplication
                         {
                             const text = await fileInput.files[0].text();
                             const data = JSON.parse(text);
+                            await AutomationManager.dropWorldStateSettings(data);
                             openImportSummary(data);
                         }
                         catch (e)

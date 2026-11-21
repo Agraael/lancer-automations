@@ -102,6 +102,7 @@ export async function deployWeaponToken(weapon, ownerActor, originToken = null, 
         name: weapon.name,
         ...(art ? { texture: { src: art, anchorY: WEAPON_ART_ANCHOR_Y } } : {}),
         actorData: { name: `${weapon.name} [${ownerName}]` },
+        delta: { ownership: foundry.utils.duplicate(ownerActor.ownership) },
         flags: {
             [MODULE_ID]: {
                 thrownWeapon: true,

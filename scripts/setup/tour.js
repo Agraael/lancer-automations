@@ -1266,6 +1266,7 @@ const CAROUSEL_STEPS = () => _withNeeds([
     _stageStep('reinforcement-arrive', 'LA.tour.step.reinforcementArrive', 'LA.tour.content.reinforcementArriveIs', 'bar', '.la-rf-bar-arrive', true),
     _stageStep('reinforcement-visibility', 'LA.tour.step.reinforcementVisibility', 'LA.tour.content.reinforcementVisibilityIs', 'bar', '[data-action="visibility"]', true),
     _stageStep('reinforcement-team', 'LA.tour.step.reinforcementTeam', 'LA.tour.content.reinforcementTeamIs', 'bar', '[data-action="team"]', true),
+    _stageStep('reinforcement-selected', 'LA.tour.step.reinforcementSelected', 'LA.tour.content.reinforcementSelectedIs', 'bar', '.la-rf-bar-selected', true),
     _stageStep('reinforcement-marker', 'LA.tour.step.reinforcementMarker', 'LA.tour.content.reinforcementMarkerIs', 'board', '.la-ts-marker'),
     _stageStep('carousel-incoming', 'LA.tour.step.carouselIncoming', 'LA.tour.content.carouselComingIs', 'carousel', '.lac-rf-in'),
     _cardStep('arrival-card', 'LA.tour.step.arrivalCard', 'LA.tour.content.arrivalCardIs', TOUR_CARD),

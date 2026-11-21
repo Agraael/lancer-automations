@@ -1,6 +1,7 @@
 import { escapeHtml, localize, localizeFormat } from '../tools/string-utils.js';
 import { TF_NO_TEAM, TF_TEAM_PATH, tfGetTeam, tfGetTeams, tfTeamsColorSides } from '../tools/token-factions-utils.js';
 import { VISIBILITIES, VISIBILITY_ICONS, draftToken, editReinforcementTokens, getReinforcements, landReinforcements, removeReinforcements, replaceReinforcementToken, teamHiddenIcon, teamLabelKey, teamShownIcon, updateReinforcements } from './reinforcements.js';
+import { openReinforcementSheet } from './reinforcement-sheet.js';
 
 const FLYOUT_MARGIN = 8;
 
@@ -263,6 +264,12 @@ export function openEntryMenu(entry, combat, event, ids = [entry.id])
             icon: '<i class="fas fa-cog"></i>',
             group: 'edit',
             callback: () => openUnitConfig(entry, combat),
+        },
+        {
+            name: 'LA.reinforcement.editSheet',
+            icon: '<i class="fas fa-user"></i>',
+            group: 'edit',
+            callback: () => openReinforcementSheet(entry, combat),
         },
         ...VISIBILITIES.map(visibility => ({
             name: `LA.reinforcement.visibility.${visibility}`,
