@@ -88,31 +88,6 @@ Hooks.on('updateItem', (item, changes) =>
         popup.data('laRebuild')?.();
 });
 
-/** Toggle .la-dark on <html> from the actual --la-plate luminance, so CSS can flip icon
-    filters for a dark panel. Read via a probe + canvas so any colour format resolves to bytes. */
-function applyPlateThemeClass()
-{
-    try
-    {
-        const probe = document.createElement('span');
-        probe.style.cssText = 'color:var(--la-plate);display:none';
-        document.body.appendChild(probe);
-        const resolved = getComputedStyle(probe).color;
-        probe.remove();
-        const ctx = document.createElement('canvas').getContext('2d');
-        ctx.fillStyle = '#ffffff';
-        ctx.fillStyle = resolved;
-        ctx.fillRect(0, 0, 1, 1);
-        const [r, g, b] = ctx.getImageData(0, 0, 1, 1).data;
-        document.documentElement.classList.toggle('la-dark', (0.2126 * r + 0.7152 * g + 0.0722 * b) < 128);
-    }
-    catch
-    { /* leave class as-is */ }
-}
-
-// Set the class once at startup too, so cards/dialogs that open without a fresh HUD render still get it.
-Hooks.once('ready', applyPlateThemeClass);
-
 export class LancerHUD
 {
     constructor()
@@ -833,8 +808,6 @@ export class LancerHUD
         if (!this._actor && !this._narrativeMode)
             return;
 
-        applyPlateThemeClass();
-
         const categories = this._buildCategories().filter(cat => this._catHasContent(cat));
         this._categories = categories;
         this._renderedTitleSig = this._titleSig();
@@ -994,9 +967,6 @@ export class LancerHUD
             if (!savedPos)
                 hud.css('top', `${defaultBase + portraitOffset}px`);
         }
-
-        if (animate)
-            hud.animate({ opacity: 1, left: startLeft }, 350);
 
         // Lock / drag / reset controls
         const lockBtn = $(htmlToElement(`<span class="la-hud-lock" title="Unlock to drag"><i class="fas fa-fw fa-lock"></i></span>`));
@@ -1162,11 +1132,9 @@ export class LancerHUD
         const c3 = this._makeCol('');
         const c4 = this._makeCol('');
         c1.css({ position: 'relative', zIndex: 4 });
-        // In v13 root CSS shifts hud padding so `top:0` no longer matches c1; pin absolute children to c1's actual y.
-        const c1Top = () => c1.position()?.top ?? 0;
-        c2.css({ position: 'absolute', top: c1Top(), left: c1.outerWidth(), display: 'none', zIndex: 3 });
-        c3.css({ position: 'absolute', top: c1Top(), left: 0,               display: 'none', zIndex: 2 });
-        c4.css({ position: 'absolute', top: c1Top(), left: 0,               display: 'none', zIndex: 1 });
+        c2.css({ position: 'absolute', display: 'none', zIndex: 3 });
+        c3.css({ position: 'absolute', left: 0, display: 'none', zIndex: 2 });
+        c4.css({ position: 'absolute', left: 0, display: 'none', zIndex: 1 });
         hud.append(c2, c3, c4);
         this._c2 = c2;
         this._c3 = c3;
@@ -1584,6 +1552,15 @@ export class LancerHUD
             ev.stopPropagation();
             openFavorites();
         });
+
+        // In v13 root CSS shifts hud padding so `top:0` no longer matches c1; pin absolute children to c1's actual y.
+        const c1Top = c1.position()?.top ?? 0;
+        c2.css({ top: c1Top, left: c1.outerWidth() });
+        c3.css('top', c1Top);
+        c4.css('top', c1Top);
+
+        if (animate)
+            hud.animate({ opacity: 1, left: startLeft }, 350);
     }
 
     // Multi-token intersection filter

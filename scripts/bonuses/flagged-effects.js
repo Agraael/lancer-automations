@@ -1791,10 +1791,13 @@ export function initCollapseHook()
     libWrapper.register(MODULE_ID,'Token.prototype._refreshEffects',
         function (wrapped, ...args)
         {
+            let temporaryEffects;
+
             // concurrent _drawEffects can destroy sprites; wrapped() sizing must always run
             try
             {
-                _collapseRemoveDuplicates(this);
+                temporaryEffects = this.actor?.temporaryEffects;
+                _collapseRemoveDuplicates(this, temporaryEffects);
             }
             catch (err)
             {
@@ -1809,8 +1812,8 @@ export function initCollapseHook()
                 _layoutHaloIcons(this);
                 _shrinkEffectIcons(this);
                 _repaintHaloBg(this);
-                _drawStackBadges(this);
-                _drawDurationBadges(this);
+                _drawStackBadges(this, temporaryEffects);
+                _drawDurationBadges(this, temporaryEffects);
             }
             catch (err)
             {
@@ -1997,8 +2000,8 @@ Hooks.on('canvasPan', () =>
 
     for (const token of canvas.tokens?.placeables ?? [])
     {
-        if (token.effects?.children?.length)
-            token.renderFlags.set({ refreshEffects: true });
+        if (!token.destroyed && token.effects?.bg && token.effects.children.length)
+            token._refreshEffects();
     }
 });
 Hooks.on('canvasReady', () =>
@@ -2012,8 +2015,8 @@ Hooks.on('updateCombat', (_combat, changed) =>
 
     for (const token of canvas.tokens?.placeables ?? [])
     {
-        if (token.effects?.children?.length)
-            token.renderFlags.set({ refreshEffects: true });
+        if (!token.destroyed && token.effects?.bg && token.effects.children.length)
+            token._refreshEffects();
     }
 });
 
@@ -2076,12 +2079,11 @@ function _shrinkEffectIcons(token)
  * Sprites are matched to effects via sprite.zIndex (set by _drawEffects = effect index).
  * @param {Token} token
  */
-function _collapseRemoveDuplicates(token)
+function _collapseRemoveDuplicates(token, temporaryEffects = token.actor?.temporaryEffects)
 {
     if (!token.actor || !token.effects?.children)
         return;
 
-    const temporaryEffects = token.actor.temporaryEffects;
     if (!temporaryEffects?.length)
         return;
 
@@ -2100,7 +2102,7 @@ function _collapseRemoveDuplicates(token)
     }
 
     // Walk effects in order, keep the first sprite of each icon group and destroy the rest.
-    const groupKey = iconGroupKeys(token.actor);
+    const groupKey = iconGroupKeys(token.actor, temporaryEffects);
     const seenPrimary = new Set();
 
     for (const effect of temporaryEffects)
@@ -2132,14 +2134,13 @@ function _collapseRemoveDuplicates(token)
  * instance with its own stack as usage. Skipped while the statuscounter module draws its own.
  * @param {Token} token
  */
-function _drawStackBadges(token)
+function _drawStackBadges(token, temporaryEffects = token.actor?.temporaryEffects)
 {
     if (game.modules.get('statuscounter')?.active)
         return;
     if (!token.actor || !token.effects?.children)
         return;
 
-    const temporaryEffects = token.actor.temporaryEffects;
     if (!temporaryEffects?.length)
         return;
 
@@ -2160,7 +2161,7 @@ function _drawStackBadges(token)
     const effectsOffsetX = token.effects?.x ?? 0;
     const effectsOffsetY = token.effects?.y ?? 0;
 
-    for (const { effect, instances, uses, usage } of statusIconEntries(token.actor))
+    for (const { effect, instances, uses, usage } of statusIconEntries(token.actor, temporaryEffects))
     {
         const sprite = spriteMap.get(effect.id);
         if (!sprite)
@@ -2188,10 +2189,10 @@ function stableJson(value)
     return JSON.stringify(value) ?? 'null';
 }
 
-export function iconGroupKeys(actor)
+export function iconGroupKeys(actor, temporaryEffects = actor?.temporaryEffects)
 {
     // Collect names managed by lancer-automations so we can include HUD effects with the same name.
-    const managedNames = new Set(/** @type {any[]} */ (actor?.temporaryEffects ?? [])
+    const managedNames = new Set(/** @type {any[]} */ (temporaryEffects ?? [])
         .filter(effect => getLAFlags(effect) && effect.name).map(effect => effect.name));
 
     const bonuses = new Map(/** @type {any[]} */ (getLAFlag(actor, 'global_bonuses') || []).map(bonus => [bonus.id, bonus]));
@@ -2229,11 +2230,10 @@ export function isCustomStatusEffect(effect, name)
     return effect.getFlag?.('temporary-custom-statuses', 'originalName') === name || effect.name === name;
 }
 
-export function statusIconEntries(actor)
+export function statusIconEntries(actor, temporaryEffects = actor?.temporaryEffects ?? [])
 {
-    const temporaryEffects = actor?.temporaryEffects ?? [];
     // Effects of one icon group collapse, so their stacks sum across the group.
-    const groupKey = iconGroupKeys(actor);
+    const groupKey = iconGroupKeys(actor, temporaryEffects);
     const entries = [];
     const byKey = new Map();
 
@@ -2422,9 +2422,8 @@ export function durationBadge(effect)
  * Reads LA duration flags, effects without a turn duration get nothing.
  * @param {Token} token
  */
-function _drawDurationBadges(token)
+function _drawDurationBadges(token, temporaryEffects = token.actor?.temporaryEffects)
 {
-    const temporaryEffects = token.actor?.temporaryEffects;
     if (!temporaryEffects?.length)
         return;
 

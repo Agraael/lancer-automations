@@ -923,6 +923,18 @@ export function registerSettings()
         type: Boolean,
         default: false,
     });
+    game.settings.register(MODULE_ID,'autoTokenHeightVehicle', {
+        scope: 'world',
+        config: false,
+        type: Boolean,
+        default: false,
+    });
+    game.settings.register(MODULE_ID,'autoTokenHeightSquad', {
+        scope: 'world',
+        config: false,
+        type: Boolean,
+        default: false,
+    });
     // Debug
 
     game.settings.register(MODULE_ID,'debugMovement', {

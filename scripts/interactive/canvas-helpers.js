@@ -716,15 +716,16 @@ export function getGridDistance(pos1, pos2)
  * @param {Token[]} tokens
  * @param {number} screenX
  * @param {number} screenY
- * @param {{isSelected?: (t: Token) => boolean, onPick?: (t: Token) => void}} [options]
+ * @param {{isSelected?: (t: Token) => boolean, onPick?: (t: Token) => void, leaveDistance?: number|null}} [options]
  * @returns {() => void} close handle
  */
 export function showOverlapStackPicker(tokens, screenX, screenY, { isSelected = () => false, onPick = () =>
-{} } = {})
+{}, leaveDistance = null } = {})
 {
     let popupEl = null;
     let outsideHandler = null;
     let escHandler = null;
+    let leaveHandler = null;
 
     const close = () =>
     {
@@ -737,6 +738,12 @@ export function showOverlapStackPicker(tokens, screenX, screenY, { isSelected = 
         {
             document.removeEventListener('pointerdown', outsideHandler, true);
             outsideHandler = null;
+        }
+
+        if (leaveHandler)
+        {
+            document.removeEventListener('pointermove', leaveHandler, true);
+            leaveHandler = null;
         }
 
         if (escHandler)
@@ -797,6 +804,21 @@ export function showOverlapStackPicker(tokens, screenX, screenY, { isSelected = 
             event.preventDefault(); close();
         }
     };
+
+    if (leaveDistance !== null)
+    {
+        leaveHandler = (event) =>
+        {
+            const box = popupEl?.getBoundingClientRect();
+            if (!box)
+                return;
+            const gapX = Math.max(box.left - event.clientX, 0, event.clientX - box.right);
+            const gapY = Math.max(box.top - event.clientY, 0, event.clientY - box.bottom);
+            if (Math.hypot(gapX, gapY) > leaveDistance)
+                close();
+        };
+        document.addEventListener('pointermove', leaveHandler, true);
+    }
 
     setTimeout(() =>
     {

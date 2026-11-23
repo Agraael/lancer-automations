@@ -1844,6 +1844,13 @@ class LancerCanvasRuler extends foundry.canvas.interaction.Ruler
         return super.destroy();
     }
 
+    _getSegmentStyle(waypoint)
+    {
+        if (this.user?.isSelf && _sightlineMode && getModuleSetting('lancerLos') && (this.path?.length ?? 0) === 2)
+            return { width: 0, alpha: 0 };
+        return super._getSegmentStyle(waypoint);
+    }
+
     _onMouseMove(event)
     {
         super._onMouseMove(event);

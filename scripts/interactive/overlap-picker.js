@@ -5,6 +5,8 @@ import { getModuleSetting } from '../tools/settings-utils.js';
 
 import { MODULE_ID } from '../tools/constants.js';
 
+const LEAVE_DISTANCE_PX = 40;
+
 function overlappingTokens(token)
 {
     const x = token.document.x;
@@ -53,8 +55,9 @@ Hooks.once('init', () =>
         const startY = originalEvent?.clientY ?? 0;
 
         const closePicker = showOverlapStackPicker(stack, startX + 10, startY + 10, {
-            isSelected: (t) => t.controlled,
-            onPick: (t) => t.control({ releaseOthers: !shift })
+            isSelected: (token) => token.controlled,
+            onPick: (token) => token.control({ releaseOthers: !shift }),
+            leaveDistance: LEAVE_DISTANCE_PX
         });
 
         const cleanup = () =>

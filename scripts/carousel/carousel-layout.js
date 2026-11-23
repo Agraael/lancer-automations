@@ -13,6 +13,7 @@ const FOLD_MOVERS = '.lac-head, [data-combat-action="fold"]';
 const EDGE_SPEED_PX = 7;
 
 const _pendingScroll = new WeakMap();
+const _widthFlips = new Set();
 let _edgeFrame = null;
 
 export const reduceMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -127,10 +128,15 @@ function contentOverflow(strip)
 
 export function fitStrip(strip, size, maxOverlap)
 {
-    for (const animation of strip.getAnimations({ subtree: true }))
+    for (const animation of _widthFlips)
     {
-        if (animation.effect?.getKeyframes?.().some(frame => 'width' in frame))
+        if (animation.playState === 'finished' || animation.playState === 'idle')
+            _widthFlips.delete(animation);
+        else if (strip.contains(/** @type {KeyframeEffect} */ (animation.effect)?.target ?? null))
+        {
             animation.finish();
+            _widthFlips.delete(animation);
+        }
     }
 
     strip.style.removeProperty('--ov');
@@ -301,7 +307,7 @@ export function playFlip(root, previous, enterAll = false)
     for (const element of growing)
     {
         element.style.width = '';
-        element.animate([{ width: `${previous.get(element.dataset.id).width}px` }, { width: `${finalWidths.get(element)}px` }], { duration: FLIP_MS, easing: 'ease-in-out' });
+        _widthFlips.add(element.animate([{ width: `${previous.get(element.dataset.id).width}px` }, { width: `${finalWidths.get(element)}px` }], { duration: FLIP_MS, easing: 'ease-in-out' }));
     }
 
     for (const element of elements)

@@ -26,13 +26,15 @@ function _onRenderCombatTracker(_app, htmlOrEl)
 
         // the tracker draws temporaryEffects in order, one icon each, so repeats of an img map to repeats of an effect
         const seen = new Map();
+        let temporaryEffects = null;
 
         for (const icon of row.querySelectorAll('img.token-effect'))
         {
             const src = icon.getAttribute('src');
             const skip = seen.get(src) ?? 0;
             seen.set(src, skip + 1);
-            const effect = _nthEffectByImg(actor, src, skip);
+            temporaryEffects ??= actor.temporaryEffects ?? [];
+            const effect = _nthEffectByImg(temporaryEffects, src, skip);
             const count = effect ? effectStack(effect) : 0;
 
             if (count <= 1)
@@ -51,9 +53,9 @@ function _onRenderCombatTracker(_app, htmlOrEl)
     }
 }
 
-function _nthEffectByImg(actor, img, index)
+function _nthEffectByImg(temporaryEffects, img, index)
 {
-    for (const effect of actor.temporaryEffects ?? [])
+    for (const effect of temporaryEffects)
     {
         if (effect.img !== img)
             continue;

@@ -66,30 +66,38 @@ function _onPointerMove(event)
 
 function _hitSprite(token, world)
 {
-    const temporaryEffects = token.actor?.temporaryEffects;
-    if (!temporaryEffects?.length || !token.effects?.children)
+    if (!token.effects?.children)
         return null;
 
     const bg = token.effects.bg;
     const overlay = token.effects.overlay;
-    token.effects.transform?.updateLocalTransform();
-    const matrix = token.effects.localTransform ?? null;
-    const scaleX = matrix ? Math.hypot(matrix.a, matrix.b) : 1;
-    const scaleY = matrix ? Math.hypot(matrix.c, matrix.d) : 1;
+    let matrix;
+    let scaleX = 1;
+    let scaleY = 1;
+    let temporaryEffects = null;
 
     for (const child of token.effects.children)
     {
         if (child === bg || child === overlay || !(child instanceof PIXI.Sprite))
             continue;
 
-        const effect = temporaryEffects[child.zIndex];
-        if (!effect)
-            continue;
+        if (matrix === undefined)
+        {
+            token.effects.transform?.updateLocalTransform();
+            matrix = token.effects.localTransform ?? null;
+            scaleX = matrix ? Math.hypot(matrix.a, matrix.b) : 1;
+            scaleY = matrix ? Math.hypot(matrix.c, matrix.d) : 1;
+        }
 
         const center = _spriteCenterWorld(token, child, matrix);
         const radius = Math.max(child.width * scaleX, child.height * scaleY) / 2;
 
-        if ((world.x - center.x) ** 2 + (world.y - center.y) ** 2 <= radius * radius)
+        if (!((world.x - center.x) ** 2 + (world.y - center.y) ** 2 <= radius * radius))
+            continue;
+
+        temporaryEffects ??= token.actor?.temporaryEffects ?? [];
+        const effect = temporaryEffects[child.zIndex];
+        if (effect)
             return { token, sprite: child, effect };
     }
 

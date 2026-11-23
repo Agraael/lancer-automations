@@ -697,7 +697,7 @@
       "lancerAutomationsApplySystemFixes": "Lancer Automations: Apply System Fixes",
       "lancerAutomationsNewsReleases": "Lancer Automations: News & Releases",
       "lancerAutomationsSyncActorsToPrototype": "Lancer Automations: Sync Actors to Prototype Token",
-      "lancerAutomationsSyncTokenHeights": "Lancer Automations: Sync Token Heights",
+      "lancerAutomationsSyncTokenHeights": "Lancer Automations: Reapply Automatic Heights",
       "limitedHandling": "LIMITED HANDLING",
       "lineBlocked": "LINE BLOCKED",
       "linkItemToExtraBar": "Link Item to Extra Bar",
@@ -1092,11 +1092,18 @@
       "cascadingTitle": "Cascading",
       "content": {
         "forEveryWorldActorSetActor": "<p>For every world actor, set <b>actor.img</b> and <b>actor.name</b> to the prototype token image and name.</p><p>Continue?</p>",
-        "setWallHeightTokenheightOnEvery": "<p>Set <b>wall-height.tokenHeight</b> on every world actor (prototype) and every placed token across all scenes.</p><p>Continue?</p>",
+        "setWallHeightTokenheightOnEvery": "<p>Rewrite every automatic token height, on prototypes and placed tokens. Heights set by hand stay.</p><p>Continue?</p>",
         "thisWillFixKnownDataIssues": "<p>This will fix known data issues on all compendium and actor-owned items.</p><p>Continue?</p>"
       },
       "markCascading": "Mark Cascading",
-      "markNotCascading": "Mark Not Cascading"
+      "markNotCascading": "Mark Not Cascading",
+      "tokenHeightAuto": "{size} → {height}. Untick Auto to set it by hand.",
+      "tokenHeightAutoLabel": "Auto",
+      "tokenHeightManual": "Set by hand. Automatic is {height}, keep the .1 to see over same-height cover.",
+      "tokenHeightOff": "Auto Token Height is off. LA sight uses {height}, Wall Height its own default.",
+      "tokenHeightSize": "Size {size}",
+      "tokenHeightSquad": "Squad",
+      "tokenHeightVehicle": "Vehicle, Size {size}"
     },
     "leave": {
       "due": "{count} leave this round. Untick one to keep it here.",
@@ -1956,6 +1963,10 @@
         "explain": "Each tier becomes its own sub-move, so the Boost offer judges it alone.",
         "label": "Split drags at speed tier changes?"
       },
+      "squad-height": {
+        "explain": "Squads at 0.6. Not an official rule.",
+        "label": "Lower height for squads?"
+      },
       "stat-privacy": {
         "choices": {
           "all": "Everyone",
@@ -2071,9 +2082,9 @@
         "blurb": "Token bars, hover info, and status effects.",
         "label": "Tokens & Statuses"
       },
-      "vehicle-squad-height": {
-        "explain": "A house rule that gives vehicles and squads a reduced height.",
-        "label": "Lower height for vehicles and squads?"
+      "vehicle-height": {
+        "explain": "Vehicles one size lower. Not an official rule.",
+        "label": "Lower height for vehicles?"
       },
       "vision": {
         "blurb": "Lancer detection modes, line of sight, and Wall Height integration.",
@@ -3675,12 +3686,16 @@
         "label": "Item Name on Action Badges"
       },
       "autoTokenHeight": {
-        "hint": "Sets each new token's wall height from its size.",
+        "hint": "Keeps each token's height on its size, unless set by hand.",
         "label": "Auto Token Height (Wall Height)"
       },
-      "autoTokenHeightVehicleSquad": {
-        "hint": "Lower height for vehicles and squads (house rule).",
-        "label": "Vehicle & Squad Height Adjustments"
+      "autoTokenHeightSquad": {
+        "hint": "Squads at 0.6. Not an official rule.",
+        "label": "Squad Height Adjustment"
+      },
+      "autoTokenHeightVehicle": {
+        "hint": "Vehicles one size lower. Not an official rule.",
+        "label": "Vehicle Height Adjustment"
       },
       "battleLogEnabled": {
         "hint": "Record combat telemetry and open the recap when a combat ends.",
@@ -4354,7 +4369,7 @@
           "label": "Token feedback"
         },
         "tokenHeightWallHeight": {
-          "hint": "Vertical tokenHeight for 3D line-of-sight over walls of the token's own size.",
+          "hint": "Token heights for line of sight. The extra 0.1 lets a token see over cover of its own size.",
           "label": "Token Height (Wall Height)"
         },
         "tokenHudButtons": {
@@ -4697,8 +4712,8 @@
         "label": "Sync All Actors Now"
       },
       "syncAllTokenHeights": {
-        "hint": "Walk every world actor and write prototypeToken.flags.wall-height.tokenHeight using the rules above.",
-        "label": "Apply Token Heights to All Actors"
+        "hint": "Rewrites every automatic height in the world. Hand-set ones stay.",
+        "label": "Reapply Automatic Heights"
       },
       "syncTemplateActors": {
         "hint": "Reset the module's template actors to their defaults and recreate missing ones. Placed tokens are not changed.",
@@ -4771,6 +4786,9 @@
         },
         "perCategorySettings": {
           "label": "Per-Category Settings"
+        },
+        "tokenHeights": {
+          "label": "Heights by Size"
         }
       },
       "tableColumn": {
@@ -4779,6 +4797,10 @@
         "control": "Control",
         "mode": "Mode",
         "onWreck": "On Wreck",
+        "size": "Size",
+        "squad": "Squad",
+        "standard": "Standard",
+        "vehicle": "Vehicle",
         "where": "Where"
       },
       "tableRow": {
@@ -5900,7 +5922,7 @@
         "visionSensorsIs": "A unit within your <b>Sensors</b> range that you can't see gets a blue outline with a scan line. Sensors reach through walls and terrain: you know exactly where it is.",
         "visionAwarenessIs": "Any other unit you can't see, at any range, shows as a yellow silhouette: you know something is there. <b>Battlefield Awareness: style</b> sets how much of it shows.",
         "visionEyeIs": "While you drag a token, each distance label carries an eye: green when you would see that unit from there, red when you would not. <b>Tactical Distance Labels</b> picks when the labels show.",
-        "visionTokenIs": "Each token's Token Config has an <b>L.A</b> tab. Under Awareness, <b>Detection Visual</b> sets how the token reads: Simple Object (a turning orange outline), Visible, or Ignore. Under Line of Sight, <b>Vision From Edge</b> and <b>Blocks Line of Sight</b>.",
+        "visionTokenIs": "Each token's Token Config has an <b>L.A</b> tab. Under Vision, <b>Detection Visual</b> sets how the token reads: Simple Object (a turning orange outline), Visible, or Ignore. <b>Vision From Edge</b> and <b>Blocks Line of Sight</b> sit below it.",
         "everyPageGroupsRelatedStuffSorted": "Every page groups related stuff, sorted by family on the left. The search box up top looks through all of them at once.",
         "everythingCurrentlyOnATokenIncluding": "Everything currently on a token, including passive bonuses you can't see otherwise (Veterancy adding a passive on a HASE check, etc.).",
         "filterByNameLidOrTrigger": "Filter by name, LID, or trigger type.",
@@ -6270,14 +6292,14 @@
     },
     "wreck": {
       "coverFilterName": "Not taller than the wreck (Lancer Automations)",
-      "defaultGlobalSetting": "Default (use global setting)",
+      "defaultGlobalSetting": "Default (world setting)",
       "pickFolderTip": "Pick a folder: a random file is used on each death",
       "resurrect": "Resurrect",
-      "sectionAwareness": "Awareness",
-      "sectionLineOfSight": "Line of Sight",
       "sectionMovement": "Movement",
       "sectionPortrait": "Portrait",
       "sectionScan": "Scan",
+      "sectionStatHint": "Stat Hint",
+      "sectionVision": "Vision",
       "sectionWreck": "Wreck",
       "unlinkScanDocument": "Unlink Scan Document",
       "unlinkScanPrompt": "Remove the scan flag from {count} journal(s) linked to {name}? The journals are not deleted."

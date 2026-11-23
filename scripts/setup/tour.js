@@ -1325,7 +1325,7 @@ const BATTLELOG_STEPS = () => _withNeeds([
     'battlelog-awards': ['awards'],
 });
 
-const TOKEN_LA_TAB = '.la-compact-config';
+const TOKEN_LA_TAB = '.la-token-config';
 let _tourTokenSheet = null;
 
 async function _openTokenLaTab()
@@ -1349,12 +1349,7 @@ async function _openTokenLaTab()
     const root = rootOf();
     /** @type {HTMLElement | null | undefined} */ (root?.querySelector('a[data-tab="la"]'))?.click();
 
-    const shown = [localize('LA.wreck.sectionAwareness'), localize('LA.wreck.sectionLineOfSight')];
-    for (const section of root?.querySelectorAll('.la-config-section') ?? [])
-    {
-        if (shown.includes(section.querySelector('.la-config-section-head')?.textContent?.trim()))
-            section.classList.remove('collapsed');
-    }
+    /** @type {HTMLElement | null | undefined} */ (root?.querySelector('.la-token-rail [data-la-section="vision"]'))?.click();
 
     sheet.setPosition?.({ height: 'auto' });
 }

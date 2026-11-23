@@ -110,7 +110,7 @@ export function claimCardEscape(event, cardEl)
 export function _updatePendingBadge()
 {
     const waiting = _cardQueueTitles.filter(entry => !entry.active);
-    setStackWaiting('flowCards', waiting.filter(entry => entry.afterFlows).map(entry => entry.title || 'Card'));
+    setStackWaiting('flowCards', waiting.filter(entry => entry.afterFlows).map(entry => entry.title || 'Card'), false);
     setStackWaiting('cards', waiting.filter(entry => !entry.afterFlows).map(entry => entry.title || 'Card'));
 }
 

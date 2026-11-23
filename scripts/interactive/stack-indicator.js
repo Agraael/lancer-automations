@@ -93,13 +93,17 @@ export function renderStackIndicator()
     const hiddenTitles = list => list.filter(card => !isShown(card)).map(card => card._laCardTitle || 'Card');
     const hudFront = [...document.querySelectorAll('.lancer-hud')].findLast(hud => !hud.closest('.la-info-card') && isShown(hud));
     const flowFront = hudFront ?? prompts.findLast(isShown) ?? null;
+    const toolFront = tools.findLast(isShown) ?? null;
+    const hiddenTools = hiddenTitles(tools);
+    const hiddenPrompts = hiddenTitles(prompts);
 
-    drawBanner('card', tools.findLast(isShown) ?? null, [...hiddenTitles(tools), ...(waitingBySource.get('cards') ?? [])], 'card');
-    drawBanner('hud', flowFront, [...hiddenTitles(prompts), ...(waitingBySource.get('flows') ?? []), ...(waitingBySource.get('flowCards') ?? [])], 'flow');
+    drawBanner('card', toolFront, [...hiddenTools, ...(waitingBySource.get('cards') ?? [])], 'card');
+    drawBanner('hud', flowFront, [...hiddenPrompts, ...(waitingBySource.get('flows') ?? []), ...(waitingBySource.get('flowCards') ?? [])], 'flow');
 }
 
-export function setStackWaiting(source, titles)
+export function setStackWaiting(source, titles, render = true)
 {
     waitingBySource.set(source, titles);
-    renderStackIndicator();
+    if (render)
+        renderStackIndicator();
 }

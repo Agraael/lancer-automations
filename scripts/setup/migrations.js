@@ -5,6 +5,8 @@ import { getModuleSetting } from '../tools/settings-utils.js';
 import { getLAFlag, setLAFlag } from '../tools/flag-utils.js';
 import { isExecutorGM } from '../tools/misc-tools.js';
 import { normalizeBonusShape } from '../bonuses/genericBonuses.js';
+import { isTokenHeightAuto, TOKEN_HEIGHT_AUTO_FLAG } from '../tools/token-height.js';
+import { isLancerActor } from '../utils/lancer-token.js';
 import { isFreshWorld } from './settings-onboarding.js';
 
 const SETTING_INSTALL_STATE = 'installState_v1';
@@ -172,6 +174,45 @@ async function _reshapeStoredBonuses()
     }
 
     Hooks.callAll('lancer-automations.clearCaches');
+}
+
+async function _markTokenHeightModes()
+{
+    const mark = (tokenData, actor) =>
+    {
+        if (typeof tokenData?.flags?.[MODULE_ID]?.[TOKEN_HEIGHT_AUTO_FLAG] === 'boolean')
+            return null;
+        return { [MODULE_ID]: { [TOKEN_HEIGHT_AUTO_FLAG]: isTokenHeightAuto(tokenData, actor) } };
+    };
+
+    const protoUpdates = [];
+
+    for (const actor of game.actors)
+    {
+        const flags = isLancerActor(actor) ? mark(actor.prototypeToken, actor) : null;
+        if (flags)
+            protoUpdates.push({ _id: actor.id, prototypeToken: { flags } });
+    }
+
+    if (protoUpdates.length)
+        await Actor.updateDocuments(protoUpdates);
+
+    for (const scene of game.scenes)
+    {
+        const updates = [];
+
+        for (const tokenDoc of scene.tokens)
+        {
+            if (!isLancerActor(tokenDoc.actor) || getLAFlag(tokenDoc, 'isWreck'))
+                continue;
+            const flags = mark(tokenDoc, tokenDoc.actor);
+            if (flags)
+                updates.push({ _id: tokenDoc.id, flags });
+        }
+
+        if (updates.length)
+            await scene.updateEmbeddedDocuments('Token', updates);
+    }
 }
 
 const MIGRATIONS = [
@@ -485,6 +526,21 @@ const MIGRATIONS = [
         {
             await _pinOldDefaults('client');
         },
+    },
+    {
+        id: 'tokenHeightHouseRuleSplit_v1',
+        async run()
+        {
+            const stored = _storedValue('autoTokenHeightVehicleSquad');
+            if (stored === undefined)
+                return;
+            await game.settings.set(MODULE_ID, 'autoTokenHeightVehicle', !!stored);
+            await game.settings.set(MODULE_ID, 'autoTokenHeightSquad', !!stored);
+        },
+    },
+    {
+        id: 'tokenHeightMode_v1',
+        run: _markTokenHeightModes,
     },
     {
         id: 'tahPortraitPerType_v1',

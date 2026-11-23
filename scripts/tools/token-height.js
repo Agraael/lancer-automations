@@ -1,31 +1,70 @@
 import { getModuleSetting } from './settings-utils.js';
+import { MODULE_ID } from './constants.js';
+
+export const TOKEN_HEIGHT_AUTO_FLAG = 'tokenHeightAuto';
+
+export function tokenHeightKind(actor)
+{
+    const squad = !!getModuleSetting('autoTokenHeightSquad');
+    const vehicle = !!getModuleSetting('autoTokenHeightVehicle');
+    if (!squad && !vehicle)
+        return 'standard';
+
+    const items = Array.from(actor?.items ?? []);
+    if (squad && items.some(item => item.system?.lid === 'npcc_squad'))
+        return 'squad';
+    if (vehicle && items.some(item => item.system?.lid === 'npct_vehicle'))
+        return 'vehicle';
+    return 'standard';
+}
+
+export function heightForSize(size, kind)
+{
+    if (kind === 'squad')
+        return 0.6;
+    if (kind === 'vehicle')
+        return size <= 1 ? 0.6 : Math.min(size - 1, 4) + 0.1;
+    return size + 0.1;
+}
+
+export function actorSize(actor)
+{
+    return Number(actor?.system?.size ?? actor?.prototypeToken?.width ?? 1) || 1;
+}
 
 /**
  * Height LA writes into the wall-height flag: SIZE plus the 0.1 peek that lets equal heights see
- * over each other, lowered for squads and vehicles when that setting is on.
+ * over each other, lowered for squads and vehicles when their settings are on.
  * @param {Actor} actor
  * @returns {number}
  */
 export function getDesiredWallHeight(actor)
 {
-    const size = Number(actor.system?.size ?? actor.prototypeToken?.width ?? 1) || 1;
-    const vsEnabled = !!getModuleSetting('autoTokenHeightVehicleSquad');
+    return heightForSize(actorSize(actor), tokenHeightKind(actor));
+}
 
-    if (vsEnabled)
-    {
-        const items = Array.from(actor.items ?? []);
-        if (items.some(item => item.system?.lid === 'npcc_squad'))
-            return 0.5;
+export function isTokenHeightAuto(tokenData, actor)
+{
+    const flag = tokenData?.flags?.[MODULE_ID]?.[TOKEN_HEIGHT_AUTO_FLAG];
+    if (typeof flag === 'boolean')
+        return flag;
 
-        if (items.some(item => /vehicle/i.test(item.system?.lid ?? '')))
-        {
-            if (size <= 1)
-                return 0.5;
-            return Math.min(size - 1, 4) + 0.1;
-        }
-    }
+    const height = Number(tokenData?.flags?.['wall-height']?.tokenHeight) || 0;
+    return height === 0 || Math.abs(height - getDesiredWallHeight(actor)) < 1e-6;
+}
 
-    return size + 0.1;
+export function autoTokenHeightFlags(tokenData, actor)
+{
+    if (!isTokenHeightAuto(tokenData, actor))
+        return null;
+
+    const desired = getDesiredWallHeight(actor);
+    const current = Number(tokenData?.flags?.['wall-height']?.tokenHeight) || 0;
+    const marked = tokenData?.flags?.[MODULE_ID]?.[TOKEN_HEIGHT_AUTO_FLAG] === true;
+
+    if (marked && Math.abs(current - desired) < 1e-6)
+        return null;
+    return { 'wall-height': { tokenHeight: desired }, [MODULE_ID]: { [TOKEN_HEIGHT_AUTO_FLAG]: true } };
 }
 
 /**

@@ -1,14 +1,14 @@
 import { runInOnInitTriggerContext, effectStack } from '../bonuses/flagged-effects.js';
 import { durationEntries } from '../bonuses/duration-clock.js';
 import { getModuleSetting } from '../tools/settings-utils.js';
-import { getDesiredWallHeight } from '../tools/token-height.js';
+import { getDesiredWallHeight, autoTokenHeightFlags, isTokenHeightAuto, tokenHeightKind, actorSize, TOKEN_HEIGHT_AUTO_FLAG } from '../tools/token-height.js';
 import { getLAFlag, getLAFlags } from '../tools/flag-utils.js';
 import { MODULE_ID } from '../tools/constants.js';
 import { localize, localizeFormat } from '../tools/string-utils.js';
 import { htmlToElement } from '../tools/dom-utils.js';
 import { SNAPSHOT_STEP, flowChanges } from '../tah/tape-changes.js';
 import { recordAction } from '../tah/action-tape.js';
-import { isLancerActor } from '../utils/lancer-token.js';
+import { isLancerActor, isExecutorGM } from '../utils/lancer-token.js';
 
 // Lancer system patches applied at init/ready, without editing the system bundle.
 
@@ -1833,7 +1833,7 @@ export const ItemDisabledAPI = {
     isDisableable,
 };
 
-// On placement: auto-set wall-height tokenHeight, unless the prototype carries a manual non-zero value.
+// On placement: automatic tokens take their height from the size, tokens set by hand keep the prototype's.
 Hooks.on('preCreateToken', (tokenDoc, _data, _options, userId) =>
 {
     if (userId !== game.userId)
@@ -1844,11 +1844,208 @@ Hooks.on('preCreateToken', (tokenDoc, _data, _options, userId) =>
         return;
 
     const actor = tokenDoc.actor;
-    if (!isLancerActor(actor))
+    if (!isLancerActor(actor) || getLAFlag(tokenDoc, 'isWreck'))
         return;
-    if (Number(tokenDoc.flags?.['wall-height']?.tokenHeight ?? 0) !== 0)
+
+    const flags = autoTokenHeightFlags(tokenDoc, actor);
+    if (flags)
+        tokenDoc.updateSource({ flags });
+});
+
+Hooks.on('preUpdateToken', (tokenDoc, changes, _options, userId) =>
+{
+    if (userId !== game.userId)
         return;
-    tokenDoc.updateSource({ flags: { 'wall-height': { tokenHeight: getDesiredWallHeight(actor) } } });
+    if (foundry.utils.getProperty(changes, `flags.${MODULE_ID}.${TOKEN_HEIGHT_AUTO_FLAG}`) !== true || !getModuleSetting('autoTokenHeight'))
+        return;
+    if (isLancerActor(tokenDoc.actor))
+        foundry.utils.setProperty(changes, 'flags.wall-height.tokenHeight', getDesiredWallHeight(tokenDoc.actor));
+});
+
+Hooks.on('preUpdateActor', (actor, changes, _options, userId) =>
+{
+    if (userId !== game.userId)
+        return;
+    if (foundry.utils.getProperty(changes, `prototypeToken.flags.${MODULE_ID}.${TOKEN_HEIGHT_AUTO_FLAG}`) !== true || !getModuleSetting('autoTokenHeight'))
+        return;
+    if (isLancerActor(actor))
+        foundry.utils.setProperty(changes, 'prototypeToken.flags.wall-height.tokenHeight', getDesiredWallHeight(actor));
+});
+
+function _tokenHeightUpdates(tokenDocs)
+{
+    const byScene = new Map();
+
+    for (const tokenDoc of tokenDocs)
+    {
+        const actor = tokenDoc.actor;
+        if (!isLancerActor(actor) || getLAFlag(tokenDoc, 'isWreck'))
+            continue;
+
+        const flags = autoTokenHeightFlags(tokenDoc, actor);
+        if (!flags)
+            continue;
+
+        if (!byScene.has(tokenDoc.parent))
+            byScene.set(tokenDoc.parent, []);
+        byScene.get(tokenDoc.parent).push({ _id: tokenDoc.id, flags });
+    }
+
+    return byScene;
+}
+
+async function _writeTokenHeightUpdates(byScene)
+{
+    let updated = 0;
+
+    for (const [scene, updates] of byScene)
+    {
+        try
+        {
+            await scene.updateEmbeddedDocuments('Token', updates);
+            updated += updates.length;
+        }
+        catch (e)
+        {
+            console.error(`lancer-automations | token height update (scene "${scene.name}") failed`, e);
+        }
+    }
+
+    return updated;
+}
+
+async function _writeAutoTokenHeights()
+{
+    let protoUpdated = 0;
+    let protoSkipped = 0;
+    const protoUpdates = [];
+
+    for (const actor of game.actors)
+    {
+        const flags = isLancerActor(actor) ? autoTokenHeightFlags(actor.prototypeToken, actor) : null;
+
+        if (!flags)
+        {
+            protoSkipped++;
+            continue;
+        }
+
+        protoUpdates.push({ _id: actor.id, prototypeToken: { flags } });
+        protoUpdated++;
+    }
+
+    if (protoUpdates.length)
+        await Actor.updateDocuments(protoUpdates);
+
+    const placed = game.scenes.contents.flatMap(scene => scene.tokens.contents);
+    const sceneUpdated = await _writeTokenHeightUpdates(_tokenHeightUpdates(placed));
+    return { protoUpdated, protoSkipped, sceneUpdated, sceneSkipped: placed.length - sceneUpdated };
+}
+
+const _syncedTokenHeights = new Map();
+
+async function _syncActorTokenHeights(actor)
+{
+    if (!isExecutorGM() || !game.modules.get('wall-height')?.active || !getModuleSetting('autoTokenHeight') || !isLancerActor(actor))
+        return;
+
+    const desired = getDesiredWallHeight(actor);
+    if (_syncedTokenHeights.get(actor.uuid) === desired)
+        return;
+    _syncedTokenHeights.set(actor.uuid, desired);
+
+    if (actor.isToken)
+    {
+        await _writeTokenHeightUpdates(_tokenHeightUpdates([actor.token]));
+        return;
+    }
+
+    const protoFlags = autoTokenHeightFlags(actor.prototypeToken, actor);
+    if (protoFlags)
+        await actor.update({ prototypeToken: { flags: protoFlags } });
+
+    const placed = game.scenes.contents.flatMap(scene => scene.tokens.filter(tokenDoc => tokenDoc.actorId === actor.id));
+    await _writeTokenHeightUpdates(_tokenHeightUpdates(placed));
+}
+
+Hooks.on('updateActor', actor => _syncActorTokenHeights(actor));
+
+for (const hookName of ['createItem', 'deleteItem'])
+{
+    Hooks.on(hookName, (item) =>
+    {
+        if (item.parent?.documentName === 'Actor')
+            _syncActorTokenHeights(item.parent);
+    });
+}
+
+for (const hookName of ['createSetting', 'updateSetting'])
+{
+    Hooks.on(hookName, (setting) =>
+    {
+        if (![`${MODULE_ID}.autoTokenHeightVehicle`, `${MODULE_ID}.autoTokenHeightSquad`].includes(setting.key) || !isExecutorGM() || !game.modules.get('wall-height')?.active || !getModuleSetting('autoTokenHeight'))
+            return;
+        _syncedTokenHeights.clear();
+        _writeAutoTokenHeights().catch(error => console.error('lancer-automations | token height resync failed', error));
+    });
+}
+
+function _tokenHeightSizeLabel(actor)
+{
+    const kind = tokenHeightKind(actor);
+    if (kind === 'squad')
+        return localize('LA.lancerModif.tokenHeightSquad');
+
+    const size = actorSize(actor);
+    const text = size === 0.5 ? '½' : String(size);
+    return localizeFormat(kind === 'vehicle' ? 'LA.lancerModif.tokenHeightVehicle' : 'LA.lancerModif.tokenHeightSize', { size: text });
+}
+
+Hooks.once('ready', () =>
+{
+    if (!game.modules.get('wall-height')?.active)
+        return;
+
+    const addHeightControls = (app, html) =>
+    {
+        const input = html.querySelector?.('input[name="flags.wall-height.tokenHeight"]');
+        const group = input?.closest('.form-group');
+        const actor = app.actor;
+        if (!group || group.querySelector('.la-token-height-status') || !isLancerActor(actor))
+            return;
+
+        const desired = getDesiredWallHeight(actor);
+        const status = htmlToElement('<p class="hint la-token-height-status"></p>');
+        group.append(status);
+
+        if (!getModuleSetting('autoTokenHeight'))
+            status.textContent = localizeFormat('LA.lancerModif.tokenHeightOff', { height: desired });
+        else
+        {
+            const toggle = htmlToElement(`<label class="la-token-height-auto" style="display:inline-flex;align-items:center;gap:4px;flex:none;"><input type="checkbox" name="flags.${MODULE_ID}.${TOKEN_HEIGHT_AUTO_FLAG}"> ${localize('LA.lancerModif.tokenHeightAutoLabel')}</label>`);
+            const checkbox = toggle.querySelector('input');
+            input.before(toggle);
+            checkbox.checked = isTokenHeightAuto(app.token, actor);
+
+            const paint = () =>
+            {
+                input.disabled = checkbox.checked;
+                if (checkbox.checked)
+                    input.value = String(desired);
+                status.textContent = checkbox.checked
+                    ? localizeFormat('LA.lancerModif.tokenHeightAuto', { size: _tokenHeightSizeLabel(actor), height: desired })
+                    : localizeFormat('LA.lancerModif.tokenHeightManual', { height: desired });
+            };
+
+            checkbox.addEventListener('change', paint);
+            paint();
+        }
+
+        app.setPosition({ height: 'auto' });
+    };
+
+    Hooks.on('renderTokenConfig', addHeightControls);
+    Hooks.on('renderPrototypeTokenConfig', addHeightControls);
 });
 
 export async function syncAllTokenHeights()
@@ -1871,94 +2068,20 @@ export async function syncAllTokenHeights()
     if (!confirmed)
         return;
 
-    let protoUpdated = 0;
-    let protoSkipped = 0;
-    const protoUpdates = [];
+    let counts;
 
-    for (const actor of game.actors)
+    try
     {
-        if (!isLancerActor(actor))
-        {
-            protoSkipped++;
-            continue;
-        }
-
-        const desired = getDesiredWallHeight(actor);
-
-        if (actor.prototypeToken?.flags?.['wall-height']?.tokenHeight === desired)
-        {
-            protoSkipped++;
-            continue;
-        }
-
-        protoUpdates.push({
-            _id: actor.id,
-            prototypeToken: { flags: { 'wall-height': { tokenHeight: desired } } }
-        });
-        protoUpdated++;
+        counts = await _writeAutoTokenHeights();
+    }
+    catch (e)
+    {
+        console.error('lancer-automations | syncAllTokenHeights (prototype) failed', e);
+        ui.notifications.error(localize('LA.notify.prototypeSyncFailedSeeConsole'));
+        return;
     }
 
-    if (protoUpdates.length)
-    {
-        try
-        {
-            await Actor.updateDocuments(protoUpdates);
-        }
-        catch (e)
-        {
-            console.error('lancer-automations | syncAllTokenHeights (prototype) failed', e);
-            ui.notifications.error(localize('LA.notify.prototypeSyncFailedSeeConsole'));
-            return;
-        }
-    }
-
-    let sceneUpdated = 0;
-    let sceneSkipped = 0;
-
-    for (const scene of game.scenes)
-    {
-        /** @type {any[]} */
-        const tokenUpdates = [];
-
-        for (const tokenDoc of scene.tokens)
-        {
-            const actor = /** @type {any} */ (tokenDoc).actor;
-
-            if (!isLancerActor(actor))
-            {
-                sceneSkipped++;
-                continue;
-            }
-
-            const desired = getDesiredWallHeight(actor);
-
-            if (/** @type {any} */ (tokenDoc).flags?.['wall-height']?.tokenHeight === desired)
-            {
-                sceneSkipped++;
-                continue;
-            }
-
-            tokenUpdates.push({
-                _id: tokenDoc.id,
-                flags: { 'wall-height': { tokenHeight: desired } }
-            });
-            sceneUpdated++;
-        }
-
-        if (tokenUpdates.length)
-        {
-            try
-            {
-                await scene.updateEmbeddedDocuments('Token', tokenUpdates);
-            }
-            catch (e)
-            {
-                console.error(`lancer-automations | syncAllTokenHeights (scene "${scene.name}") failed`, e);
-            }
-        }
-    }
-
-    ui.notifications.info(localizeFormat('LA.notify.prototypeSyncDone', { protoUpdated, protoSkipped, sceneUpdated, sceneSkipped }));
+    ui.notifications.info(localizeFormat('LA.notify.prototypeSyncDone', counts));
 }
 
 export async function syncAllActorImgs()

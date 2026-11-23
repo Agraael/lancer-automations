@@ -10,6 +10,7 @@ let hudWatchers = [];
 let busy = false;
 let liftSizes = null;
 let liftChanges = null;
+let liftZones = [];
 
 function reserveHudRoom()
 {
@@ -62,6 +63,8 @@ function watchHudZone()
 
 function trackHudZone()
 {
+    if (document.getElementById('hudzone') === hudZone)
+        return;
     watchHudZone();
     refreshCorner();
 }
@@ -103,10 +106,20 @@ function liftChat()
     const lift = tops.length ? (chatRect.bottom - Math.min(...tops)) / scale + HUD_GAP - inputRow : 0;
 
     chat.classList.toggle('la-chat-lifted', lift > 0);
-    if (lift > 0)
-        chat.style.setProperty('--la-chat-lift', `${lift}px`);
+    const liftValue = lift > 0 ? `${lift}px` : '';
+    if (chat.style.getPropertyValue('--la-chat-lift') === liftValue)
+        return;
+    if (liftValue)
+        chat.style.setProperty('--la-chat-lift', liftValue);
     else
         chat.style.removeProperty('--la-chat-lift');
+}
+
+function onLiftMutations(records)
+{
+    const zones = HUD_ZONE_IDS.map(id => document.getElementById(id));
+    if (records.some(record => record.target !== document.body) || zones.some((zone, index) => zone !== liftZones[index]))
+        observeLiftZones();
 }
 
 function observeLiftZones()
@@ -114,8 +127,9 @@ function observeLiftZones()
     liftSizes.disconnect();
     liftChanges.disconnect();
     liftChanges.observe(document.body, { childList: true });
+    liftZones = HUD_ZONE_IDS.map(id => document.getElementById(id));
 
-    for (const zone of HUD_ZONE_IDS.map(id => document.getElementById(id)).filter(Boolean))
+    for (const zone of liftZones.filter(Boolean))
     {
         liftChanges.observe(zone, { childList: true });
         liftSizes.observe(zone);
@@ -128,7 +142,7 @@ function observeLiftZones()
 function watchChatLift()
 {
     liftSizes = new ResizeObserver(liftChat);
-    liftChanges = new MutationObserver(observeLiftZones);
+    liftChanges = new MutationObserver(onLiftMutations);
     observeLiftZones();
     window.addEventListener('resize', liftChat);
     Hooks.on('collapseSidebar', liftChat);

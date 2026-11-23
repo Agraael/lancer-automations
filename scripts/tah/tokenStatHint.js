@@ -1673,7 +1673,9 @@ function liftTerrainViewer(pendingDrop = 0)
 
     const naturalBottom = (terrainViewerBottom() ?? (document.getElementById('players')?.getBoundingClientRect().top ?? 0)) + pendingDrop;
     const lift = Math.max(0, Math.ceil(naturalBottom - _popupEl.getBoundingClientRect().top + TERRAIN_GAP));
-    body.style.setProperty('--la-stat-dock-lift', `${lift}px`);
+
+    if (body.style.getPropertyValue('--la-stat-dock-lift') !== `${lift}px`)
+        body.style.setProperty('--la-stat-dock-lift', `${lift}px`);
     body.classList.toggle('la-stat-dock-open', lift > 0);
 }
 

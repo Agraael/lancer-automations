@@ -5,6 +5,7 @@ import { localize, localizeFormat } from '../tools/string-utils.js';
 import { setLAFlag } from '../tools/flag-utils.js';
 import { AutomationExport, AutomationImport } from '../activations/automation-export-import.js';
 import { repairLCPData, syncAllActorImgs, syncAllTokenHeights } from './lancer-modif.js';
+import { heightForSize } from '../tools/token-height.js';
 import { openNewsHistory } from './news.js';
 import { openBattleLogGMCardTest, openBattleLogRecapTest } from '../Battelog/battlelog.js';
 import { openTelemetryDebugWindow } from '../Battelog/telemetry-debug.js';
@@ -796,7 +797,17 @@ const VISION_FIELDS = [
 
     { type: 'section', label: 'LA.settingsMenus.section.tokenHeightWallHeight.label', hint: 'LA.settingsMenus.section.tokenHeightWallHeight.hint' },
     { key: 'autoTokenHeight', type: 'boolean', label: 'LA.settingsMenus.autoTokenHeight.label', hint: 'LA.settingsMenus.autoTokenHeight.hint' },
-    { key: 'autoTokenHeightVehicleSquad', type: 'boolean', label: 'LA.settingsMenus.autoTokenHeightVehicleSquad.label', hint: 'LA.settingsMenus.autoTokenHeightVehicleSquad.hint' },
+    { key: 'autoTokenHeightVehicle', type: 'boolean', label: 'LA.settingsMenus.autoTokenHeightVehicle.label', hint: 'LA.settingsMenus.autoTokenHeightVehicle.hint' },
+    { key: 'autoTokenHeightSquad', type: 'boolean', label: 'LA.settingsMenus.autoTokenHeightSquad.label', hint: 'LA.settingsMenus.autoTokenHeightSquad.hint' },
+    { type: 'table',
+        label: 'LA.settingsMenus.table.tokenHeights.label',
+        getTable: () => ({
+            columns: ['LA.settingsMenus.tableColumn.size', 'LA.settingsMenus.tableColumn.standard', 'LA.settingsMenus.tableColumn.vehicle', 'LA.settingsMenus.tableColumn.squad'],
+            rows: [0.5, 1, 2, 3, 4].map(size => ({
+                label: size === 0.5 ? '½' : String(size),
+                cells: ['standard', 'vehicle', 'squad'].map(kind => ({ isText: true, text: String(heightForSize(size, kind)) })),
+            })),
+        }) },
     { type: 'button',
         key: 'syncAllTokenHeights',
         label: 'LA.settingsMenus.syncAllTokenHeights.label',

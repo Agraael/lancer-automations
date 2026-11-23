@@ -960,6 +960,16 @@ export async function preWreck(document, _change, userId)
 
 // Token config "L.A" tab
 
+let _lastLaSection = null;
+
+function _showLaSection(laTab, sectionId)
+{
+    for (const link of laTab.querySelectorAll('.la-token-rail [data-la-section]'))
+        link.classList.toggle('active', link.dataset.laSection === sectionId);
+    for (const section of laTab.querySelectorAll('.la-token-body > [data-la-section]'))
+        section.hidden = section.dataset.laSection !== sectionId;
+}
+
 export function initWreckTokenConfig()
 {
     const handler = (app, html, data) => _renderWreckTab(app, html, data);
@@ -999,35 +1009,63 @@ function _renderWreckTab(app, html, data)
 
     const sections = [];
     if (showWreck)
-        sections.push({ title: localize('LA.wreck.sectionWreck'), html: _buildWreckSectionHtml(flags) });
+        sections.push({ id: 'wreck', icon: 'fa-solid fa-explosion', title: localize('LA.wreck.sectionWreck'), html: _buildWreckSectionHtml(flags) });
     sections.push({
-        title: localize('LA.wreck.sectionAwareness'),
-        html: _buildAwarenessSectionHtml(flags) + _buildStatHintSectionHtml(flags)
+        id: 'vision',
+        icon: 'fa-solid fa-eye',
+        title: localize('LA.wreck.sectionVision'),
+        html: _buildAwarenessSectionHtml(flags) + _buildLineOfSightSectionHtml(flags)
     });
-    sections.push({ title: localize('LA.wreck.sectionLineOfSight'), html: _buildLineOfSightSectionHtml(flags) });
     if (game.user?.isGM)
-        sections.push({ title: localize('LA.wreck.sectionScan'), cls: 'la-scan-section', html: _buildScanSectionHtml(tokenDoc) });
-    sections.push({ title: localize('LA.wreck.sectionMovement'), html: _buildMovementSectionHtml(flags) });
-    sections.push({ title: localize('LA.wreck.sectionPortrait'), html: _buildPortraitSectionHtml(flags, actorType) });
-    const sectionsHtml = sections.map((section, idx) => _wrapSection(section, idx > 0)).join('');
+        sections.push({ id: 'scan', icon: 'fa-solid fa-magnifying-glass-chart', title: localize('LA.wreck.sectionScan'), cls: 'la-scan-section', html: _buildScanSectionHtml(tokenDoc) });
+    sections.push({ id: 'statHint', icon: 'fa-solid fa-circle-info', title: localize('LA.wreck.sectionStatHint'), html: _buildStatHintSectionHtml(flags) });
+    sections.push({ id: 'movement', icon: 'fa-solid fa-shoe-prints', title: localize('LA.wreck.sectionMovement'), html: _buildMovementSectionHtml(flags) });
+    sections.push({ id: 'portrait', icon: 'fa-solid fa-image-portrait', title: localize('LA.wreck.sectionPortrait'), html: _buildPortraitSectionHtml(flags, actorType) });
 
-    const tabHtml = `<div class="tab scrollable" data-group="sheet" data-tab="la"><div class="la-compact-config">${sectionsHtml}</div></div>`;
+    const active = sections.some(section => section.id === _lastLaSection) ? _lastLaSection : sections[0].id;
+    const railHtml = sections.map(section =>
+        `<a data-tab="${section.id}" data-group="la" data-la-section="${section.id}"${section.id === active ? ' class="active"' : ''}><i class="${section.icon}" inert></i><span>${section.title}</span></a>`).join('');
+    const bodyHtml = sections.map(section =>
+        `<div class="la-token-section${section.cls ? ` ${section.cls}` : ''}" data-la-section="${section.id}"${section.id === active ? '' : ' hidden'}>${section.html}</div>`).join('');
+
+    const tabHtml = `<div class="tab scrollable" data-group="sheet" data-tab="la"><div class="la-token-config"><nav class="tabs vertical la-token-rail">${railHtml}</nav><div class="la-token-body">${bodyHtml}</div></div></div>`;
     const resourcesTab = rootEl.querySelector('div.tab[data-tab="resources"]');
 
     if (resourcesTab)
         resourcesTab.insertAdjacentHTML('afterend', tabHtml);
 
     const laTab = rootEl.querySelector('div.tab[data-tab="la"]');
-    laTab?.addEventListener('click', (event) =>
+    laTab?.querySelector('.la-token-rail')?.addEventListener('click', (event) =>
     {
-        const head = event.target?.closest?.('.la-config-section-head');
-        if (!head)
+        const link = event.target?.closest?.('[data-la-section]');
+        if (!link)
             return;
         event.preventDefault();
-        head.parentElement.classList.toggle('collapsed');
+        _lastLaSection = link.dataset.laSection;
+        _showLaSection(laTab, _lastLaSection);
         if (typeof app.setPosition === 'function')
             app.setPosition({ height: 'auto' });
     });
+
+    const wreckModeSelect = laTab?.querySelector('[data-la-wreck-mode]');
+
+    if (wreckModeSelect)
+    {
+        wreckModeSelect.addEventListener('change', () =>
+        {
+            const skip = wreckModeSelect.value === 'none';
+            for (const row of laTab.querySelectorAll('[data-la-wreck-extra]'))
+                row.hidden = skip;
+            const skipHint = laTab.querySelector('[data-la-wreck-skip-hint]');
+            if (skipHint)
+                skipHint.hidden = !skip;
+            if (typeof app.setPosition === 'function')
+                app.setPosition({ height: 'auto' });
+        });
+    }
+
+    for (const toggle of laTab?.querySelectorAll('.la-asset input[type="checkbox"]') ?? [])
+        toggle.addEventListener('change', () => toggle.closest('.la-asset')?.classList.toggle('la-off', !toggle.checked));
 
     const portraitSelect = laTab?.querySelector('[data-la-portrait-mode]');
     const portraitImgRow = laTab?.querySelector('[data-la-portrait-img]');
@@ -1079,77 +1117,48 @@ function _buildWreckSectionHtml(flags)
     const modeOpt = (value, label) => `<option value="${value}"${wreckMode === value ? 'selected' : ''}>${label}</option>`;
     const terrainOverride = flags.terrainOverride ?? 'default';
     const terrainOpt = (value, label) => `<option value="${value}"${terrainOverride === value ? 'selected' : ''}>${label}</option>`;
+    const skipped = wreckMode === 'none' ? ' hidden' : '';
+    const assetRow = (toggleKey, enabled, pathKey, path, label) => `
+        <div class="form-group la-asset${enabled ? '' : ' la-off'}" data-la-wreck-extra${skipped}>
+            <label class="checkbox"><input type="checkbox" name="flags.${MODULE_ID}.${toggleKey}" data-dtype="Boolean"${enabled ? ' checked' : ''}>${label}</label>
+            <div class="form-fields">
+                <file-picker name="flags.${MODULE_ID}.${pathKey}" value="${path}"></file-picker>
+                <button type="button" class="la-pick-folder" data-for="flags.${MODULE_ID}.${pathKey}" data-tooltip="${localize('LA.wreck.pickFolderTip')}" style="flex:0 0 auto;"><i class="fas fa-folder-tree" inert></i></button>
+            </div>
+        </div>`;
     return `
         <div class="form-group">
             <label>Wreck Mode</label>
             <div class="form-fields">
-                <select name="flags.${MODULE_ID}.wreckMode">
-                    ${modeOpt('default', 'Default (use category setting)')}
+                <select name="flags.${MODULE_ID}.wreckMode" data-la-wreck-mode>
+                    ${modeOpt('default', 'Default (category setting)')}
                     ${modeOpt('token', 'Token')}
                     ${modeOpt('tile', 'Tile')}
-                    ${modeOpt('none', 'Skip (do nothing)')}
+                    ${modeOpt('none', 'Skip')}
                 </select>
             </div>
+            <p class="hint" data-la-wreck-skip-hint${wreckMode === 'none' ? '' : ' hidden'}>No wreck, no terrain, nothing below applies.</p>
         </div>
-        <div class="form-group">
+        <div class="form-group" data-la-wreck-extra${skipped}>
             <label>On Wreck</label>
             <div class="form-fields">
                 <select name="flags.${MODULE_ID}.terrainOverride">
-                    ${terrainOpt('default', 'Default (use category setting)')}
+                    ${terrainOpt('default', 'Default (category setting)')}
                     ${terrainOpt('none', 'Nothing')}
                     ${terrainOpt('terrain', 'THT Difficult Terrain')}
                     ${terrainOpt('aura', 'Aura (movement +1)')}
                 </select>
             </div>
         </div>
-        <div class="form-group">
-            <label>Wreck Image Path</label>
-            <div class="form-fields">
-                <file-picker name="flags.${MODULE_ID}.wreckImgPath" value="${imgPath}"></file-picker>
-                <button type="button" class="la-pick-folder" data-for="flags.${MODULE_ID}.wreckImgPath" data-tooltip="${localize('LA.wreck.pickFolderTip')}" style="flex:0 0 auto;"><i class="fas fa-folder-tree" inert></i></button>
-            </div>
-        </div>
-        <div class="form-group">
-            <label>Wreck Effect Path</label>
-            <div class="form-fields">
-                <file-picker name="flags.${MODULE_ID}.wreckEffectPath" value="${effectPath}"></file-picker>
-                <button type="button" class="la-pick-folder" data-for="flags.${MODULE_ID}.wreckEffectPath" data-tooltip="${localize('LA.wreck.pickFolderTip')}" style="flex:0 0 auto;"><i class="fas fa-folder-tree" inert></i></button>
-            </div>
-        </div>
-        <div class="form-group">
-            <label>Wreck Sound Path</label>
-            <div class="form-fields">
-                <file-picker name="flags.${MODULE_ID}.wreckSoundPath" value="${soundPath}"></file-picker>
-                <button type="button" class="la-pick-folder" data-for="flags.${MODULE_ID}.wreckSoundPath" data-tooltip="${localize('LA.wreck.pickFolderTip')}" style="flex:0 0 auto;"><i class="fas fa-folder-tree" inert></i></button>
-            </div>
-        </div>
-        <div class="form-group">
-            <label>Tile Wreck Image/Effect Scale</label>
+        ${assetRow('spawnWreckImage', spawnImg, 'wreckImgPath', imgPath, 'Image')}
+        ${assetRow('playWreckEffect', playEffect, 'wreckEffectPath', effectPath, 'Effect')}
+        ${assetRow('playWreckSound', playSound, 'wreckSoundPath', soundPath, 'Sound')}
+        <div class="form-group" data-la-wreck-extra${skipped}>
+            <label>Wreck Scale</label>
             <div class="form-fields">
                 <input type="range" name="flags.${MODULE_ID}.wreckScale" value="${scale}" step="0.1" min="0" max="5" data-dtype="Number">
                 <span class="range-value">${scale}</span>
             </div>
-        </div>
-        <div class="form-group">
-            <label>Spawn Wreck Image</label>
-            <div class="form-fields">
-                <input type="checkbox" name="flags.${MODULE_ID}.spawnWreckImage" data-dtype="Boolean" ${spawnImg ? 'checked' : ''}>
-            </div>
-            <p class="notes">Display wreck image when this token is destroyed.</p>
-        </div>
-        <div class="form-group">
-            <label>Play Wreck Sound</label>
-            <div class="form-fields">
-                <input type="checkbox" name="flags.${MODULE_ID}.playWreckSound" data-dtype="Boolean" ${playSound ? 'checked' : ''}>
-            </div>
-            <p class="notes">Play sound effect when this token is wrecked.</p>
-        </div>
-        <div class="form-group">
-            <label>Play Wreck Effect</label>
-            <div class="form-fields">
-                <input type="checkbox" name="flags.${MODULE_ID}.playWreckEffect" data-dtype="Boolean" ${playEffect ? 'checked' : ''}>
-            </div>
-            <p class="notes">Play visual effect when this token is wrecked.</p>
         </div>
     `;
 }
@@ -1169,7 +1178,7 @@ function _buildAwarenessSectionHtml(flags)
                     ${opt('ignore', 'Ignore (not detected)')}
                 </select>
             </div>
-            <p class="notes">Controls Battle Awareness display. Non-default modes also disable Sensor detection on this token.</p>
+            <p class="hint">Controls Battle Awareness display. Non-default modes also disable Sensor detection on this token.</p>
         </div>
     `;
 }
@@ -1182,7 +1191,7 @@ function _buildStatHintSectionHtml(flags)
     {
         const opt = (value, label) => `<option value="${value}"${current === value ? 'selected' : ''}>${label}</option>`;
         return `<select name="flags.${MODULE_ID}.${name}" data-dtype="String">
-            ${opt('default', 'Default (use global setting)')}
+            ${opt('default', 'Default (world setting)')}
             ${opt('on', 'On')}
             ${opt('off', 'Off')}
         </select>`;
@@ -1194,17 +1203,17 @@ function _buildStatHintSectionHtml(flags)
             <div class="form-fields">
                 <input type="text" name="flags.${MODULE_ID}.statHintUnknownLabel" value="${_escapeText(unknownLabel)}" placeholder="${localize('LA.wreck.defaultGlobalSetting')}">
             </div>
-            <p class="notes">Stat hint header for this token while unscanned.</p>
+            <p class="hint">Stat hint header for this token while unscanned.</p>
         </div>
         <div class="form-group">
-            <label>Hide class/templates/tier when not scanned</label>
+            <label>Hide Class Until Scanned</label>
             <div class="form-fields">${triSelect('statHintHideClass', flags.statHintHideClass ?? 'default')}</div>
-            <p class="notes">Hide the class/frame subtitle and tier badge until scanned.</p>
+            <p class="hint">Hide the class/frame subtitle and tier badge until scanned.</p>
         </div>
         <div class="form-group">
-            <label>Hide current values without owner/observer access</label>
+            <label>Hide Current Values</label>
             <div class="form-fields">${triSelect('statHintHideCurrent', flags.statHintHideCurrent ?? 'default')}</div>
-            <p class="notes">Current HP, heat, and resources show as "?" in the stat hint.</p>
+            <p class="hint">Without owner or observer access, current HP, heat and resources show as "?" in the stat hint.</p>
         </div>
     `;
 }
@@ -1215,7 +1224,7 @@ function _buildLineOfSightSectionHtml(flags)
     const opt = (value, label) => `<option value="${value}"${fromEdge === value ? ' selected' : ''}>${label}</option>`;
     return `
         <div class="form-group">
-            <label data-tooltip="${localize('LA.vision.fromEdgeTip')}">${localize('LA.vision.fromEdge')}</label>
+            <label>${localize('LA.vision.fromEdge')}</label>
             <div class="form-fields">
                 <select name="flags.${MODULE_ID}.visionFromEdge">
                     ${opt('default', 'Default (world setting)')}
@@ -1223,18 +1232,21 @@ function _buildLineOfSightSectionHtml(flags)
                     ${opt('off', 'Off')}
                 </select>
             </div>
+            <p class="hint">${localize('LA.vision.fromEdgeTip')}</p>
         </div>
         <div class="form-group">
-            <label data-tooltip="${localize('LA.vision.blocksLosTip')}">${localize('LA.vision.blocksLos')}</label>
+            <label>${localize('LA.vision.blocksLos')}</label>
             <div class="form-fields">
                 <input type="checkbox" name="flags.${MODULE_ID}.blocksLineOfSight"${flags.blocksLineOfSight ? ' checked' : ''}>
             </div>
+            <p class="hint">${localize('LA.vision.blocksLosTip')}</p>
         </div>
         <div class="form-group">
-            <label data-tooltip="${localize('LA.vision.blocksLaLosOnlyTip')}">${localize('LA.vision.blocksLaLosOnly')}</label>
+            <label>${localize('LA.vision.blocksLaLosOnly')}</label>
             <div class="form-fields">
                 <input type="checkbox" name="flags.${MODULE_ID}.blocksLaLosOnly"${flags.blocksLaLosOnly ? ' checked' : ''}>
             </div>
+            <p class="hint">${localize('LA.vision.blocksLaLosOnlyTip')}</p>
         </div>
     `;
 }
@@ -1248,24 +1260,28 @@ function _buildMovementSectionHtml(flags)
     return `
         <div class="form-group">
             <label>Solid</label>
-            <input type="checkbox" name="flags.${MODULE_ID}.solid" ${solid ? 'checked' : ''}/>
-            <p class="notes">Acts like solid terrain as tall as the token. Others climb onto it and cannot pass through it, allies included.</p>
+            <div class="form-fields">
+                <input type="checkbox" name="flags.${MODULE_ID}.solid" ${solid ? 'checked' : ''}/>
+            </div>
+            <p class="hint">Acts like solid terrain as tall as the token. Others climb onto it and cannot pass through it, allies included.</p>
         </div>
         <div class="form-group">
             <label>Disable Auto-elevation from Terrain</label>
-            <input type="checkbox" name="flags.${MODULE_ID}.disableAutoTerrainElevation" ${disableAutoTerrain ? 'checked' : ''}/>
-            <p class="notes">Skip THT terrain elevation tracking for this token. Q/E offsets still work.</p>
+            <div class="form-fields">
+                <input type="checkbox" name="flags.${MODULE_ID}.disableAutoTerrainElevation" ${disableAutoTerrain ? 'checked' : ''}/>
+            </div>
+            <p class="hint">Skip THT terrain elevation tracking for this token. Q/E offsets still work.</p>
         </div>
         <div class="form-group">
             <label>Rotate Toward Movement</label>
             <div class="form-fields">
                 <select name="flags.${MODULE_ID}.autoRotate" data-dtype="String">
-                    ${opt('default', 'Default (use core setting)')}
+                    ${opt('default', 'Default (core setting)')}
                     ${opt('on', 'On')}
                     ${opt('off', 'Off')}
                 </select>
             </div>
-            <p class="notes">Off keeps the facing you set by hand when dragging or nudging the token.</p>
+            <p class="hint">Off keeps the facing you set by hand when dragging or nudging the token.</p>
         </div>
     `;
 }
@@ -1283,12 +1299,12 @@ function _buildPortraitSectionHtml(flags, actorType)
             <label>Use Pilot Portrait</label>
             <div class="form-fields">
                 <select name="flags.${MODULE_ID}.${FLAG_PORTRAIT_MECH_PILOT}" data-dtype="String">
-                    ${pilotOpt(PORTRAIT_PILOT.DEFAULT, 'Default (use global setting)')}
+                    ${pilotOpt(PORTRAIT_PILOT.DEFAULT, 'Default (world setting)')}
                     ${pilotOpt(PORTRAIT_PILOT.YES, 'Yes')}
                     ${pilotOpt(PORTRAIT_PILOT.NO, 'No')}
                 </select>
             </div>
-            <p class="notes">Draw the linked pilot's art instead of the mech's.</p>
+            <p class="hint">Draw the linked pilot's art instead of the mech's.</p>
         </div>
     `;
 
@@ -1297,35 +1313,24 @@ function _buildPortraitSectionHtml(flags, actorType)
             <label>HUD Portrait</label>
             <div class="form-fields">
                 <select name="flags.${MODULE_ID}.${FLAG_PORTRAIT_MODE}" data-dtype="String" data-la-portrait-mode>
-                    ${opt(PORTRAIT_MODES.DEFAULT, 'Default (use global setting)')}
+                    ${opt(PORTRAIT_MODES.DEFAULT, 'Default (world setting)')}
                     ${opt(PORTRAIT_MODES.TOKEN, 'Token art')}
                     ${opt(PORTRAIT_MODES.ACTOR, 'Actor portrait')}
                     ${opt(PORTRAIT_MODES.CUSTOM, 'Custom image')}
                     ${opt(PORTRAIT_MODES.OFF, 'Off')}
                 </select>
             </div>
-            <p class="notes">Artwork shown above the Token Action HUD name band.</p>
+            <p class="hint">Artwork shown above the Token Action HUD name band.</p>
         </div>
         <div class="form-group" data-la-portrait-img ${mode === PORTRAIT_MODES.CUSTOM ? '' : 'hidden'}>
             <label>Portrait Image</label>
             <div class="form-fields">
                 <file-picker name="flags.${MODULE_ID}.${FLAG_PORTRAIT_IMG}" type="imagevideo" value="${_escapeText(img)}"></file-picker>
             </div>
-            <p class="notes">Used when the portrait is set to Custom image.</p>
+            <p class="hint">Used when the portrait is set to Custom image.</p>
         </div>
         ${pilotRow}
     `;
-}
-
-function _sectionHeadHtml(title)
-{
-    return `<button type="button" class="la-config-section-head"><i class="fas fa-chevron-down la-chevron" inert></i>${title}</button>`;
-}
-
-function _wrapSection(section, collapsed)
-{
-    const cls = section.cls ? ` ${section.cls}` : '';
-    return `<div class="la-config-section${cls}${collapsed ? ' collapsed' : ''}">${_sectionHeadHtml(section.title)}${section.html}</div>`;
 }
 
 function _linkedScanDocsFor(actorUuid)
@@ -1365,7 +1370,7 @@ function _buildScanSectionHtml(tokenDoc)
             <div class="form-fields">
                 <span class="la-scan-doc-name">${docLabel}</span>
             </div>
-            <p class="notes">Journals stamped as this token's scan document. Players see it per each journal's own permissions.</p>
+            <p class="hint">Journals stamped as this token's scan document. Players see it per each journal's own permissions.</p>
         </div>
         <div class="form-group">
             <label>Link Document</label>
@@ -1380,7 +1385,7 @@ function _buildScanSectionHtml(tokenDoc)
             <div class="form-fields">
                 <input type="checkbox" class="la-scanned-by-all" ${scannedByAll ? 'checked' : ''}>
             </div>
-            <p class="notes">Force this token revealed (stats, name, battle log) to every player, ignoring scan journals.</p>
+            <p class="hint">Force this token revealed (stats, name, battle log) to every player, ignoring scan journals.</p>
         </div>
     `;
 }
@@ -1447,7 +1452,7 @@ function _refreshScanSection(rootEl, tokenDoc, app)
 
     if (!section)
         return;
-    section.innerHTML = _sectionHeadHtml('Scan') + _buildScanSectionHtml(tokenDoc);
+    section.innerHTML = _buildScanSectionHtml(tokenDoc);
     _wireScanControls(rootEl, tokenDoc, app);
     if (typeof app?.setPosition === 'function')
         app.setPosition({ height: 'auto' });
