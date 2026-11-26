@@ -2,6 +2,15 @@
     "version": 1,
     "entries": [
         {
+            "id": "2026-11-26-iso-status-effects",
+            "date": "2026-11-26",
+            "title": "Status effects on isometric",
+            "body": [
+                "<p>Hi there, I just noticed that all my custom status effects are wrong on isometric. Since I don't play isometric myself, I tend to forget about it a lot. This will be fixed in the next patch, sorry about that.</p>",
+                "<p>Bye.</p>"
+            ]
+        },
+        {
             "id": "2026-11-20-lancer-4-8-3",
             "date": "2026-11-20",
             "title": "Lancer Automations 4.8.3",
